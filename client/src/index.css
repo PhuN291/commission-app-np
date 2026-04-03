@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-primary-border: hsl(var(--primary-border));
+  --color-accent-border: hsl(var(--accent-border));
+  --color-card-border: hsl(var(--card-border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --font-sans: 'Inter', sans-serif;
+  --font-heading: 'Inter', sans-serif;
+}
+
+/* LIGHT MODE - Shopify-inspired Slate/Gray Scale */
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  --background: 0 0% 98%;
+  --foreground: 224 71% 4%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 224 71% 4%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 71% 4%;
+  
+  --primary: 224 71% 4%; /* Black/Deep Slate */
+  --primary-foreground: 0 0% 100%;
+  
+  --secondary: 220 14% 96%;
+  --secondary-foreground: 224 71% 4%;
+  
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;
+  
+  --accent: 220 14% 96%;
+  --accent-foreground: 224 71% 4%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 224 71% 4%;
+
+  --chart-1: 224 71% 4%;
+  --chart-2: 220 9% 46%;
+  
+  --radius: 0.5rem;
+  
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply font-sans antialiased bg-[#f6f6f7] text-slate-900;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-primary-teal {
+    background: linear-gradient(135deg, hsl(174 100% 29%) 0%, hsl(174 80% 40%) 100%);
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Search bar glow animation */
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes glow-spin {
+  to { --glow-angle: 360deg; }
+}
+
+.search-glow-wrapper {
+  position: relative;
+  isolation: isolate;
+}
+
+.search-glow-wrapper::before,
+.search-glow-wrapper::after {
+  content: "";
+  position: absolute;
+  border-radius: 0.5rem;
+  background: conic-gradient(
+    from var(--glow-angle),
+    #402fb5 0%, #cf30aa 25%, #a099d8 37%,
+    #18116a 50%, #cf30aa 62%, #dfa2da 75%, #402fb5 100%
+  );
+  animation: glow-spin 4s linear infinite paused;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Layer 1: sharp border */
+.search-glow-wrapper::before {
+  inset: 0;
+  z-index: 0;
+}
+
+/* Layer 2: blurred glow */
+.search-glow-wrapper::after {
+  inset: -3px;
+  z-index: -1;
+  filter: blur(8px);
+}
+
+/* Activate on hover - disabled */
+/* .search-glow-wrapper:hover::before,
+.search-glow-wrapper:hover::after {
+  opacity: 1;
+  animation-play-state: running;
+} */

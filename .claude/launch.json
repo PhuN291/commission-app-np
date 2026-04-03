@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "/Users/mac/local/bin/npx",
+      "runtimeArgs": ["tsx", "server/index.ts"],
+      "port": 3000,
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "3000",
+        "PATH": "/Users/mac/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    },
+    {
+      "name": "vias-app",
+      "runtimeExecutable": "/Users/mac/local/bin/npx",
+      "runtimeArgs": ["tsx", "server/index.ts"],
+      "port": 3001,
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "3001",
+        "PATH": "/Users/mac/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    }
+  ]
+}

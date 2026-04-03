@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 60" width="360" height="60">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@600;700;800&amp;display=swap');
+      .clinic-name { font-family: 'Be Vietnam Pro', system-ui, sans-serif; }
+    </style>
+  </defs>
+
+  <!-- NP Monogram -->
+  <g transform="translate(8, 2)">
+    <!-- N letter - outlined -->
+    <path d="M0,52 L0,4 L6.4,4 L6.4,36 L30.4,4 L36.8,4 L36.8,52 L30.4,52 L30.4,20 L6.4,52 Z"
+          fill="none" stroke="white" stroke-width="2.4" opacity="0.9"/>
+    <!-- P letter with medical cross -->
+    <g transform="translate(22.4, 0)">
+      <path d="M6.4,4 L6.4,52 L12.8,52 L12.8,33.6 L24,33.6 C33.6,33.6 38.4,27.2 38.4,19.2 C38.4,11.2 33.6,4 24,4 Z M12.8,10.4 L22.4,10.4 C28.8,10.4 32,13.6 32,19.2 C32,24.8 28.8,27.2 22.4,27.2 L12.8,27.2 Z"
+            fill="white" opacity="0.9"/>
+      <!-- Medical cross inside P bowl -->
+      <rect x="20" y="14.4" width="8" height="2.4" rx="0.4" fill="#1a1c1d"/>
+      <rect x="22.8" y="11.6" width="2.4" height="8" rx="0.4" fill="#1a1c1d"/>
+    </g>
+  </g>
+
+  <!-- Text block -->
+  <g>
+    <!-- PHÒNG KHÁM -->
+    <text x="84" y="22" class="clinic-name" font-size="12.8" font-weight="600" fill="white" opacity="0.6" letter-spacing="1.2">PHÒNG KHÁM</text>
+    <!-- NGUYÊN PHƯƠNG -->
+    <text x="84" y="44" class="clinic-name" font-size="19.2" font-weight="800" fill="white" opacity="0.95" letter-spacing="0.8">NGUYÊN PHƯƠNG</text>
+  </g>
+</svg>
