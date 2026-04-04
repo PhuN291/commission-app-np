@@ -5,9 +5,9 @@ import clinicLogo from "@assets/np-clinic-logo.webp";
 import clinicLogoWhite from "@assets/np-clinic-logo-white.svg";
 import {
   Search, Bell, Menu, History, Stethoscope, Calendar,
-  ClipboardList, User, Bot, Home, Users, CreditCard,
-  Activity, Award, Settings, X, ShoppingBag, ChevronDown,
-  BellOff, BarChart3, TrendingUp, UserCheck, Plus,
+  ClipboardList, User, Home, Users, Wallet,
+  Award, X, ShoppingBag, ChevronDown,
+  BellOff, BarChart3, TrendingUp, UserCheck, Plus, ShieldCheck, SlidersHorizontal, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,38 +57,32 @@ const navItems: NavItem[] = [
   { label: "Trang chủ", icon: Home, href: "/", key: "dashboard" },
   { label: "Dịch vụ", icon: Stethoscope, href: "/services", key: "services" },
   { label: "Khách hàng", icon: Users, href: "/customers", key: "customers" },
+  { label: "Đơn hàng", icon: ShoppingBag, href: "/orders", key: "orders" },
+  { label: "Hoa hồng", icon: Wallet, href: "/income", key: "commission" },
   {
-    label: "Order", icon: ShoppingBag, key: "order-group",
-    children: [
-      { label: "Đơn hàng", href: "/orders", key: "orders" },
-    ],
-  },
-  {
-    label: "Thu nhập", icon: CreditCard, key: "income-group",
-    children: [
-      { label: "Hoa hồng", href: "/income", key: "commission" },
-    ],
-  },
-  {
-    label: "Hiệu suất", icon: Activity, key: "perf-group",
+    label: "Báo cáo", icon: BarChart3, key: "reports-group",
     children: [
       { label: "Hiệu suất", href: "/performance", key: "performance" },
-    ],
-  },
-  {
-    label: "Phân tích", icon: BarChart3, key: "analytics-group",
-    children: [
       { label: "Tổng quan", href: "/analytics/overview", key: "analytics-overview" },
       { label: "Bác sĩ", href: "/analytics/doctors", key: "analytics-doctors" },
       { label: "Bệnh nhân", href: "/analytics/patients", key: "analytics-patients" },
       { label: "Lịch hẹn", href: "/analytics/appointments", key: "analytics-appointments" },
     ],
   },
+  { label: "Trợ lý AI", icon: Sparkles, href: "/ai-chat", key: "ai-chat", badge: "Mới" },
 ];
 
 const settingsItems: NavItem[] = [
-  { label: "Trợ lý AI", icon: Bot, href: "/ai-chat", key: "ai-chat", badge: "Mới" },
-  { label: "Cài đặt", icon: Settings, href: "#", key: "settings" },
+  {
+    label: "Quản trị", icon: ShieldCheck, key: "admin-group",
+    children: [
+      { label: "Tổng hợp hoa hồng", href: "/admin/commission-approval", key: "admin-commission-approval" },
+      { label: "Nhân viên", href: "/admin/staff", key: "admin-staff" },
+      { label: "Cấu hình hoa hồng", href: "/admin/commission-config", key: "admin-commission" },
+      { label: "Voucher", href: "/admin/vouchers", key: "admin-vouchers" },
+      { label: "Cài đặt hệ thống", href: "/admin/settings", key: "admin-settings" },
+    ],
+  },
 ];
 
 interface SearchHistoryItem {
@@ -176,7 +170,7 @@ export default function AppHeader({ userName: userNameProp, activePage = "dashbo
 
   const getExpandedGroups = (): Set<string> => {
     const groups = new Set<string>();
-    for (const item of navItems) {
+    for (const item of [...navItems, ...settingsItems]) {
       if (item.children?.some(c => c.key === activePage)) {
         groups.add(item.key);
       }
@@ -189,7 +183,7 @@ export default function AppHeader({ userName: userNameProp, activePage = "dashbo
   useEffect(() => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
-      for (const item of navItems) {
+      for (const item of [...navItems, ...settingsItems]) {
         if (item.children?.some(c => c.key === activePage)) {
           next.add(item.key);
         }
@@ -590,7 +584,7 @@ export default function AppHeader({ userName: userNameProp, activePage = "dashbo
               className="h-9 w-9 flex items-center justify-center rounded-lg text-[#b5b5b5] hover:text-white hover:bg-[#303030] transition-colors"
               data-testid="button-store"
             >
-              <Bot className="h-5 w-5" />
+              <Sparkles className="h-5 w-5" />
             </button>
           </Link>
           <Sheet open={notifOpen} onOpenChange={setNotifOpen}>

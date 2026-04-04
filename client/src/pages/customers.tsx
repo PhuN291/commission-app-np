@@ -6,8 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
-  LayoutList,
-  Columns,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,20 +14,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import AppHeader from "@/components/app-header";
 import { Breadcrumb } from "@/components/breadcrumb";
-import { Badge } from "@/components/ui/badge";
 import type { Customer, Order } from "@shared/schema";
-import { 
-  CUSTOMER_TAGS, 
-  FOLLOW_UP_CUSTOMER_IDS, 
+import {
+  CUSTOMER_TAGS,
+  FOLLOW_UP_CUSTOMER_IDS,
   NEW_THIS_MONTH_IDS,
-  PIPELINE_COLUMNS
 } from "@/lib/mock-crm";
 
 const filterTabs = [
-  { label: "Tất cả" },
-  { label: "Cần follow-up", badge: 3 },
-  { label: "Khách VIP" },
-  { label: "Mới trong tháng" }
+  { label: "Tất cả", badge: 50, badgeColor: "" },
+  { label: "Cần follow-up", badge: 8, badgeColor: "" },
+  { label: "VIP", badge: 5, badgeColor: "bg-[#b8860b] text-white" },
+  { label: "Khách rớt", badge: 12, badgeColor: "bg-[#de3618] text-white" },
 ];
 
 function formatCurrency(value: number) {
@@ -40,7 +36,7 @@ export default function Customers() {
   const [, navigate] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState("Tất cả");
-  const [viewMode, setViewMode] = useState<"list" | "pipeline">("list");
+
 
   const { data: customersData = [], isLoading: isLoadingCustomers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -69,11 +65,11 @@ export default function Customers() {
     if (activeFilter === "Cần follow-up") {
       return FOLLOW_UP_CUSTOMER_IDS.includes(customer.id);
     }
-    if (activeFilter === "Khách VIP") {
+    if (activeFilter === "VIP") {
       const tags = CUSTOMER_TAGS[customer.id] || [];
       return tags.includes("VIP");
     }
-    if (activeFilter === "Mới trong tháng") {
+    if (activeFilter === "Khách rớt") {
       return NEW_THIS_MONTH_IDS.includes(customer.id);
     }
     
@@ -89,28 +85,6 @@ export default function Customers() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-bold text-[#1a1c1d]" data-testid="text-customers-title">Khách hàng</h1>
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="flex bg-[#e4e4e4] p-1 rounded-lg shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-7 px-2 rounded-md ${viewMode === "list" ? "bg-white shadow-sm text-[#1a1c1d]" : "text-[#616161]"}`}
-                onClick={() => setViewMode("list")}
-                data-testid="button-view-list"
-              >
-                <LayoutList className="h-4 w-4 mr-1.5" />
-                <span className="text-xs font-bold">Danh sách</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-7 px-2 rounded-md ${viewMode === "pipeline" ? "bg-white shadow-sm text-[#1a1c1d]" : "text-[#616161]"}`}
-                onClick={() => setViewMode("pipeline")}
-                data-testid="button-view-pipeline"
-              >
-                <Columns className="h-4 w-4 mr-1.5" />
-                <span className="text-xs font-bold">Pipeline</span>
-              </Button>
-            </div>
             <Button className="rounded-lg h-8 bg-[#1a1c1d] hover:bg-[#2a2c2d] text-white text-xs px-4 font-bold shadow-sm shrink-0" data-testid="button-add-customer">
               Thêm khách hàng
             </Button>
@@ -137,8 +111,10 @@ export default function Customers() {
                     data-testid={`filter-tab-customer-${tab.label}`}
                   >
                     {tab.label}
-                    {tab.badge && (
-                      <span className="bg-[#de3618] text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                    {tab.badge != null && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                        tab.badgeColor || "bg-[#e0e0e0] text-[#616161]"
+                      }`}>
                         {tab.badge}
                       </span>
                     )}
@@ -160,8 +136,7 @@ export default function Customers() {
               </div>
             </div>
 
-            {viewMode === "list" ? (
-              <>
+            <>
                 <div className="hidden md:block">
                   <Table>
                     <TableHeader className="bg-[#f6f6f7]">
@@ -229,44 +204,6 @@ export default function Customers() {
                   })}
                 </div>
               </>
-            ) : (
-              <div className="p-4 bg-[#f6f6f7] overflow-x-auto">
-                <div className="flex lg:grid lg:grid-cols-4 gap-4">
-                  {PIPELINE_COLUMNS.map((column, idx) => (
-                    <div key={idx} className="flex flex-col gap-3 min-w-[240px] shrink-0 lg:min-w-0 lg:shrink">
-                      <div className="flex items-center justify-between px-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xs font-bold text-[#4a4d50] uppercase tracking-wider">{column.title}</h3>
-                          <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-bold border-[#d2d5d8] text-[#616161] bg-white">
-                            {column.cards.length}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-3 min-h-[200px]">
-                        {column.cards.map((card) => (
-                          <Card 
-                            key={card.customerId} 
-                            className="p-3 border-[#d2d5d8] shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-white border-l-4"
-                            style={{ borderLeftColor: column.color }}
-                            onClick={() => navigate(`/customers/${card.customerId}`)}
-                            data-testid={`pipeline-card-${card.customerId}`}
-                          >
-                            <div className="space-y-1.5">
-                              <p className="text-sm font-bold text-[#1a1c1d] leading-none">{card.name}</p>
-                              <p className="text-[11px] text-[#616161]">{card.phone}</p>
-                              <div className="pt-1 border-t border-[#f1f1f1] mt-2">
-                                <p className="text-[10px] font-medium text-[#8c9196] uppercase tracking-tighter">Quan tâm</p>
-                                <p className="text-[11px] text-[#1a1c1d] font-medium truncate">{card.serviceInterest}</p>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {filteredCustomers.length === 0 && (
               <div className="text-center py-12">

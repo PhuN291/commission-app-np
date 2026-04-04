@@ -122,7 +122,7 @@ export default function Dashboard() {
                     <span className="text-lg font-medium text-white/80">VNĐ</span>
                   </div>
                 </div>
-                <Badge className="bg-white/20 text-white border-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
+                <Badge className="bg-white/30 text-white border-0 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm">
                   <TrendingUp className="h-3 w-3 mr-1 inline" /> +12.5%
                 </Badge>
               </div>
@@ -134,7 +134,9 @@ export default function Dashboard() {
             <CardContent className="p-5">
               <div className="flex justify-between items-start mb-4">
                 <p className="text-xs font-bold text-[#4a4d50] uppercase tracking-wider">Doanh số</p>
-                <TrendingUp className="h-4 w-4 text-[#008060]" />
+                <Badge className="bg-[#e4f3d9] text-[#008060] border-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
+                  <TrendingUp className="h-3 w-3 mr-1 inline" /> +8.2%
+                </Badge>
               </div>
               <h3 className="text-2xl font-bold text-[#1a1c1d] tabular-nums" data-testid="text-revenue">{formatCurrency(user.currentRevenue).replace('₫', '')}</h3>
             </CardContent>
@@ -144,7 +146,9 @@ export default function Dashboard() {
             <CardContent className="p-5">
               <div className="flex justify-between items-start mb-4">
                 <p className="text-xs font-bold text-[#4a4d50] uppercase tracking-wider">Đã chốt</p>
-                <Briefcase className="h-4 w-4 text-[#1a1c1d]" />
+                <Badge className="bg-[#e4f3d9] text-[#008060] border-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
+                  <TrendingUp className="h-3 w-3 mr-1 inline" /> +2
+                </Badge>
               </div>
               <h3 className="text-2xl font-bold text-[#1a1c1d] tabular-nums" data-testid="text-deals-count">{recentOrders.length}</h3>
             </CardContent>
@@ -188,35 +192,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide" data-testid="badges-row">
-              {mockBadges.map((badge, i) => {
-                const BadgeIcon = badge.icon;
-                return (
-                  <div
-                    key={i}
-                    className={`flex flex-col items-center gap-1.5 min-w-[72px] p-3 rounded-xl transition-all border ${
-                      badge.achieved ? "" : "opacity-40 grayscale"
-                    }`}
-                    style={{
-                      backgroundColor: badge.achieved ? badge.bg : "#f6f6f7",
-                      borderColor: badge.achieved ? badge.color + "30" : "#e3e3e3",
-                    }}
-                    data-testid={`badge-${i}`}
-                  >
-                    <div
-                      className="h-10 w-10 rounded-full flex items-center justify-center text-white"
-                      style={{ backgroundColor: badge.achieved ? badge.iconBg : "#d2d5d8" }}
-                    >
-                      <BadgeIcon className="h-5 w-5" />
-                    </div>
-                    <span
-                      className="text-[10px] font-bold text-center leading-tight"
-                      style={{ color: badge.achieved ? "#1a1c1d" : "#8c9196" }}
-                    >{badge.name}</span>
-                  </div>
-                );
-              })}
-            </div>
+            {/* Badges row hidden */}
           </CardContent>
         </Card>
 

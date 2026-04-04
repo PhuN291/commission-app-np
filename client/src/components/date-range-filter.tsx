@@ -21,7 +21,7 @@ function formatDateLabel(d: Date): string {
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-function getPresetRange(preset: string): { from: Date; to: Date } {
+export function getPresetRange(preset: string): { from: Date; to: Date } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const to = new Date(today);

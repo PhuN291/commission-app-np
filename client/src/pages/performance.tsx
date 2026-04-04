@@ -274,41 +274,7 @@ export default function PerformancePage() {
           </CardContent>
         </Card>
 
-        <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white" data-testid="section-badges">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#e3e3e3]">
-            <h3 className="text-sm font-bold text-[#1a1c1d]">Thành tích & Badge</h3>
-          </div>
-          <CardContent className="p-4 sm:p-6">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {allBadges.map((badge, i) => {
-                const BadgeIcon = badge.icon;
-                return (
-                  <div
-                    key={i}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
-                      badge.achieved
-                        ? "bg-[#e4f3d9] border-[#bbe5b3]"
-                        : "bg-[#f6f6f7] border-[#e3e3e3] opacity-50"
-                    }`}
-                    data-testid={`perf-badge-${i}`}
-                  >
-                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${
-                      badge.achieved ? "bg-[#008060] text-white" : "bg-[#d2d5d8] text-[#8c9196]"
-                    }`}>
-                      <BadgeIcon className="h-6 w-6" />
-                    </div>
-                    <p className={`text-xs font-bold text-center ${
-                      badge.achieved ? "text-[#008060]" : "text-[#8c9196]"
-                    }`}>{badge.name}</p>
-                    <p className="text-[10px] text-[#8c9196] text-center leading-tight">
-                      {badge.achieved ? badge.date : badge.condition}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Badge section hidden */}
       </main>
     </div>
   );
