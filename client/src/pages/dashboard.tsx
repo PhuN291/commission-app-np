@@ -15,6 +15,7 @@ import {
   Gift,
   ClipboardList,
   ChevronRight,
+  Bell,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -89,21 +90,30 @@ export default function Dashboard() {
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
         </div>
 
-        <Link href="/orders?status=pending" className="block">
-          <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white hover:bg-[#f6f6f7] transition-colors cursor-pointer">
-            <CardContent className="p-4 sm:p-5 flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-[#fff4bd] flex items-center justify-center shrink-0">
-                <ClipboardList className="h-5 w-5 text-[#8a6116]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#1a1c1d]">
-                  Bạn có <span className="text-[#005bd3]">{pendingOrdersCount}</span> đơn hàng đang chờ xử lý
-                </p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-[#8c9196] shrink-0" />
-            </CardContent>
-          </Card>
-        </Link>
+        <div className="flex gap-3">
+          <Link href="/orders?status=pending" className="block flex-1">
+            <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white hover:bg-[#f6f6f7] transition-colors cursor-pointer">
+              <CardContent className="px-4 py-3 flex items-start justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-[#1a1c1d] tabular-nums">{pendingOrdersCount}</p>
+                  <p className="text-xs text-[#8c9196] mt-0.5">Đơn chờ xử lý</p>
+                </div>
+                <ClipboardList className="h-5 w-5 text-[#8c9196] mt-1" />
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/customers" className="block flex-1">
+            <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white hover:bg-[#f6f6f7] transition-colors cursor-pointer">
+              <CardContent className="px-4 py-3 flex items-start justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-[#1a1c1d] tabular-nums">3</p>
+                  <p className="text-xs text-[#8c9196] mt-0.5">Nhắc tái khám</p>
+                </div>
+                <Bell className="h-5 w-5 text-[#8c9196] mt-1" />
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           

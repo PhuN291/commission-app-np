@@ -109,7 +109,7 @@ export default function AnalyticsOverview() {
       <AppHeader userName="Nguyễn Thị Mai" activePage="analytics-overview" />
 
       <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-lg font-bold text-[#1a1c1d]">Tổng quan doanh thu</h1>
             <p className="text-xs text-[#8c9196] mt-0.5">Theo dõi doanh thu và các chỉ số chính của phòng khám</p>

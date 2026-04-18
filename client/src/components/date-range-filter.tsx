@@ -239,7 +239,7 @@ export default function DateRangeFilter({ value = "last_30_days", onChange }: Da
     <div ref={ref} className="relative inline-block">
       <button
         onClick={() => { setOpen(!open); setPresetOpen(false); }}
-        className="flex items-center gap-2 h-9 px-3.5 rounded-lg border border-[#d2d5d8] bg-white hover:bg-[#f6f6f7] transition-colors text-sm font-medium text-[#1a1c1d] shadow-sm"
+        className="flex items-center gap-2 h-9 px-3.5 rounded-lg border border-[#d2d5d8] bg-white hover:bg-[#f6f6f7] transition-colors text-sm font-medium text-[#1a1c1d] shadow-sm whitespace-nowrap shrink-0"
         data-testid="button-date-range"
       >
         <Calendar className="h-4 w-4 text-[#8c9196]" />

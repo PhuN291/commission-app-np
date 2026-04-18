@@ -120,42 +120,42 @@ export default function IncomePage() {
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-0 shadow-lg bg-gradient-primary-teal text-white overflow-hidden relative rounded-2xl">
-            <CardContent className="p-6 relative z-10">
-              <p className="text-white/70 text-[11px] font-bold uppercase tracking-wider">Hoa hồng tạm tính</p>
-              <h2 className="text-3xl font-bold tracking-tight tabular-nums mt-2" data-testid="text-estimated-commission">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Card className="border-0 shadow-lg bg-gradient-primary-teal text-white overflow-hidden relative rounded-xl">
+            <CardContent className="p-4 relative z-10">
+              <p className="text-white/80 text-xs font-medium">Hoa hồng tạm tính</p>
+              <h2 className="text-xl font-bold tracking-tight tabular-nums mt-1" data-testid="text-estimated-commission">
                 {formatCurrency(summary.estimatedCommission)}
               </h2>
-              <div className="flex items-center gap-1 mt-2">
+              <div className="flex items-center gap-1 mt-1">
                 <TrendingUp className="h-3 w-3 text-white/70" />
-                <span className="text-xs text-white/70">{summary.totalDeals} giao dịch trong tháng</span>
+                <span className="text-[11px] text-white/70">{summary.totalDeals} giao dịch trong tháng</span>
               </div>
             </CardContent>
           </Card>
 
           <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white">
-            <CardContent className="p-6">
-              <p className="text-[11px] font-bold text-[#8c9196] uppercase tracking-wider">Hoa hồng thực nhận</p>
-              <h2 className="text-3xl font-bold tracking-tight tabular-nums mt-2 text-[#1a1c1d]" data-testid="text-actual-commission">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-[#8c9196]">Hoa hồng thực nhận</p>
+              <h2 className="text-xl font-bold tracking-tight tabular-nums mt-1 text-[#1a1c1d]" data-testid="text-actual-commission">
                 {formatCurrency(summary.actualCommission)}
               </h2>
-              <div className="flex items-center gap-1 mt-2">
+              <div className="flex items-center gap-1 mt-1">
                 <ArrowUpRight className="h-3 w-3 text-[#008060]" />
-                <span className="text-xs text-[#008060] font-medium">{summary.completedDeals} đã hoàn tất</span>
+                <span className="text-[11px] text-[#008060] font-medium">{summary.completedDeals} đã hoàn tất</span>
               </div>
             </CardContent>
           </Card>
 
           <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white">
-            <CardContent className="p-6">
-              <p className="text-[11px] font-bold text-[#8c9196] uppercase tracking-wider">Hoa hồng chờ duyệt</p>
-              <h2 className="text-3xl font-bold tracking-tight tabular-nums mt-2 text-[#f59e0b]" data-testid="text-pending-commission">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-[#8c9196]">Hoa hồng chờ duyệt</p>
+              <h2 className="text-xl font-bold tracking-tight tabular-nums mt-1 text-[#f59e0b]" data-testid="text-pending-commission">
                 {formatCurrency(summary.pendingCommission)}
               </h2>
-              <div className="flex items-center gap-1 mt-2">
+              <div className="flex items-center gap-1 mt-1">
                 <TrendingDown className="h-3 w-3 text-[#8c9196]" />
-                <span className="text-xs text-[#8c9196]">{summary.totalDeals - summary.completedDeals} đang chờ xử lý</span>
+                <span className="text-[11px] text-[#8c9196]">{summary.totalDeals - summary.completedDeals} đang chờ xử lý</span>
               </div>
             </CardContent>
           </Card>
