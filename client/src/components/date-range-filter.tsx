@@ -248,7 +248,7 @@ export default function DateRangeFilter({ value = "last_30_days", onChange }: Da
       </button>
 
       {open && (
-        <div className={`absolute top-full mt-1 z-50 w-[340px] bg-white border border-[#d2d5d8] rounded-2xl shadow-xl animate-in fade-in-0 zoom-in-95 duration-100 ${popupAlign === "left" ? "left-0" : "right-0"}`}>
+        <div className={`absolute top-full mt-1 z-50 w-[340px] bg-white border border-[#d2d5d8] rounded-np-card shadow-xl animate-in fade-in-0 zoom-in-95 duration-100 ${popupAlign === "left" ? "left-0" : "right-0"}`}>
           <div className="p-4 space-y-4">
             <div className="relative">
               <button
@@ -263,7 +263,7 @@ export default function DateRangeFilter({ value = "last_30_days", onChange }: Da
                 </div>
               </button>
               {presetOpen && (
-                <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#d2d5d8] rounded-xl shadow-lg py-1 z-50 max-h-[240px] overflow-y-auto">
+                <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#d2d5d8] rounded-np-card shadow-lg py-1 z-50 max-h-[240px] overflow-y-auto">
                   {presetOptions.map((option) => (
                     <button
                       key={option.value}

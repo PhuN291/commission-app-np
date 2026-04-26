@@ -1,32 +1,41 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRoute, useLocation, Link } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useRoute } from "wouter";
+import type { LucideIcon } from "lucide-react";
 import {
+  Bell,
+  Calendar,
+  CalendarDays,
+  Check,
+  CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Phone,
-  Mail,
-  FileText,
-  User,
-  Package,
-  CalendarDays,
   Clock,
-  MapPin,
-  Check,
-  Bell,
-  LogIn,
-  X,
-  Calendar,
   EyeOff,
+  FileText,
+  LogIn,
+  Mail,
+  MapPin,
+  MoreHorizontal,
+  Phone,
   Play,
-  CheckCircle,
   UserX,
-  History,
+  X,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import {
+  Avatar,
+  Card,
+  Chev,
+  DetailHeader,
+  NPButton,
+  OrderStatusBadges,
+  Row,
+  Screen,
+  SectionTitle,
+  getStatusTone,
+  useTabNav,
+} from "@/components/np";
+import { Badge as NPBadge } from "@/components/np/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,54 +49,58 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import AppHeader from "@/components/app-header";
-import { Breadcrumb } from "@/components/breadcrumb";
-import { OrderStatusBadges, SingleStatusBadge } from "@/components/status-badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   APPOINTMENT_BUTTONS,
-  VISIT_BUTTONS,
   APPOINTMENT_STATUSES,
+  VISIT_BUTTONS,
   VISIT_STATUSES,
   type AppointmentStatusCode,
-  type VisitStatusCode,
   type StatusButton,
+  type VisitStatusCode,
 } from "@shared/status";
-import type { Order, Customer, StatusLog } from "@shared/schema";
+import type { Customer, Order, StatusLog } from "@shared/schema";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value) + " ₫";
+function fmtVND(n: number) {
+  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
 }
 
-function getButtonIcon(icon: StatusButton["icon"]) {
-  const cls = "h-3.5 w-3.5";
-  switch (icon) {
-    case "check": return <Check className={cls} />;
-    case "bell": return <Bell className={cls} />;
-    case "log-in": return <LogIn className={cls} />;
-    case "x": return <X className={cls} />;
-    case "calendar": return <Calendar className={cls} />;
-    case "eye-off": return <EyeOff className={cls} />;
-    case "play": return <Play className={cls} />;
-    case "check-circle": return <CheckCircle className={cls} />;
-    case "user-x": return <UserX className={cls} />;
-    default: return null;
-  }
-}
+const BUTTON_ICONS: Record<StatusButton["icon"], LucideIcon> = {
+  check: Check,
+  bell: Bell,
+  "log-in": LogIn,
+  x: X,
+  calendar: Calendar,
+  "eye-off": EyeOff,
+  play: Play,
+  "check-circle": CheckCircle,
+  "user-x": UserX,
+};
+
+const TIME_SLOTS = [
+  "08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30",
+  "13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00",
+];
 
 export default function OrderDetail() {
+  const { active, onTab } = useTabNav();
   const [, params] = useRoute("/orders/:id");
   const [, navigate] = useLocation();
-  const orderId = params?.id ? parseInt(params.id) : 0;
+  const orderId = params?.id ? parseInt(params.id, 10) : 0;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -95,44 +108,25 @@ export default function OrderDetail() {
     action: () => void;
   }>({ open: false, title: "", description: "", action: () => {} });
 
-  // Reschedule dialog state
   const [rescheduleDialog, setRescheduleDialog] = useState(false);
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
+  const [actionsSheetOpen, setActionsSheetOpen] = useState(false);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/orders/${orderId}`],
     enabled: orderId > 0,
   });
-
-  const { data: allOrders = [] } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
-  });
-
-  const { data: allCustomers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
-  });
-
+  const { data: allOrders = [] } = useQuery<Order[]>({ queryKey: ["/api/orders"] });
+  const { data: allCustomers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: statusLogs = [] } = useQuery<StatusLog[]>({
     queryKey: [`/api/orders/${orderId}/status-logs`],
     enabled: orderId > 0,
   });
-
-  const { data: assignee } = useQuery<{
-    id: number; name: string; avatar: string | null; role: string;
-  }>({
+  const { data: assignee } = useQuery<{ id: number; name: string; avatar: string | null; role: string }>({
     queryKey: [`/api/users/${order?.userId}`],
     enabled: !!order?.userId,
   });
-
-  const assigneeInitials = assignee
-    ? assignee.name.split(" ").map(w => w[0]).slice(-2).join("").toUpperCase()
-    : "";
-
-  const matchedCustomer = order ? allCustomers.find(c => c.phone === order.phone) : null;
-  const currentIndex = allOrders.findIndex(o => o.id === orderId);
-  const prevOrder = currentIndex > 0 ? allOrders[currentIndex - 1] : null;
-  const nextOrder = currentIndex < allOrders.length - 1 ? allOrders[currentIndex + 1] : null;
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
@@ -207,14 +201,14 @@ export default function OrderDetail() {
       return;
     }
     if (btn.needsConfirmation) {
-      const statusInfo = APPOINTMENT_STATUSES[btn.targetStatus as AppointmentStatusCode];
+      const info = APPOINTMENT_STATUSES[btn.targetStatus as AppointmentStatusCode];
       setConfirmDialog({
         open: true,
-        title: `Xác nhận: ${statusInfo?.label || btn.label}`,
-        description: `Bạn có chắc muốn chuyển trạng thái lịch hẹn sang "${statusInfo?.label}"? Thao tác này không thể hoàn tác.`,
+        title: `Xác nhận: ${info?.label || btn.label}`,
+        description: `Bạn có chắc muốn chuyển trạng thái lịch hẹn sang "${info?.label}"? Thao tác này không thể hoàn tác.`,
         action: () => {
           updateAppointmentStatus.mutate({ status: btn.targetStatus });
-          setConfirmDialog(prev => ({ ...prev, open: false }));
+          setConfirmDialog((p) => ({ ...p, open: false }));
         },
       });
     } else {
@@ -224,14 +218,14 @@ export default function OrderDetail() {
 
   const handleVisitAction = (btn: StatusButton) => {
     if (btn.needsConfirmation) {
-      const statusInfo = VISIT_STATUSES[btn.targetStatus as VisitStatusCode];
+      const info = VISIT_STATUSES[btn.targetStatus as VisitStatusCode];
       setConfirmDialog({
         open: true,
-        title: `Xác nhận: ${statusInfo?.label || btn.label}`,
-        description: `Bạn có chắc muốn chuyển trạng thái khám sang "${statusInfo?.label}"? Thao tác này không thể hoàn tác.`,
+        title: `Xác nhận: ${info?.label || btn.label}`,
+        description: `Bạn có chắc muốn chuyển trạng thái khám sang "${info?.label}"? Thao tác này không thể hoàn tác.`,
         action: () => {
           updateVisitStatus.mutate({ status: btn.targetStatus });
-          setConfirmDialog(prev => ({ ...prev, open: false }));
+          setConfirmDialog((p) => ({ ...p, open: false }));
         },
       });
     } else {
@@ -239,391 +233,351 @@ export default function OrderDetail() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || !order) {
     return (
-      <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-        <AppHeader activePage="orders" />
-        <main className="flex-1 p-4 md:p-8 bg-[#f6f6f7] rounded-t-2xl flex items-center justify-center">
-          <div className="h-8 w-8 border-2 border-[#008060] border-t-transparent rounded-full animate-spin"></div>
-        </main>
-      </div>
-    );
-  }
-
-  if (!order) {
-    return (
-      <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-        <AppHeader activePage="orders" />
-        <main className="flex-1 p-4 md:p-8 bg-[#f6f6f7] rounded-t-2xl flex items-center justify-center">
-          <p className="text-[#8c9196]">Không tìm thấy đơn hàng</p>
-        </main>
-      </div>
+      <Screen activeTab={active} onTab={onTab} noHeader>
+        <DetailHeader title="Đơn hàng" onBack={() => navigate("/orders")} />
+        <div className="flex flex-1 items-center justify-center py-20">
+          {isLoading ? (
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
+          ) : (
+            <p className="text-np-text-muted">Không tìm thấy đơn hàng</p>
+          )}
+        </div>
+      </Screen>
     );
   }
 
   const appointmentStatus = order.appointmentStatus as AppointmentStatusCode;
   const visitStatus = order.visitStatus as VisitStatusCode | null;
   const appointmentButtons = APPOINTMENT_BUTTONS[appointmentStatus] || [];
-  const visitButtons = visitStatus ? (VISIT_BUTTONS[visitStatus] || []) : [];
+  const visitButtons = visitStatus ? VISIT_BUTTONS[visitStatus] || [] : [];
+  const currentIndex = allOrders.findIndex((o) => o.id === orderId);
+  const prevOrder = currentIndex > 0 ? allOrders[currentIndex - 1] : null;
+  const nextOrder = currentIndex < allOrders.length - 1 ? allOrders[currentIndex + 1] : null;
+  const matchedCustomer = allCustomers.find((c) => c.phone === order.phone);
+  const ratePct = order.totalPrice > 0 ? ((order.commission / order.totalPrice) * 100).toFixed(1) : "0";
 
-  const timeSlots = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00"];
+  // Mock team — TODO: replace với API thực khi backend hỗ trợ multi-assignee
+  const orderTeam: { id: number; name: string; role: string }[] = [
+    ...(assignee ? [{ id: assignee.id, name: assignee.name, role: "Sale - Điều dưỡng" }] : []),
+    { id: -101, name: "Lê Thị Tuyết", role: "Điều dưỡng trưởng" },
+    { id: -102, name: "Nguyễn Đức Trần", role: "Bác sĩ" },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-      <AppHeader activePage="orders" />
-
-      <main className="flex-1 p-4 md:p-8 space-y-5 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <Breadcrumb items={[{ label: "Đơn hàng", href: "/orders" }, { label: order.code }]} />
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={() => navigate("/orders")} className="shrink-0 text-[#8c9196] hover:text-[#1a1c1d] transition-colors" data-testid="button-back-orders">
-              <ChevronLeft className="h-5 w-5" />
+    <Screen activeTab={active} onTab={onTab} noHeader>
+      <DetailHeader
+        title={order.code}
+        subtitle={`Tạo ${order.createdAt}`}
+        onBack={() => navigate("/orders")}
+        trailing={
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => prevOrder && navigate(`/orders/${prevOrder.id}`)}
+              disabled={!prevOrder}
+              aria-label="Đơn trước"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-np-button bg-transparent hover:bg-np-surface-sub disabled:opacity-40"
+            >
+              <ChevronLeft size={20} strokeWidth={2.25} className="text-np-ink" />
             </button>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg font-bold text-[#1a1c1d] truncate" data-testid="text-order-code">{order.code}</h1>
-                <OrderStatusBadges appointmentStatus={order.appointmentStatus} visitStatus={order.visitStatus} />
+            <button
+              type="button"
+              onClick={() => nextOrder && navigate(`/orders/${nextOrder.id}`)}
+              disabled={!nextOrder}
+              aria-label="Đơn sau"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-np-button bg-transparent hover:bg-np-surface-sub disabled:opacity-40"
+            >
+              <ChevronRight size={20} strokeWidth={2.25} className="text-np-ink" />
+            </button>
+          </div>
+        }
+      />
+
+      <div className="bg-np-surface-sub">
+        {/* Status summary */}
+        <div className="px-4 py-4">
+          <div className="mb-2.5 flex items-baseline justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
+                Tổng đơn
               </div>
-              <p className="text-xs text-[#8c9196]">{order.createdAt}</p>
-              {assignee && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Avatar className="h-5 w-5">
-                    {assignee.avatar && <AvatarImage src={assignee.avatar} alt={assignee.name} />}
-                    <AvatarFallback className="text-[8px] font-bold bg-[#a855f7] text-white">
-                      {assigneeInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs text-[#8c9196]">{assignee.name}</span>
-                </div>
-              )}
+              <div className="mt-0.5 text-[28px] font-extrabold leading-none tracking-[-0.8px] text-np-ink tabular-nums">
+                {fmtVND(order.totalPrice)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
+                Hoa hồng
+              </div>
+              <div className="mt-0.5 text-[18px] font-extrabold text-np-brand-ink tabular-nums">
+                +{fmtVND(order.commission)}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0 self-end sm:self-auto">
-            <Button variant="outline" size="icon" className="h-8 w-8 border-[#d2d5d8]" disabled={!prevOrder} onClick={() => prevOrder && navigate(`/orders/${prevOrder.id}`)} data-testid="button-prev-order">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8 border-[#d2d5d8]" disabled={!nextOrder} onClick={() => nextOrder && navigate(`/orders/${nextOrder.id}`)} data-testid="button-next-order">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+          <OrderStatusBadges
+            appointmentStatus={order.appointmentStatus}
+            visitStatus={order.visitStatus}
+          />
+          <div className="mt-1.5 text-[11px] font-medium text-np-text-muted">
+            Tỉ lệ hoa hồng: {ratePct}%
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-5">
-            {/* Dịch vụ */}
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center gap-2">
-                <Package className="h-4 w-4 text-[#4a4d50]" />
-                <h2 className="text-sm font-bold text-[#1a1c1d]">Dịch vụ</h2>
-              </div>
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[#e3e3e3] bg-[#f6f6f7]">
-                      <th className="text-left text-[10px] font-bold text-[#4a4d50] uppercase px-5 py-3">Dịch vụ</th>
-                      <th className="text-center text-[10px] font-bold text-[#4a4d50] uppercase px-5 py-3 w-24">Số lượng</th>
-                      <th className="text-right text-[10px] font-bold text-[#4a4d50] uppercase px-5 py-3 w-32">Đơn giá</th>
-                      <th className="text-right text-[10px] font-bold text-[#4a4d50] uppercase px-5 py-3 w-32">Thành tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-[#e3e3e3]" data-testid="row-order-service">
-                      <td className="px-5 py-4">
-                        <p className="font-medium text-[#1a1c1d]">{order.serviceName}</p>
-                        <p className="text-[10px] text-[#8c9196] mt-0.5">Mã DV: {order.serviceCode}</p>
-                        {order.serviceCategory && <p className="text-[10px] text-[#8c9196] mt-0.5">Danh mục: {order.serviceCategory}</p>}
-                      </td>
-                      <td className="px-5 py-4 text-center text-[#1a1c1d]">{order.quantity}</td>
-                      <td className="px-5 py-4 text-right text-[#1a1c1d]">{formatCurrency(order.unitPrice)}</td>
-                      <td className="px-5 py-4 text-right font-bold text-[#1a1c1d]">{formatCurrency(order.totalPrice)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="sm:hidden p-4" data-testid="card-order-service-mobile">
-                <p className="font-medium text-[#1a1c1d] text-sm">{order.serviceName}</p>
-                <p className="text-[10px] text-[#8c9196] mt-0.5">Mã DV: {order.serviceCode}</p>
-                {order.serviceCategory && <p className="text-[10px] text-[#8c9196] mt-0.5">Danh mục: {order.serviceCategory}</p>}
-                <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-[#8c9196]">SL: {order.quantity}</span>
-                  <span className="text-[#8c9196]">{formatCurrency(order.unitPrice)}/dv</span>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-xs text-[#616161]">Thành tiền</span>
-                  <span className="text-sm font-bold text-[#1a1c1d]">{formatCurrency(order.totalPrice)}</span>
-                </div>
-              </div>
-            </Card>
-
-            {/* Thanh toán */}
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3]">
-                <h2 className="text-sm font-bold text-[#1a1c1d]">Thanh toán</h2>
-              </div>
-              <div className="px-4 sm:px-5 py-4 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#616161]">Tạm tính ({order.quantity} dịch vụ)</span>
-                  <span className="text-[#1a1c1d] font-medium">{formatCurrency(order.totalPrice)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#616161]">Giảm giá</span>
-                  <span className="text-[#1a1c1d]">0 ₫</span>
-                </div>
-                <div className="border-t border-[#e3e3e3] pt-3 flex items-center justify-between">
-                  <span className="text-sm font-bold text-[#1a1c1d]">Tổng cộng</span>
-                  <span className="font-bold text-[#1a1c1d] text-base" data-testid="text-order-total">{formatCurrency(order.totalPrice)}</span>
-                </div>
-              </div>
-            </Card>
-
-            {/* Hoa hồng */}
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center justify-between flex-wrap gap-2">
-                <h2 className="text-sm font-bold text-[#1a1c1d]">Hoa hồng</h2>
-                <Badge className="bg-[#e4f3d9] text-[#008060] text-[10px] font-bold border-0 px-2 py-0.5">Thu nhập từ đơn</Badge>
-              </div>
-              <div className="px-4 sm:px-5 py-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-[#8c9196]">Số tiền hoa hồng</p>
-                  <p className="text-xl font-bold text-[#008060] mt-1" data-testid="text-order-commission">{formatCurrency(order.commission)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-[#8c9196]">Tỉ lệ</p>
-                  <p className="text-sm font-bold text-[#1a1c1d] mt-1">{order.totalPrice > 0 ? ((order.commission / order.totalPrice) * 100).toFixed(1) : 0}%</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Lịch sử trạng thái */}
-            {statusLogs.length > 0 && (
-              <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-                <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center gap-2">
-                  <History className="h-4 w-4 text-[#4a4d50]" />
-                  <h2 className="text-sm font-bold text-[#1a1c1d]">Lịch sử trạng thái</h2>
-                </div>
-                <div className="px-4 sm:px-5 py-4">
-                  <div className="relative space-y-4 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-[#e3e3e3]">
-                    {statusLogs.map((log) => {
-                      const isAppt = log.tier === "appointment";
-                      const fromInfo = isAppt
-                        ? APPOINTMENT_STATUSES[log.fromStatus as AppointmentStatusCode]
-                        : VISIT_STATUSES[log.fromStatus as VisitStatusCode];
-                      const toInfo = isAppt
-                        ? APPOINTMENT_STATUSES[log.toStatus as AppointmentStatusCode]
-                        : VISIT_STATUSES[log.toStatus as VisitStatusCode];
-                      return (
-                        <div key={log.id} className="relative pl-6">
-                          <div className={`absolute left-0 top-1 h-4 w-4 rounded-full border-2 z-10 ${
-                            isAppt ? "bg-white border-[#008060]" : "bg-white border-[#1e40af]"
-                          }`} />
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs text-[#8c9196]">{log.timestamp}</span>
-                              <Badge variant="outline" className="text-[9px] font-normal border-[#e3e3e3] px-1.5 py-0 h-4">
-                                {isAppt ? "Lịch hẹn" : "Khám"}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <SingleStatusBadge status={log.fromStatus} tier={log.tier as "appointment" | "visit"} />
-                              <span className="text-[10px] text-[#8c9196]">→</span>
-                              <SingleStatusBadge status={log.toStatus} tier={log.tier as "appointment" | "visit"} />
-                            </div>
-                            {log.note && (
-                              <p className="text-xs text-[#616161] mt-1">{log.note}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+        {/* Phụ trách */}
+        {orderTeam.length > 0 && (
+          <>
+            <SectionTitle>Phụ trách</SectionTitle>
+            <Card className="overflow-hidden p-0">
+              {orderTeam.map((m, i) => (
+                <div
+                  key={m.id}
+                  className={
+                    "flex items-center gap-3 px-4 py-3" +
+                    (i === orderTeam.length - 1 ? "" : " border-b border-np-surface-pressed")
+                  }
+                >
+                  <Avatar name={m.name} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[14px] font-semibold text-np-ink">{m.name}</span>
+                    <span className="ml-1.5 text-[12px] text-np-text-muted">· {m.role}</span>
                   </div>
                 </div>
-              </Card>
-            )}
-          </div>
+              ))}
+            </Card>
+          </>
+        )}
 
-          {/* Right column */}
-          <div className="space-y-5">
-            {/* Card Trạng thái — nút hành động */}
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3]">
-                <h2 className="text-sm font-bold text-[#1a1c1d]">Trạng thái</h2>
+        {/* Khách hàng */}
+        <SectionTitle>Khách hàng</SectionTitle>
+        <Card className="overflow-hidden p-0">
+          <Row
+            leading={<Avatar name={order.patientName} size={44} />}
+            title={order.patientName}
+            subtitle={`Mã KH: KH-${String(order.id).padStart(4, "0")}`}
+            trailing={matchedCustomer ? <Chev /> : undefined}
+            onClick={matchedCustomer ? () => navigate(`/customers/${matchedCustomer.id}`) : undefined}
+          />
+          <InfoRow icon={Phone} label="Số điện thoại" value={order.phone} />
+          {order.email && <InfoRow icon={Mail} label="Email" value={order.email} />}
+          {order.examType && <InfoRow icon={MapPin} label="Hình thức" value={order.examType} last />}
+        </Card>
+
+        {/* Dịch vụ */}
+        <SectionTitle>Dịch vụ</SectionTitle>
+        <Card className="overflow-hidden p-0">
+          <div className="border-b border-np-surface-pressed px-4 py-3.5">
+            <div className="flex items-start justify-between gap-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-bold text-np-ink">{order.serviceName}</div>
+                <div className="mt-1 text-[12px] font-medium text-np-text-muted">
+                  {order.serviceCode}
+                  {order.serviceCategory ? ` · ${order.serviceCategory}` : ""}
+                </div>
+                <div className="mt-1.5 text-[12px] font-medium text-np-text-sub">
+                  {fmtVND(order.unitPrice)} × {order.quantity}
+                </div>
               </div>
-              <div className="px-4 sm:px-5 py-4 space-y-4">
-                {/* Current appointment status */}
-                <div>
-                  <p className="text-[10px] font-bold text-[#616161] uppercase mb-2">Lịch hẹn</p>
-                  <OrderStatusBadges appointmentStatus={order.appointmentStatus} size="md" />
-                  {appointmentButtons.length > 0 && (
-                    <div className="mt-3 flex flex-col gap-2">
-                      {appointmentButtons.map((btn) => (
-                        <Button
-                          key={btn.targetStatus}
-                          size="sm"
-                          variant={btn.variant === "destructive" ? "destructive" : btn.variant === "outline" ? "outline" : "default"}
-                          className={`h-9 text-xs font-bold justify-start gap-2 ${
-                            btn.variant === "default" ? "bg-[#008060] hover:bg-[#006e52] text-white" : ""
-                          } ${btn.variant === "outline" ? "border-[#d2d5d8]" : ""}`}
-                          onClick={() => handleAppointmentAction(btn)}
-                          disabled={updateAppointmentStatus.isPending}
+              <div className="flex-shrink-0 text-[14px] font-bold text-np-ink tabular-nums">
+                {fmtVND(order.totalPrice)}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5 px-4 py-3">
+            <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
+              <span>Tạm tính</span>
+              <span className="tabular-nums">{fmtVND(order.totalPrice)}</span>
+            </div>
+            <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
+              <span>Giảm giá</span>
+              <span className="tabular-nums">0₫</span>
+            </div>
+            <div className="mt-1 flex justify-between border-t border-np-border pt-2 text-[15px] font-extrabold text-np-ink">
+              <span>Tổng cộng</span>
+              <span className="tabular-nums">{fmtVND(order.totalPrice)}</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Lịch hẹn — chỉ hiện khi có ngày hoặc giờ hẹn */}
+        {(order.appointmentDate || order.appointmentTime) && (
+          <>
+            <SectionTitle>Lịch hẹn</SectionTitle>
+            <Card className="overflow-hidden p-0">
+              {order.appointmentDate && (
+                <InfoRow
+                  icon={CalendarDays}
+                  label="Ngày hẹn"
+                  value={order.appointmentDate}
+                  last={!order.appointmentTime}
+                />
+              )}
+              {order.appointmentTime && (
+                <InfoRow icon={Clock} label="Giờ hẹn" value={order.appointmentTime} last />
+              )}
+            </Card>
+          </>
+        )}
+
+        {/* Lịch sử trạng thái */}
+        {statusLogs.length > 0 && (
+          <>
+            <SectionTitle>Lịch sử trạng thái</SectionTitle>
+            <Card className="p-4">
+              <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-px before:bg-np-border">
+                {statusLogs.map((log, idx) => {
+                  const isAppt = log.tier === "appointment";
+                  const isLatest = idx === statusLogs.length - 1;
+                  const fromInfo = isAppt
+                    ? APPOINTMENT_STATUSES[log.fromStatus as AppointmentStatusCode]
+                    : VISIT_STATUSES[log.fromStatus as VisitStatusCode];
+                  const toInfo = isAppt
+                    ? APPOINTMENT_STATUSES[log.toStatus as AppointmentStatusCode]
+                    : VISIT_STATUSES[log.toStatus as VisitStatusCode];
+                  const dotColor = isAppt ? "border-np-brand-ink" : "border-[#1e40af]";
+                  const fillColor = isAppt ? "bg-np-brand-ink" : "bg-[#1e40af]";
+                  return (
+                    <div key={log.id} className="relative pl-6">
+                      {/* Marker */}
+                      {isLatest ? (
+                        <span className="absolute left-0 top-1 z-10 flex h-4 w-4 items-center justify-center">
+                          <span
+                            className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${fillColor}`}
+                          />
+                          <span
+                            className={`relative inline-flex h-3 w-3 rounded-full ${fillColor}`}
+                          />
+                        </span>
+                      ) : (
+                        <div
+                          className={`absolute left-0 top-1 z-10 h-4 w-4 rounded-full border-2 bg-white ${dotColor}`}
+                        />
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`text-[11px] ${
+                            isLatest ? "font-bold text-np-ink" : "text-np-text-muted"
+                          }`}
                         >
-                          {getButtonIcon(btn.icon)}
-                          {btn.label}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Visit status (only when arrived) */}
-                {visitStatus && (
-                  <div className="pt-4 border-t border-[#e3e3e3]">
-                    <p className="text-[10px] font-bold text-[#616161] uppercase mb-2">Khám bệnh</p>
-                    <SingleStatusBadge status={visitStatus} tier="visit" size="md" />
-                    {visitButtons.length > 0 && (
-                      <div className="mt-3 flex flex-col gap-2">
-                        {visitButtons.map((btn) => (
-                          <Button
-                            key={btn.targetStatus}
-                            size="sm"
-                            variant={btn.variant === "destructive" ? "destructive" : btn.variant === "outline" ? "outline" : "default"}
-                            className={`h-9 text-xs font-bold justify-start gap-2 ${
-                              btn.variant === "default" ? "bg-[#1e40af] hover:bg-[#1e3a8a] text-white" : ""
-                            } ${btn.variant === "outline" ? "border-[#d2d5d8]" : ""}`}
-                            onClick={() => handleVisitAction(btn)}
-                            disabled={updateVisitStatus.isPending}
-                          >
-                            {getButtonIcon(btn.icon)}
-                            {btn.label}
-                          </Button>
-                        ))}
+                          {log.timestamp}
+                        </span>
+                        <span className="rounded-np-badge border border-np-border px-1.5 py-0 text-[9px] font-normal text-np-text-sub">
+                          {isAppt ? "Lịch hẹn" : "Khám"}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {fromInfo && (
+                          <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.fromStatus)}>
+                            {fromInfo.label}
+                          </NPBadge>
+                        )}
+                        <span className="text-[10px] text-np-text-muted">→</span>
+                        {toInfo && (
+                          <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.toStatus)}>
+                            {toInfo.label}
+                          </NPBadge>
+                        )}
+                      </div>
+                      {log.note && (
+                        <p
+                          className={`mt-1 text-[12px] ${
+                            isLatest ? "font-medium text-np-ink" : "text-np-text-sub"
+                          }`}
+                        >
+                          {log.note}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </Card>
+          </>
+        )}
 
-            {/* Lịch hẹn */}
-            {(order.appointmentDate || order.appointmentTime || order.examType) && (
-              <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-                <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4 text-[#4a4d50]" />
-                  <h2 className="text-sm font-bold text-[#1a1c1d]">Lịch hẹn</h2>
-                </div>
-                <div className="px-4 sm:px-5 py-4 space-y-3">
-                  {order.appointmentDate && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#8c9196]" />
-                      <span className="text-[#616161]">Ngày hẹn:</span>
-                      <span className="font-medium text-[#1a1c1d]" data-testid="text-appointment-date">{order.appointmentDate}</span>
-                    </div>
-                  )}
-                  {order.appointmentTime && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="h-3.5 w-3.5 shrink-0 text-[#8c9196]" />
-                      <span className="text-[#616161]">Giờ hẹn:</span>
-                      <span className="font-medium text-[#1a1c1d]" data-testid="text-appointment-time">{order.appointmentTime}</span>
-                    </div>
-                  )}
-                  {order.examType && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="h-3.5 w-3.5 shrink-0 text-[#8c9196]" />
-                      <span className="text-[#616161]">Hình thức:</span>
-                      <Badge className={`text-[10px] font-bold border-0 px-2 py-0.5 ${
-                        order.examType === "Lấy mẫu tại nhà" ? "bg-[#dbeafe] text-[#1e40af]" : "bg-[#e4f3d9] text-[#008060]"
-                      }`} data-testid="badge-exam-type">
-                        {order.examType}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )}
-
-            {/* Hóa đơn VAT */}
-            {(order.vatCompanyName || order.vatTaxCode) && (
-              <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-                <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-[#4a4d50]" />
-                  <h2 className="text-sm font-bold text-[#1a1c1d]">Hóa đơn VAT</h2>
-                </div>
-                <div className="px-4 sm:px-5 py-4 space-y-3">
-                  {order.vatCompanyName && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-[#8c9196] shrink-0 w-28">Tên công ty:</span>
-                      <span className="font-medium text-[#1a1c1d]">{order.vatCompanyName}</span>
-                    </div>
-                  )}
-                  {order.vatTaxCode && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-[#8c9196] shrink-0 w-28">Mã số thuế:</span>
-                      <span className="font-medium text-[#1a1c1d]">{order.vatTaxCode}</span>
-                    </div>
-                  )}
-                  {order.vatCompanyAddress && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-[#8c9196] shrink-0 w-28">Địa chỉ:</span>
-                      <span className="font-medium text-[#1a1c1d]">{order.vatCompanyAddress}</span>
-                    </div>
-                  )}
-                  {order.vatEmail && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-[#8c9196] shrink-0 w-28">Email:</span>
-                      <span className="font-medium text-[#005bd3]">{order.vatEmail}</span>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )}
-
-            {/* Ghi chú */}
-            {order.notes !== null && order.notes !== undefined && order.notes !== "" && (
-              <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-                <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-[#4a4d50]" />
-                  <h2 className="text-sm font-bold text-[#1a1c1d]">Ghi chú</h2>
-                </div>
-                <div className="px-4 sm:px-5 py-4">
-                  <p className="text-sm text-[#616161]">{order.notes}</p>
-                </div>
-              </Card>
-            )}
-
-            {/* Khách hàng */}
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="px-4 sm:px-5 py-4 border-b border-[#e3e3e3] flex items-center gap-2">
-                <User className="h-4 w-4 text-[#4a4d50]" />
-                <h2 className="text-sm font-bold text-[#1a1c1d]">Khách hàng</h2>
-              </div>
-              <div className="px-4 sm:px-5 py-4 space-y-3">
-                {matchedCustomer ? (
-                  <Link href={`/customers/${matchedCustomer.id}`}>
-                    <p className="text-sm font-bold text-[#005bd3] hover:underline cursor-pointer" data-testid="text-order-patient">{order.patientName}</p>
-                  </Link>
-                ) : (
-                  <p className="text-sm font-bold text-[#005bd3]" data-testid="text-order-patient">{order.patientName}</p>
-                )}
-                <div className="space-y-2">
-                  <p className="text-sm text-[#616161] font-medium">Thông tin liên hệ</p>
-                  <div className="flex items-center gap-2 text-sm text-[#616161]">
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#8c9196]" />
-                    <span data-testid="text-order-phone">{order.phone}</span>
-                  </div>
-                  {order.email && (
-                    <div className="flex items-center gap-2 text-sm text-[#005bd3] min-w-0">
-                      <Mail className="h-3.5 w-3.5 shrink-0 text-[#8c9196]" />
-                      <span className="truncate" data-testid="text-order-email">{order.email}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+        {/* Hóa đơn VAT */}
+        {(order.vatCompanyName || order.vatTaxCode) && (
+          <>
+            <SectionTitle>Hóa đơn VAT</SectionTitle>
+            <Card className="space-y-2.5 p-4">
+              {order.vatCompanyName && <KeyVal label="Tên công ty" value={order.vatCompanyName} />}
+              {order.vatTaxCode && <KeyVal label="Mã số thuế" value={order.vatTaxCode} />}
+              {order.vatCompanyAddress && <KeyVal label="Địa chỉ" value={order.vatCompanyAddress} />}
+              {order.vatEmail && <KeyVal label="Email" value={order.vatEmail} valueClass="text-np-link" />}
             </Card>
-          </div>
-        </div>
-      </main>
+          </>
+        )}
 
-      {/* Confirmation AlertDialog */}
-      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}>
+        {/* Ghi chú */}
+        {order.notes && (
+          <>
+            <SectionTitle>Ghi chú</SectionTitle>
+            <Card className="p-4">
+              <p className="flex items-start gap-2 text-[13px] text-np-text-sub">
+                <FileText size={14} strokeWidth={2.25} className="mt-0.5 flex-shrink-0 text-np-text-muted" />
+                {order.notes}
+              </p>
+            </Card>
+          </>
+        )}
+
+        {/* Spacer để content cuối không bị che bởi action bar absolute */}
+        {(appointmentButtons.length > 0 || visitButtons.length > 0) && <div className="h-[88px]" />}
+
+        <div className="h-5" />
+      </div>
+
+      {/* Compact action bar — absolute pin trên TabBar, luôn visible */}
+      {(appointmentButtons.length > 0 || visitButtons.length > 0) &&
+        (() => {
+          const allActions: Array<StatusButton & { tier: "appointment" | "visit" }> = [
+            ...appointmentButtons.map((b) => ({ ...b, tier: "appointment" as const })),
+            ...(visitStatus ? visitButtons.map((b) => ({ ...b, tier: "visit" as const })) : []),
+          ];
+          const primary = allActions.find((b) => b.variant === "default") ?? allActions[0];
+          const hasMore = allActions.length > 1;
+          const PrimaryIcon = BUTTON_ICONS[primary.icon];
+          const handle = (a: typeof primary) =>
+            a.tier === "appointment" ? handleAppointmentAction(a) : handleVisitAction(a);
+
+          return (
+            <div className="absolute bottom-[64px] left-0 right-0 z-20 border-t border-np-border bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+              <div className="flex items-center gap-2">
+                <NPButton
+                  size="lg"
+                  tone={
+                    primary.variant === "destructive"
+                      ? "dark"
+                      : primary.variant === "outline"
+                      ? "ghost"
+                      : "primary"
+                  }
+                  icon={PrimaryIcon}
+                  className="flex-1 justify-center"
+                  onClick={() => handle(primary)}
+                  disabled={updateAppointmentStatus.isPending || updateVisitStatus.isPending}
+                >
+                  {primary.label}
+                </NPButton>
+                {hasMore && (
+                  <button
+                    type="button"
+                    aria-label="Hành động khác"
+                    onClick={() => setActionsSheetOpen(true)}
+                    className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-np-button border border-np-border-strong bg-white text-np-ink transition-colors hover:bg-np-surface-sub"
+                  >
+                    <MoreHorizontal size={20} strokeWidth={2.25} />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* Confirm dialog */}
+      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog((p) => ({ ...p, open }))}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
@@ -636,36 +590,42 @@ export default function OrderDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reschedule Dialog */}
+      {/* Reschedule dialog */}
       <Dialog open={rescheduleDialog} onOpenChange={setRescheduleDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Dời lịch hẹn</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-[#616161]">
+            <p className="text-[13px] text-np-text-sub">
               Chọn ngày và giờ mới. Đơn hiện tại sẽ được đánh dấu "Dời lịch" và một đơn mới sẽ được tạo với trạng thái "Đã xác nhận".
             </p>
             <div>
-              <label className="text-xs font-medium text-[#616161] mb-1.5 block">Ngày hẹn mới</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">Ngày hẹn mới</label>
               <Input
                 type="date"
                 value={newDate}
-                onChange={(e) => { setNewDate(e.target.value); setNewTime(""); }}
+                onChange={(e) => {
+                  setNewDate(e.target.value);
+                  setNewTime("");
+                }}
                 min={new Date().toISOString().split("T")[0]}
-                className="bg-[#f6f6f7] border-[#d2d5d8] rounded-lg h-9 text-sm"
               />
             </div>
             {newDate && (
               <div>
-                <label className="text-xs font-medium text-[#616161] mb-1.5 block">Giờ hẹn mới</label>
+                <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">Giờ hẹn mới</label>
                 <div className="grid grid-cols-4 gap-2">
-                  {timeSlots.map(time => (
+                  {TIME_SLOTS.map((time) => (
                     <button
                       key={time}
                       type="button"
-                      className={`h-8 rounded-lg text-xs font-medium border transition-all ${newTime === time ? "bg-[#008060] text-white border-[#008060]" : "bg-[#f6f6f7] text-[#1a1c1d] border-[#d2d5d8] hover:border-[#008060] hover:text-[#008060]"}`}
                       onClick={() => setNewTime(time)}
+                      className={`h-8 rounded-np-button border text-[12px] font-medium transition-all ${
+                        newTime === time
+                          ? "border-np-brand-ink bg-np-brand-ink text-white"
+                          : "border-np-border-strong bg-np-surface-sub text-np-ink hover:border-np-brand-ink hover:text-np-brand-ink"
+                      }`}
                     >
                       {time}
                     </button>
@@ -675,11 +635,11 @@ export default function OrderDetail() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRescheduleDialog(false)} className="border-[#d2d5d8]">
+            <NPButton tone="ghost" onClick={() => setRescheduleDialog(false)}>
               Hủy bỏ
-            </Button>
-            <Button
-              className="bg-[#008060] hover:bg-[#006e52] text-white"
+            </NPButton>
+            <NPButton
+              tone="primary"
               disabled={!newDate || !newTime || rescheduleOrder.isPending}
               onClick={() => {
                 const formattedDate = newDate.split("-").reverse().join("/");
@@ -687,10 +647,132 @@ export default function OrderDetail() {
               }}
             >
               {rescheduleOrder.isPending ? "Đang xử lý..." : "Xác nhận dời lịch"}
-            </Button>
+            </NPButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Overflow actions sheet */}
+      <Sheet open={actionsSheetOpen} onOpenChange={setActionsSheetOpen}>
+        <SheetContent
+          side="bottom"
+          className="mx-auto max-w-[390px] gap-0 rounded-t-np-sheet border-0 bg-white p-0"
+        >
+          <div className="flex justify-center pt-2">
+            <div className="h-1 w-9 rounded-full bg-np-border-strong" />
+          </div>
+          <SheetHeader className="px-5 pb-3 pt-3 text-left">
+            <SheetTitle className="text-[17px] font-bold tracking-[-0.1px] text-np-ink">
+              Hành động
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-2 px-4 pb-6">
+            {appointmentButtons.length > 0 && (
+              <>
+                <div className="px-1 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
+                  Lịch hẹn
+                </div>
+                {appointmentButtons.map((btn) => {
+                  const Icon = BUTTON_ICONS[btn.icon];
+                  return (
+                    <NPButton
+                      key={`sheet-appt-${btn.targetStatus}`}
+                      size="md"
+                      tone={
+                        btn.variant === "destructive"
+                          ? "dark"
+                          : btn.variant === "outline"
+                          ? "ghost"
+                          : "primary"
+                      }
+                      icon={Icon}
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setActionsSheetOpen(false);
+                        handleAppointmentAction(btn);
+                      }}
+                      disabled={updateAppointmentStatus.isPending}
+                    >
+                      {btn.label}
+                    </NPButton>
+                  );
+                })}
+              </>
+            )}
+            {visitStatus && visitButtons.length > 0 && (
+              <>
+                <div className="px-1 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
+                  Khám bệnh
+                </div>
+                {visitButtons.map((btn) => {
+                  const Icon = BUTTON_ICONS[btn.icon];
+                  return (
+                    <NPButton
+                      key={`sheet-visit-${btn.targetStatus}`}
+                      size="md"
+                      tone={
+                        btn.variant === "destructive"
+                          ? "dark"
+                          : btn.variant === "outline"
+                          ? "ghost"
+                          : "primary"
+                      }
+                      icon={Icon}
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setActionsSheetOpen(false);
+                        handleVisitAction(btn);
+                      }}
+                      disabled={updateVisitStatus.isPending}
+                    >
+                      {btn.label}
+                    </NPButton>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </Screen>
+  );
+}
+
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+  last,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3 ${
+        last ? "" : "border-b border-np-surface-pressed"
+      }`}
+    >
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-np-surface-sub">
+        <Icon size={15} strokeWidth={2.25} className="text-np-text-sub" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
+          {label}
+        </div>
+        <div className="mt-0.5 truncate text-[14px] font-semibold text-np-ink">{value || "—"}</div>
+      </div>
+    </div>
+  );
+}
+
+function KeyVal({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="flex items-start gap-2 text-[13px]">
+      <span className="w-28 flex-shrink-0 text-np-text-muted">{label}:</span>
+      <span className={`font-medium text-np-ink ${valueClass ?? ""}`}>{value}</span>
     </div>
   );
 }

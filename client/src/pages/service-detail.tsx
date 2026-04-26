@@ -2,35 +2,38 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
-  ChevronLeft,
-  Stethoscope,
-  Hash,
-  Clock,
-  UserRound,
   BadgePercent,
-  Shield,
-  Plus,
+  Bot,
+  CheckCircle2,
+  Clock,
+  Hash,
   Minus,
   Package,
+  Plus,
+  Shield,
   ShoppingCart,
-  CheckCircle2,
-  Bot,
+  Stethoscope,
+  UserRound,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Badge,
+  Card,
+  DetailHeader,
+  NPButton,
+  Screen,
+  SectionTitle,
+  useTabNav,
+} from "@/components/np";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import AppHeader from "@/components/app-header";
-import { Breadcrumb } from "@/components/breadcrumb";
 import type { Service } from "@shared/schema";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value) + " ₫";
+function fmtVND(value: number) {
+  return new Intl.NumberFormat("vi-VN").format(value) + "₫";
 }
 
 export interface PackageMarker {
@@ -461,6 +464,7 @@ export const SERVICE_PACKAGES: Record<string, ServicePackage[]> = {
 };
 
 export default function ServiceDetail() {
+  const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
   const params = useParams<{ id: string }>();
   const serviceId = parseInt(params.id || "0");
@@ -468,17 +472,24 @@ export default function ServiceDetail() {
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [selectedPackageIdx, setSelectedPackageIdx] = useState<number | null>(null);
 
+  const { data: allServices = [], isLoading } = useQuery<Service[]>({
+    queryKey: ["/api/services"],
+  });
+
+  const service = allServices.find((s) => s.id === serviceId);
+  const packages = service ? SERVICE_PACKAGES[service.code] || [] : [];
+
   const toggleMarker = (pkgIdx: number, mIdx: number) => {
     const key = `${pkgIdx}-${mIdx}`;
-    setExpandedMarkers(prev => ({ ...prev, [key]: !prev[key] }));
+    setExpandedMarkers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleCreateOrder = () => {
     if (packages.length > 0) {
       setSelectedPackageIdx(null);
       setPackageDialogOpen(true);
-    } else {
-      navigate(`/orders/new?serviceId=${service!.id}`);
+    } else if (service) {
+      navigate(`/orders/new?serviceId=${service.id}`);
     }
   };
 
@@ -488,297 +499,285 @@ export default function ServiceDetail() {
     }
   };
 
-  const { data: allServices = [], isLoading } = useQuery<Service[]>({
-    queryKey: ["/api/services"],
-  });
-
-  const service = allServices.find(s => s.id === serviceId);
-  const packages = service ? (SERVICE_PACKAGES[service.code] || []) : [];
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-        <AppHeader activePage="services" />
-        <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-          <div className="flex items-center justify-center py-20">
-            <div className="h-8 w-8 border-2 border-[#008060] border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        </main>
-      </div>
+      <Screen activeTab={active} onTab={onTab} noHeader>
+        <DetailHeader title="Dịch vụ" onBack={() => navigate("/services")} />
+        <div className="flex flex-1 items-center justify-center py-20">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
+        </div>
+      </Screen>
     );
   }
 
   if (!service) {
     return (
-      <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-        <AppHeader activePage="services" />
-        <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-          <div className="text-center py-20">
-            <p className="text-[#8c9196]">Không tìm thấy dịch vụ</p>
-            <button onClick={() => navigate("/services")} className="mt-4 text-sm text-[#008060] font-medium hover:underline">
-              Quay lại danh sách
-            </button>
-          </div>
-        </main>
-      </div>
+      <Screen activeTab={active} onTab={onTab} noHeader>
+        <DetailHeader title="Dịch vụ" onBack={() => navigate("/services")} />
+        <div className="flex flex-1 flex-col items-center justify-center py-20">
+          <p className="text-np-text-muted">Không tìm thấy dịch vụ</p>
+          <button
+            type="button"
+            onClick={() => navigate("/services")}
+            className="mt-3 text-[14px] font-medium text-np-brand-ink hover:underline"
+          >
+            Quay lại danh sách
+          </button>
+        </div>
+      </Screen>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-      <AppHeader activePage="services" />
+    <Screen activeTab={active} onTab={onTab} noHeader>
+      <DetailHeader title={service.title} onBack={() => navigate("/services")} />
 
-      <main className="flex-1 p-4 md:p-8 space-y-5 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <Breadcrumb items={[{ label: "Dịch vụ", href: "/services" }, { label: service.title }]} />
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <button onClick={() => navigate("/services")} className="shrink-0 text-[#8c9196] hover:text-[#1a1c1d] transition-colors" data-testid="button-back-services">
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <h1 className="text-lg font-bold text-[#1a1c1d] truncate" data-testid="text-service-detail-title">{service.title}</h1>
+      <div className="bg-np-surface-sub pb-24">
+        {/* Hero */}
+        <div className="bg-white px-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-np-card bg-np-surface-sub">
+              <Stethoscope size={24} strokeWidth={2.2} className="text-np-text-sub" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[18px] font-bold text-np-ink">{service.title}</h2>
+                <span className="flex items-center gap-1 rounded bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+                  <Hash size={10} /> {service.code}
+                </span>
+              </div>
+              <p className="mt-1 text-[13px] leading-relaxed text-np-text-sub">
+                {service.description}
+              </p>
+            </div>
           </div>
-          <Button
-            onClick={handleCreateOrder}
-            className="bg-[#008060] hover:bg-[#006e52] text-white shrink-0"
-            data-testid="button-create-order"
-          >
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            Tạo đơn hàng
-          </Button>
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <div className="rounded-lg bg-np-surface-sub px-3 py-2.5">
+              <div className="flex items-center gap-1 text-[11px] text-np-text-muted">
+                <Package size={12} strokeWidth={2.25} /> Giá dịch vụ
+              </div>
+              <div className="mt-1 text-[15px] font-bold text-np-ink">{fmtVND(service.price)}</div>
+            </div>
+            <div className="rounded-lg bg-np-brand-soft px-3 py-2.5">
+              <div className="flex items-center gap-1 text-[11px] text-np-brand-ink">
+                <BadgePercent size={12} strokeWidth={2.25} /> Hoa hồng
+              </div>
+              <div className="mt-1 text-[15px] font-bold text-np-brand-ink">
+                {service.commissionRange}₫
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-5">
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="p-5 sm:p-6">
-                <div className="flex gap-4 items-start mb-5">
-                  <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                    <Stethoscope className="h-6 w-6 text-blue-600" />
+        {/* Thông tin chi tiết */}
+        <SectionTitle>Thông tin chi tiết</SectionTitle>
+        <Card className="space-y-3 p-4">
+          <InfoLine
+            icon={<UserRound size={15} strokeWidth={2.25} />}
+            label="Chỉ định"
+            trailing={
+              <Badge tone={service.requiresDoctor ? "attention" : "neutral"}>
+                {service.requiresDoctor ? "Bác sĩ" : "Kỹ thuật viên"}
+              </Badge>
+            }
+          />
+          <InfoLine
+            icon={<Clock size={15} strokeWidth={2.25} />}
+            label="Thời gian"
+            trailing={<span className="text-[13px] font-bold text-np-ink">{service.duration}</span>}
+          />
+          <InfoLine
+            icon={<Shield size={15} strokeWidth={2.25} />}
+            label="Bảo hiểm"
+            trailing={
+              <Badge tone={service.insurance === "Có hỗ trợ" ? "success" : "critical"}>
+                {service.insurance}
+              </Badge>
+            }
+          />
+        </Card>
+
+        {/* Packages */}
+        {packages.length > 0 && (
+          <>
+            <SectionTitle>Các gói dịch vụ ({packages.length} gói)</SectionTitle>
+            <div className="space-y-3 px-0">
+              {packages.map((pkg, pkgIdx) => (
+                <Card key={pkgIdx} className="overflow-hidden p-0">
+                  <div className="bg-np-surface-sub px-4 py-3.5">
+                    <h4 className="text-[14px] font-bold text-np-ink">
+                      {pkg.name} ({pkg.markers.length} chỉ số)
+                    </h4>
+                    <p className="mt-1 text-[12px] leading-relaxed text-np-text-sub">
+                      {pkg.description}
+                    </p>
+                    <div className="mt-2 flex items-center gap-4">
+                      <div className="flex items-center gap-1 text-[12px]">
+                        <Package size={12} strokeWidth={2.25} className="text-np-text-muted" />
+                        <span className="text-np-text-muted">Giá:</span>
+                        <span className="font-bold text-np-ink">{fmtVND(pkg.price)}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[12px]">
+                        <BadgePercent size={12} strokeWidth={2.25} className="text-np-brand-ink" />
+                        <span className="text-np-brand-ink">HH:</span>
+                        <span className="font-bold text-np-brand-ink">{fmtVND(pkg.commission)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h2 className="font-bold text-lg text-[#1a1c1d]" data-testid="text-service-name">{service.title}</h2>
-                      <span className="text-[10px] font-bold text-[#8c9196] bg-[#f6f6f7] px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1 shrink-0">
-                        <Hash className="h-3 w-3" /> {service.code}
+                  <div>
+                    {pkg.markers.map((marker, mIdx) => {
+                      const isExpanded = expandedMarkers[`${pkgIdx}-${mIdx}`];
+                      return (
+                        <div
+                          key={mIdx}
+                          className={
+                            mIdx === pkg.markers.length - 1
+                              ? ""
+                              : "border-b border-np-surface-pressed"
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => marker.description && toggleMarker(pkgIdx, mIdx)}
+                            className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                              marker.description
+                                ? "cursor-pointer hover:bg-np-surface-sub"
+                                : "cursor-default"
+                            }`}
+                          >
+                            {marker.description && isExpanded ? (
+                              <Minus size={16} className="flex-shrink-0 text-np-brand-ink" />
+                            ) : (
+                              <Plus size={16} className="flex-shrink-0 text-np-brand-ink" />
+                            )}
+                            <span className="text-[14px] text-np-ink">{marker.name}</span>
+                          </button>
+                          {isExpanded && marker.description && (
+                            <div className="px-4 pb-3 pl-11">
+                              <p className="text-[12px] leading-relaxed text-np-text-sub">
+                                {marker.description}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="h-5" />
+      </div>
+
+      {/* Sticky CTA */}
+      <div className="absolute bottom-[64px] left-0 right-0 z-20 border-t border-np-border bg-white p-3">
+        <NPButton
+          tone="primary"
+          size="lg"
+          className="w-full justify-center"
+          icon={ShoppingCart}
+          onClick={handleCreateOrder}
+        >
+          Tạo đơn hàng
+        </NPButton>
+      </div>
+
+      {/* FAB Hỏi AI */}
+      <button
+        type="button"
+        onClick={() => navigate(`/ai-chat?service=${encodeURIComponent(service.title)}`)}
+        className="absolute bottom-[132px] right-4 z-20 flex items-center gap-2 rounded-full bg-np-brand-ink px-4 py-3 text-white shadow-lg transition-colors hover:bg-np-brand-hover"
+      >
+        <Bot size={20} strokeWidth={2.25} />
+        <span className="text-[14px] font-bold">Hỏi AI</span>
+      </button>
+
+      <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
+        <DialogContent className="overflow-hidden rounded-np-card p-0 sm:max-w-md">
+          <DialogHeader className="px-5 pb-0 pt-5">
+            <DialogTitle className="text-[16px] font-bold text-np-ink">Chọn gói dịch vụ</DialogTitle>
+            <p className="mt-1 text-[12px] text-np-text-muted">Vui lòng chọn gói để tạo đơn hàng</p>
+          </DialogHeader>
+          <div className="mt-4 max-h-[50vh] overflow-y-auto border-t border-np-border">
+            {packages.map((pkg, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setSelectedPackageIdx(idx)}
+                className={`w-full border-b border-np-surface-pressed px-5 py-4 text-left transition-colors last:border-0 ${
+                  selectedPackageIdx === idx ? "bg-np-brand-soft" : "hover:bg-np-surface-sub"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+                      selectedPackageIdx === idx
+                        ? "border-np-brand-ink bg-np-brand-ink"
+                        : "border-np-border-strong"
+                    }`}
+                  >
+                    {selectedPackageIdx === idx && (
+                      <CheckCircle2 size={14} className="text-white" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-bold text-np-ink">{pkg.name}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-np-text-sub">
+                      {pkg.description}
+                    </p>
+                    <div className="mt-2 flex items-center gap-3 text-[12px]">
+                      <span>
+                        <span className="text-np-text-muted">Giá: </span>
+                        <span className="font-bold text-np-ink">{fmtVND(pkg.price)}</span>
+                      </span>
+                      <span>
+                        <span className="text-np-brand-ink">HH: </span>
+                        <span className="font-bold text-np-brand-ink">{fmtVND(pkg.commission)}</span>
                       </span>
                     </div>
-                    <p className="text-sm text-[#4a4d50] leading-relaxed" data-testid="text-service-description">{service.description}</p>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-[#f6f6f7] rounded-lg p-3.5">
-                    <div className="flex items-center gap-2 text-xs text-[#8c9196] mb-1">
-                      <Package className="h-3.5 w-3.5" />
-                      <span>Giá dịch vụ</span>
-                    </div>
-                    <p className="text-base font-bold text-[#1a1c1d]" data-testid="text-service-price">{formatCurrency(service.price)}</p>
-                  </div>
-                  <div className="bg-[#f0fdf4] rounded-lg p-3.5">
-                    <div className="flex items-center gap-2 text-xs text-[#008060] mb-1">
-                      <BadgePercent className="h-3.5 w-3.5" />
-                      <span>Hoa hồng</span>
-                    </div>
-                    <p className="text-base font-bold text-[#008060]" data-testid="text-service-commission">{service.commissionRange} đ</p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {packages.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-[#1a1c1d] flex items-center gap-2">
-                  <Package className="h-4 w-4 text-[#4a4d50]" />
-                  Các gói dịch vụ ({packages.length} gói)
-                </h3>
-
-                {packages.map((pkg, pkgIdx) => (
-                  <Card key={pkgIdx} className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden" data-testid={`card-package-${pkgIdx}`}>
-                    <div className="px-5 py-4 bg-[#f6f6f7] border-b border-[#e3e3e3]">
-                      <h4 className="text-sm font-bold text-[#1a1c1d] mb-1" data-testid={`text-package-name-${pkgIdx}`}>
-                        {pkg.name} ({pkg.markers.length} Chỉ số)
-                      </h4>
-                      <p className="text-xs text-[#6d7175] leading-relaxed" data-testid={`text-package-desc-${pkgIdx}`}>{pkg.description}</p>
-                      <div className="flex items-center gap-4 mt-3">
-                        <div className="flex items-center gap-1.5">
-                          <Package className="h-3.5 w-3.5 text-[#8c9196]" />
-                          <span className="text-xs text-[#8c9196]">Giá:</span>
-                          <span className="text-xs font-bold text-[#1a1c1d]" data-testid={`text-package-price-${pkgIdx}`}>{formatCurrency(pkg.price)}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <BadgePercent className="h-3.5 w-3.5 text-[#008060]" />
-                          <span className="text-xs text-[#008060]">Hoa hồng:</span>
-                          <span className="text-xs font-bold text-[#008060]" data-testid={`text-package-commission-${pkgIdx}`}>{formatCurrency(pkg.commission)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="divide-y divide-[#e3e3e3]">
-                      {pkg.markers.map((marker, mIdx) => {
-                        const isExpanded = expandedMarkers[`${pkgIdx}-${mIdx}`];
-                        return (
-                          <div key={mIdx} data-testid={`marker-${pkgIdx}-${mIdx}`}>
-                            <button
-                              onClick={() => marker.description && toggleMarker(pkgIdx, mIdx)}
-                              className={`flex items-center gap-3 px-5 py-3.5 w-full text-left transition-colors ${marker.description ? 'hover:bg-[#f9fafb] cursor-pointer' : 'cursor-default'}`}
-                              data-testid={`button-toggle-marker-${pkgIdx}-${mIdx}`}
-                            >
-                              {marker.description ? (
-                                isExpanded ? (
-                                  <Minus className="h-4 w-4 text-[#008060] shrink-0" />
-                                ) : (
-                                  <Plus className="h-4 w-4 text-[#008060] shrink-0" />
-                                )
-                              ) : (
-                                <Plus className="h-4 w-4 text-[#008060] shrink-0" />
-                              )}
-                              <span className="text-sm text-[#1a1c1d]">{marker.name}</span>
-                            </button>
-                            {isExpanded && marker.description && (
-                              <div className="px-5 pb-3.5 pl-12">
-                                <p className="text-xs text-[#6d7175] leading-relaxed" data-testid={`text-marker-desc-${pkgIdx}-${mIdx}`}>
-                                  {marker.description}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+              </button>
+            ))}
           </div>
-
-          <div className="space-y-5">
-            <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#e3e3e3]">
-                <h3 className="text-sm font-bold text-[#1a1c1d]">Thông tin chi tiết</h3>
-              </div>
-              <div className="px-5 py-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-[#8c9196]">
-                    <UserRound className="h-4 w-4" />
-                    <span>Chỉ định</span>
-                  </div>
-                  <Badge variant="outline" className={`text-[10px] px-2 py-0.5 border-0 font-bold ${service.requiresDoctor ? 'bg-orange-50 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {service.requiresDoctor ? 'Bác sĩ' : 'Kỹ thuật viên'}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-[#8c9196]">
-                    <Clock className="h-4 w-4" />
-                    <span>Thời gian</span>
-                  </div>
-                  <span className="text-xs font-bold text-[#1a1c1d]">{service.duration}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-[#8c9196]">
-                    <Shield className="h-4 w-4" />
-                    <span>Bảo hiểm</span>
-                  </div>
-                  <Badge variant="outline" className={`text-[10px] px-2 py-0.5 border-0 font-bold ${service.insurance === 'Có hỗ trợ' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
-                    {service.insurance}
-                  </Badge>
-                </div>
-              </div>
-            </Card>
-
-            {packages.length > 0 && (
-              <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-[#e3e3e3]">
-                  <h3 className="text-sm font-bold text-[#1a1c1d]">Tổng quan gói</h3>
-                </div>
-                <div className="px-5 py-4 space-y-3">
-                  {packages.map((pkg, idx) => (
-                    <div key={idx} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-[#4a4d50]">{pkg.name}</span>
-                        <span className="text-xs font-bold text-[#008060] bg-[#f0fdf4] px-2 py-0.5 rounded">{pkg.markers.length} chỉ số</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-[#8c9196]">{formatCurrency(pkg.price)}</span>
-                        <span className="text-[11px] text-[#008060]">HH: {formatCurrency(pkg.commission)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
+          <div className="flex items-center gap-3 border-t border-np-border bg-white px-5 py-4">
+            <NPButton
+              tone="primary"
+              className="flex-1 justify-center"
+              disabled={selectedPackageIdx === null}
+              onClick={confirmPackageAndNavigate}
+            >
+              Tạo đơn hàng
+            </NPButton>
+            <NPButton tone="ghost" onClick={() => setPackageDialogOpen(false)}>
+              Huỷ
+            </NPButton>
           </div>
-        </div>
+        </DialogContent>
+      </Dialog>
+    </Screen>
+  );
+}
 
-        <button
-          onClick={() => navigate(`/ai-chat?service=${encodeURIComponent(service.title)}`)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full bg-[#008060] hover:bg-[#006e52] text-white shadow-lg transition-colors"
-          data-testid="fab-ask-ai"
-        >
-          <Bot className="h-5 w-5" />
-          <span className="text-sm font-bold">Hỏi AI</span>
-        </button>
-
-        <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
-          <DialogContent className="sm:max-w-md p-0 gap-0 rounded-2xl overflow-hidden border-[#d2d5d8]">
-            <DialogHeader className="px-5 pt-5 pb-0">
-              <DialogTitle className="text-base font-bold text-[#1a1c1d]">Chọn gói dịch vụ</DialogTitle>
-              <p className="text-xs text-[#8c9196] mt-1">Vui lòng chọn gói để tạo đơn hàng</p>
-            </DialogHeader>
-
-            <div className="max-h-[50vh] overflow-y-auto border-t border-[#e3e3e3] mt-4">
-              <div className="divide-y divide-[#e3e3e3]">
-                {packages.map((pkg, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedPackageIdx(idx)}
-                    className={`w-full text-left px-5 py-4 transition-colors ${selectedPackageIdx === idx ? 'bg-[#f0fdf4]' : 'hover:bg-[#f6f6f7]'}`}
-                    data-testid={`dialog-package-${idx}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedPackageIdx === idx ? 'border-[#008060] bg-[#008060]' : 'border-[#c4c7c9]'}`}>
-                        {selectedPackageIdx === idx && <CheckCircle2 className="h-4 w-4 text-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-[#1a1c1d]">{pkg.name}</p>
-                        <p className="text-xs text-[#6d7175] mt-0.5 leading-relaxed">{pkg.description}</p>
-                        <div className="flex items-center gap-4 mt-2">
-                          <span className="text-xs text-[#1a1c1d]">
-                            <span className="text-[#8c9196]">Giá: </span>
-                            <span className="font-bold">{formatCurrency(pkg.price)}</span>
-                          </span>
-                          <span className="text-xs text-[#008060]">
-                            <span>HH: </span>
-                            <span className="font-bold">{formatCurrency(pkg.commission)}</span>
-                          </span>
-                          <span className="text-[10px] text-[#8c9196] bg-[#f6f6f7] px-1.5 py-0.5 rounded">{pkg.markers.length} chỉ số</span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 px-5 py-4 border-t border-[#e3e3e3] bg-white">
-              <Button
-                onClick={confirmPackageAndNavigate}
-                disabled={selectedPackageIdx === null}
-                className="flex-1 h-10 bg-[#008060] hover:bg-[#006e52] text-white font-bold text-sm rounded-xl disabled:opacity-50"
-                data-testid="button-confirm-package"
-              >
-                Tạo đơn hàng
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setPackageDialogOpen(false)}
-                className="h-10 px-6 border-[#d2d5d8] text-[#1a1c1d] font-bold text-sm rounded-xl"
-                data-testid="button-cancel-package"
-              >
-                Huỷ
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </main>
+function InfoLine({
+  icon,
+  label,
+  trailing,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  trailing: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 text-[12px] text-np-text-muted">
+        {icon}
+        <span>{label}</span>
+      </div>
+      {trailing}
     </div>
   );
 }

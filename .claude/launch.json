@@ -5,10 +5,10 @@
       "name": "dev",
       "runtimeExecutable": "/Users/mac/local/bin/npx",
       "runtimeArgs": ["tsx", "server/index.ts"],
-      "port": 3000,
+      "port": 5174,
       "env": {
         "NODE_ENV": "development",
-        "PORT": "3000",
+        "PORT": "5174",
         "PATH": "/Users/mac/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       }
     },

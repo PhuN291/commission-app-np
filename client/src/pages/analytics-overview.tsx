@@ -1,78 +1,65 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
+import type { LucideIcon } from "lucide-react";
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Users,
-  Repeat,
   Activity,
-  ArrowUpRight,
   ArrowDownRight,
+  ArrowUpRight,
+  DollarSign,
+  Repeat,
+  TrendingDown,
+  TrendingUp,
+  Users,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import {
-  LineChart,
+  CartesianGrid,
   Line,
-  BarChart,
-  Bar,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
 } from "recharts";
-import AppHeader from "@/components/app-header";
+import {
+  Badge,
+  Card,
+  DetailHeader,
+  PageHeader,
+  Screen,
+  SectionTitle,
+  useTabNav,
+} from "@/components/np";
 import DateRangeFilter from "@/components/date-range-filter";
+import { cn } from "@/lib/utils";
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
+const fmtVND = (n: number) => new Intl.NumberFormat("vi-VN").format(n) + "đ";
+
+function fmtShort(n: number) {
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + "tỷ";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(0) + "tr";
+  if (n >= 1_000) return (n / 1_000).toFixed(0) + "k";
+  return String(n);
+}
+
+type KpiCard = {
+  title: string;
+  value: number;
+  change: number;
+  icon: LucideIcon;
+  format: "currency" | "number" | "percent";
 };
 
-const formatShort = (amount: number) => {
-  if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(1)}tỷ`;
-  if (amount >= 1000000) return `${(amount / 1000000).toFixed(0)}tr`;
-  if (amount >= 1000) return `${(amount / 1000).toFixed(0)}k`;
-  return amount.toString();
-};
-
-// KPI Cards mock data
-const kpiCards = [
-  {
-    title: "Tổng doanh thu",
-    value: 1245000000,
-    change: 12.3,
-    icon: DollarSign,
-    format: "currency",
-  },
-  {
-    title: "Số bệnh nhân",
-    value: 847,
-    change: 8.1,
-    icon: Users,
-    format: "number",
-  },
-  {
-    title: "DT trung bình / BN",
-    value: 1470000,
-    change: 4.2,
-    icon: Activity,
-    format: "currency",
-  },
-  {
-    title: "Tỷ lệ quay lại",
-    value: 34.2,
-    change: -2.1,
-    icon: Repeat,
-    format: "percent",
-  },
+const kpiCards: KpiCard[] = [
+  { title: "Tổng doanh thu", value: 1_245_000_000, change: 12.3, icon: DollarSign, format: "currency" },
+  { title: "Số bệnh nhân", value: 847, change: 8.1, icon: Users, format: "number" },
+  { title: "DT trung bình / BN", value: 1_470_000, change: 4.2, icon: Activity, format: "currency" },
+  { title: "Tỷ lệ quay lại", value: 34.2, change: -2.1, icon: Repeat, format: "percent" },
 ];
 
-// Line chart mock data - 30 days
 const revenueLineData = Array.from({ length: 30 }, (_, i) => {
   const day = i + 1;
-  const base = 35000000 + Math.sin(i * 0.3) * 15000000 + Math.random() * 8000000;
-  const prev = 30000000 + Math.sin(i * 0.3) * 12000000 + Math.random() * 6000000;
+  const base = 35_000_000 + Math.sin(i * 0.3) * 15_000_000 + (((i * 7919) % 1000) / 1000) * 8_000_000;
+  const prev = 30_000_000 + Math.sin(i * 0.3) * 12_000_000 + (((i * 6997) % 1000) / 1000) * 6_000_000;
   return {
     day: `${day.toString().padStart(2, "0")}/03`,
     current: Math.round(base),
@@ -80,245 +67,231 @@ const revenueLineData = Array.from({ length: 30 }, (_, i) => {
   };
 });
 
-// Horizontal bar chart - revenue by service
 const serviceRevenueData = [
-  { name: "Khám tổng quát", revenue: 320000000, percent: 25.7 },
-  { name: "Siêu âm", revenue: 245000000, percent: 19.7 },
-  { name: "Xét nghiệm máu", revenue: 198000000, percent: 15.9 },
-  { name: "Nội soi", revenue: 176000000, percent: 14.1 },
-  { name: "Điều dưỡng tại nhà", revenue: 152000000, percent: 12.2 },
-  { name: "Khác", revenue: 154000000, percent: 12.4 },
+  { name: "Khám tổng quát", revenue: 320_000_000, percent: 25.7 },
+  { name: "Siêu âm", revenue: 245_000_000, percent: 19.7 },
+  { name: "Xét nghiệm máu", revenue: 198_000_000, percent: 15.9 },
+  { name: "Nội soi", revenue: 176_000_000, percent: 14.1 },
+  { name: "Điều dưỡng tại nhà", revenue: 152_000_000, percent: 12.2 },
+  { name: "Khác", revenue: 154_000_000, percent: 12.4 },
 ];
 
-const barColors = ["#008060", "#00a67d", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5"];
+const BAR_COLORS = ["#1A8A7D", "#22A594", "#34D399", "#6EE7B7", "#A7F3D0", "#D1FAE5"];
 
-// Top 5 growing services
 const topGrowingServices = [
-  { name: "Điều dưỡng tại nhà", growth: 45.2, revenue: 152000000 },
-  { name: "Nội soi", growth: 28.7, revenue: 176000000 },
-  { name: "Xét nghiệm máu", growth: 18.3, revenue: 198000000 },
-  { name: "Siêu âm", growth: 12.1, revenue: 245000000 },
-  { name: "Khám tổng quát", growth: -3.5, revenue: 320000000 },
+  { name: "Điều dưỡng tại nhà", growth: 45.2, revenue: 152_000_000 },
+  { name: "Nội soi", growth: 28.7, revenue: 176_000_000 },
+  { name: "Xét nghiệm máu", growth: 18.3, revenue: 198_000_000 },
+  { name: "Siêu âm", growth: 12.1, revenue: 245_000_000 },
+  { name: "Khám tổng quát", growth: -3.5, revenue: 320_000_000 },
 ];
 
 export default function AnalyticsOverview() {
+  const { active, onTab } = useTabNav();
+  const [, navigate] = useLocation();
   const [dateRange, setDateRange] = useState("last_30_days");
 
   return (
-    <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-      <AppHeader userName="Nguyễn Thị Mai" activePage="analytics-overview" />
+    <Screen activeTab={active} onTab={onTab} noHeader>
+      <DetailHeader title="Phân tích tổng quan" onBack={() => navigate("/")} />
 
-      <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-lg font-bold text-[#1a1c1d]">Tổng quan doanh thu</h1>
-            <p className="text-xs text-[#8c9196] mt-0.5">Theo dõi doanh thu và các chỉ số chính của phòng khám</p>
-          </div>
-          <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        </div>
+      <div className="bg-np-surface-sub pb-5">
+        <PageHeader
+          title="Tổng quan"
+          subtitle="Doanh thu và chỉ số chính"
+          action={<DateRangeFilter value={dateRange} onChange={setDateRange} />}
+        />
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 gap-2.5 px-4">
           {kpiCards.map((card) => {
             const Icon = card.icon;
             const isPositive = card.change >= 0;
+            const displayValue =
+              card.format === "currency"
+                ? fmtShort(card.value) + "đ"
+                : card.format === "percent"
+                ? `${card.value}%`
+                : card.value.toLocaleString("vi-VN");
             return (
-              <Card key={card.title} className="border-[#d2d5d8] shadow-sm rounded-xl bg-white">
-                <CardContent className="p-5">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#e4f3d9] flex items-center justify-center">
-                      <Icon className="h-5 w-5 text-[#008060]" />
-                    </div>
-                    <div
-                      className={`flex items-center gap-0.5 text-xs font-bold px-2 py-1 rounded-full ${
-                        isPositive ? "bg-[#e4f3d9] text-[#008060]" : "bg-[#fce4e4] text-[#d72c0d]"
-                      }`}
-                    >
-                      {isPositive ? (
-                        <ArrowUpRight className="h-3 w-3" />
-                      ) : (
-                        <ArrowDownRight className="h-3 w-3" />
-                      )}
-                      {isPositive ? "+" : ""}
-                      {card.change.toFixed(1)}%
-                    </div>
+              <div key={card.title} className="rounded-np-card bg-white p-3.5">
+                <div className="mb-2 flex items-start justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-np-brand-soft">
+                    <Icon size={18} strokeWidth={2} className="text-np-brand-ink" />
                   </div>
-                  <p className="text-xs font-bold text-[#4a4d50] uppercase tracking-wider mb-1">
-                    {card.title}
-                  </p>
-                  <h3 className="text-2xl font-bold text-[#1a1c1d] tabular-nums">
-                    {card.format === "currency"
-                      ? formatCurrency(card.value)
-                      : card.format === "percent"
-                      ? `${card.value}%`
-                      : card.value.toLocaleString("vi-VN")}
-                  </h3>
-                </CardContent>
-              </Card>
+                  <div
+                    className={cn(
+                      "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                      isPositive
+                        ? "bg-np-brand-soft text-np-brand-ink"
+                        : "bg-np-danger-bg text-np-danger",
+                    )}
+                  >
+                    {isPositive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                    {isPositive ? "+" : ""}
+                    {card.change.toFixed(1)}%
+                  </div>
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+                  {card.title}
+                </p>
+                <h3 className="mt-0.5 text-[20px] font-extrabold tracking-[-0.4px] text-np-ink tabular-nums">
+                  {displayValue}
+                </h3>
+              </div>
             );
           })}
         </div>
 
-        {/* Revenue Line Chart */}
-        <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white">
-          <div className="px-5 py-4 border-b border-[#e3e3e3]">
-            <h3 className="text-sm font-bold text-[#1a1c1d]">Doanh thu theo thời gian</h3>
-            <div className="flex items-center gap-4 mt-2">
-              <div className="flex items-center gap-1.5">
-                <div className="h-0.5 w-5 bg-[#008060] rounded-full" />
-                <span className="text-[11px] text-[#8c9196]">Kỳ hiện tại</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-0.5 w-5 bg-[#c9cccf] rounded-full" style={{ borderTop: "1px dashed #c9cccf" }} />
-                <span className="text-[11px] text-[#8c9196]">Kỳ trước</span>
-              </div>
+        {/* Line chart */}
+        <SectionTitle>Doanh thu theo thời gian</SectionTitle>
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <div className="h-0.5 w-5 rounded-full bg-np-brand-ink" />
+              <span className="text-[11px] text-np-text-muted">Kỳ hiện tại</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div
+                className="h-0 w-5"
+                style={{ borderTop: "1px dashed var(--color-np-border-strong)" }}
+              />
+              <span className="text-[11px] text-np-text-muted">Kỳ trước</span>
             </div>
           </div>
-          <CardContent className="p-5">
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={revenueLineData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e3e3e3" vertical={false} />
-                  <XAxis
-                    dataKey="day"
-                    tick={{ fontSize: 11, fill: "#8c9196" }}
-                    axisLine={{ stroke: "#e3e3e3" }}
-                    tickLine={false}
-                    interval={4}
-                  />
-                  <YAxis
-                    tickFormatter={formatShort}
-                    tick={{ fontSize: 11, fill: "#8c9196" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={50}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#1a1c1d",
-                      border: "none",
-                      borderRadius: "10px",
-                      fontSize: "12px",
-                      color: "#fff",
-                      padding: "10px 14px",
-                    }}
-                    formatter={(value: number, name: string) => [
-                      formatCurrency(value),
-                      name === "current" ? "Kỳ hiện tại" : "Kỳ trước",
-                    ]}
-                    labelFormatter={(label) => `Ngày ${label}`}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="current"
-                    stroke="#008060"
-                    strokeWidth={2.5}
-                    dot={false}
-                    activeDot={{ r: 5, fill: "#008060", stroke: "#fff", strokeWidth: 2 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="previous"
-                    stroke="#c9cccf"
-                    strokeWidth={1.5}
-                    strokeDasharray="6 4"
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#c9cccf", stroke: "#fff", strokeWidth: 2 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={revenueLineData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-np-border)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 10, fill: "var(--color-np-text-muted)" }}
+                  axisLine={{ stroke: "var(--color-np-border)" }}
+                  tickLine={false}
+                  interval={5}
+                />
+                <YAxis
+                  tickFormatter={fmtShort}
+                  tick={{ fontSize: 10, fill: "var(--color-np-text-muted)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={40}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-np-ink)",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    color: "#fff",
+                    padding: "8px 12px",
+                  }}
+                  formatter={(value: number, name: string) => [
+                    fmtVND(value),
+                    name === "current" ? "Kỳ hiện tại" : "Kỳ trước",
+                  ]}
+                  labelFormatter={(label) => `Ngày ${label}`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="current"
+                  stroke="var(--color-np-brand-ink)"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 5, fill: "var(--color-np-brand-ink)", stroke: "#fff", strokeWidth: 2 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="previous"
+                  stroke="var(--color-np-border-strong)"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </Card>
 
-        {/* Revenue by Service + Top Growing */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Horizontal Bar Chart - 60% */}
-          <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white lg:col-span-3">
-            <div className="px-5 py-4 border-b border-[#e3e3e3]">
-              <h3 className="text-sm font-bold text-[#1a1c1d]">Doanh thu theo dịch vụ</h3>
-            </div>
-            <CardContent className="p-5">
-              <div className="space-y-4">
-                {serviceRevenueData.map((service, i) => {
-                  const maxRevenue = serviceRevenueData[0].revenue;
-                  const widthPercent = (service.revenue / maxRevenue) * 100;
-                  return (
-                    <div key={service.name} className="flex items-center gap-3">
-                      <div className="w-28 sm:w-32 shrink-0">
-                        <span className="text-sm font-medium text-[#1a1c1d] truncate block">
-                          {service.name}
-                        </span>
-                      </div>
-                      <div className="flex-1 flex items-center gap-3">
-                        <div className="flex-1 h-8 bg-[#f6f6f7] rounded-lg overflow-hidden">
-                          <div
-                            className="h-full rounded-lg transition-all duration-700 ease-out flex items-center px-3"
-                            style={{
-                              width: `${widthPercent}%`,
-                              backgroundColor: barColors[i],
-                            }}
-                          >
-                            {widthPercent > 30 && (
-                              <span className="text-[11px] font-bold text-white whitespace-nowrap">
-                                {formatCurrency(service.revenue)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <span className="text-xs font-bold text-[#8c9196] w-12 text-right shrink-0">
-                          {service.percent}%
-                        </span>
-                      </div>
+        {/* Revenue by service */}
+        <SectionTitle>Doanh thu theo dịch vụ</SectionTitle>
+        <Card className="p-4">
+          <div className="space-y-3">
+            {serviceRevenueData.map((service, i) => {
+              const maxRevenue = serviceRevenueData[0].revenue;
+              const widthPercent = (service.revenue / maxRevenue) * 100;
+              return (
+                <div key={service.name}>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="truncate text-[13px] font-medium text-np-ink">
+                      {service.name}
+                    </span>
+                    <div className="flex flex-shrink-0 items-center gap-2 tabular-nums">
+                      <span className="text-[12px] font-bold text-np-ink">
+                        {fmtShort(service.revenue)}đ
+                      </span>
+                      <span className="text-[11px] font-medium text-np-text-muted">
+                        {service.percent}%
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Top 5 Growing Services - 40% */}
-          <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white lg:col-span-2">
-            <div className="px-5 py-4 border-b border-[#e3e3e3]">
-              <h3 className="text-sm font-bold text-[#1a1c1d]">Top 5 dịch vụ tăng trưởng</h3>
-            </div>
-            <CardContent className="p-5">
-              <div className="space-y-3">
-                {topGrowingServices.map((service, i) => {
-                  const isPositive = service.growth >= 0;
-                  return (
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-np-surface-sub">
                     <div
-                      key={service.name}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-[#f6f6f7] border border-[#e3e3e3]"
-                    >
-                      <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center text-sm font-bold text-[#8c9196] border border-[#e3e3e3]">
-                        {i + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[#1a1c1d] truncate">{service.name}</p>
-                        <p className="text-[11px] text-[#8c9196]">{formatCurrency(service.revenue)}</p>
-                      </div>
-                      <div
-                        className={`flex items-center gap-0.5 text-xs font-bold ${
-                          isPositive ? "text-[#008060]" : "text-[#d72c0d]"
-                        }`}
-                      >
-                        {isPositive ? (
-                          <TrendingUp className="h-3.5 w-3.5" />
-                        ) : (
-                          <TrendingDown className="h-3.5 w-3.5" />
-                        )}
-                        {isPositive ? "+" : ""}
-                        {service.growth.toFixed(1)}%
-                      </div>
-                    </div>
-                  );
-                })}
+                      className="h-full rounded-full transition-all duration-700 ease-out"
+                      style={{
+                        width: `${widthPercent}%`,
+                        backgroundColor: BAR_COLORS[i],
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {/* Top growing */}
+        <SectionTitle>Top 5 dịch vụ tăng trưởng</SectionTitle>
+        <Card className="overflow-hidden p-0">
+          {topGrowingServices.map((service, i) => {
+            const isPositive = service.growth >= 0;
+            return (
+              <div
+                key={service.name}
+                className={
+                  "flex items-center gap-3 px-4 py-3" +
+                  (i === topGrowingServices.length - 1 ? "" : " border-b border-np-surface-pressed")
+                }
+              >
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-np-surface-sub text-[13px] font-bold text-np-text-sub">
+                  {i + 1}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-semibold text-np-ink">{service.name}</p>
+                  <p className="text-[11px] text-np-text-muted tabular-nums">
+                    {fmtShort(service.revenue)}đ
+                  </p>
+                </div>
+                <Badge tone={isPositive ? "success" : "critical"}>
+                  {isPositive ? (
+                    <TrendingUp size={11} strokeWidth={2.25} />
+                  ) : (
+                    <TrendingDown size={11} strokeWidth={2.25} />
+                  )}
+                  {isPositive ? "+" : ""}
+                  {service.growth.toFixed(1)}%
+                </Badge>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    </div>
+            );
+          })}
+        </Card>
+
+        <div className="h-5" />
+      </div>
+    </Screen>
   );
 }

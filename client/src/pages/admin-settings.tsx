@@ -1,14 +1,18 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Save } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import {
+  Card,
+  DetailHeader,
+  NPButton,
+  Screen,
+  SectionTitle,
+  useTabNav,
+} from "@/components/np";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import AppHeader from "@/components/app-header";
-import { Breadcrumb } from "@/components/breadcrumb";
 import { useToast } from "@/hooks/use-toast";
 
-// ── Helpers ──
 const fmtCurrency = (v: string) => {
   const n = v.replace(/\D/g, "");
   return n ? new Intl.NumberFormat("vi-VN").format(Number(n)) : "";
@@ -16,8 +20,9 @@ const fmtCurrency = (v: string) => {
 
 const parseCurrency = (v: string) => v.replace(/\./g, "");
 
-// ── Component ──
 export default function AdminSettings() {
+  const { active, onTab } = useTabNav();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const [vipThreshold, setVipThreshold] = useState("5000000");
@@ -37,18 +42,14 @@ export default function AdminSettings() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] flex flex-col">
-      <AppHeader activePage="admin-settings" />
+    <Screen activeTab={active} onTab={onTab} noHeader>
+      <DetailHeader title="Cài đặt hệ thống" onBack={() => navigate("/")} />
 
-      <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <Breadcrumb items={[{ label: "Quản lý" }, { label: "Cài đặt hệ thống" }]} />
-
-        <h1 className="text-lg font-bold text-[#1a1c1d]">Cài đặt hệ thống</h1>
-
-        <Card className="border-[#d2d5d8] shadow-sm bg-white rounded-xl p-5 md:p-6 max-w-xl space-y-5">
-          {/* Mốc VIP */}
+      <div className="bg-np-surface-sub pb-5">
+        <SectionTitle>Quy tắc hệ thống</SectionTitle>
+        <Card className="space-y-5 p-4">
           <div className="space-y-1.5">
-            <Label htmlFor="vipThreshold" className="text-sm font-semibold text-[#1a1c1d]">
+            <Label htmlFor="vipThreshold" className="text-[14px] font-semibold text-np-ink">
               Mốc VIP
             </Label>
             <div className="relative">
@@ -59,20 +60,19 @@ export default function AdminSettings() {
                 placeholder="5.000.000"
                 value={fmtCurrency(vipThreshold)}
                 onChange={(e) => setVipThreshold(parseCurrency(e.target.value))}
-                className="border-[#d2d5d8] rounded-lg h-10 pr-12 tabular-nums"
+                className="pr-12 tabular-nums"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#8c9196] font-medium pointer-events-none">
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[14px] font-medium text-np-text-muted">
                 VNĐ
               </span>
             </div>
-            <p className="text-xs text-[#8c9196]">
+            <p className="text-[12px] text-np-text-muted">
               Khách hàng có tổng chi tiêu từ mốc này trở lên sẽ được gắn nhãn VIP.
             </p>
           </div>
 
-          {/* Số ngày nhắc trước tái khám */}
           <div className="space-y-1.5">
-            <Label htmlFor="reminderDays" className="text-sm font-semibold text-[#1a1c1d]">
+            <Label htmlFor="reminderDays" className="text-[14px] font-semibold text-np-ink">
               Số ngày nhắc trước tái khám
             </Label>
             <div className="relative">
@@ -83,20 +83,19 @@ export default function AdminSettings() {
                 placeholder="2"
                 value={reminderDays}
                 onChange={(e) => setReminderDays(e.target.value)}
-                className="border-[#d2d5d8] rounded-lg h-10 pr-12 tabular-nums"
+                className="pr-12 tabular-nums"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#8c9196] font-medium pointer-events-none">
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[14px] font-medium text-np-text-muted">
                 ngày
               </span>
             </div>
-            <p className="text-xs text-[#8c9196]">
+            <p className="text-[12px] text-np-text-muted">
               Hệ thống sẽ gửi nhắc nhở trước lịch tái khám theo số ngày này.
             </p>
           </div>
 
-          {/* Số ngày quá hạn để cảnh báo */}
           <div className="space-y-1.5">
-            <Label htmlFor="overdueDays" className="text-sm font-semibold text-[#1a1c1d]">
+            <Label htmlFor="overdueDays" className="text-[14px] font-semibold text-np-ink">
               Số ngày quá hạn để cảnh báo
             </Label>
             <div className="relative">
@@ -107,30 +106,29 @@ export default function AdminSettings() {
                 placeholder="0"
                 value={overdueDays}
                 onChange={(e) => setOverdueDays(e.target.value)}
-                className="border-[#d2d5d8] rounded-lg h-10 pr-12 tabular-nums"
+                className="pr-12 tabular-nums"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#8c9196] font-medium pointer-events-none">
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[14px] font-medium text-np-text-muted">
                 ngày
               </span>
             </div>
-            <p className="text-xs text-[#8c9196]">
+            <p className="text-[12px] text-np-text-muted">
               Nhập 0 = cảnh báo ngay lập tức khi quá hạn.
             </p>
           </div>
 
-          {/* Save button */}
-          <div className="pt-2">
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-lg h-10 bg-[#008060] hover:bg-[#006e52] text-white text-sm px-5 font-bold shadow-sm"
-            >
-              <Save className="h-4 w-4 mr-1.5" />
-              {saving ? "Đang lưu..." : "Lưu thay đổi"}
-            </Button>
-          </div>
+          <NPButton
+            tone="primary"
+            size="md"
+            icon={Save}
+            className="w-full justify-center"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Đang lưu..." : "Lưu thay đổi"}
+          </NPButton>
         </Card>
-      </main>
-    </div>
+      </div>
+    </Screen>
   );
 }

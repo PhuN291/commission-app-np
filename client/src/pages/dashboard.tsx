@@ -1,212 +1,357 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
+import { Bell, ClipboardList, Gift, Info, TrendingUp, Trophy } from "lucide-react";
 import {
-  TrendingUp,
-  Briefcase,
-  Trophy,
-  Star,
-  Crown,
-  Award,
-  Rocket,
-  Flame,
-  Gem,
-  Heart,
-  Gift,
-  ClipboardList,
-  ChevronRight,
-  Bell,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import AppHeader from "@/components/app-header";
-import DateRangeFilter from "@/components/date-range-filter";
-import elementUrl from "@assets/element_(1)_1771761383161.png";
+  Avatar,
+  Badge,
+  Card,
+  Chev,
+  IconTile,
+  NPProgress,
+  OrderStatusBadges,
+  PageHeader,
+  Row,
+  Screen,
+  SectionTitle,
+  useTabNav,
+} from "@/components/np";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+type DashboardOrder = {
+  id: number;
+  code: string;
+  serviceName: string;
+  serviceCode: string;
+  patientName: string;
+  totalPrice: number;
+  commission: number;
+  appointmentStatus: string;
+  visitStatus: string | null;
+  createdAt: string;
+};
+
+type DashboardData = {
+  user: {
+    id: number;
+    name: string;
+    role: string;
+    department: string;
+    avatar: string | null;
+    targetRevenue: number;
+    currentRevenue: number;
+    commissionRate: number;
+  };
+  recentOrders: DashboardOrder[];
+  pendingOrdersCount: number;
+};
+
+const RANK_TIERS = [
+  { name: "Đồng", min: 0, next: "Bạc", nextMin: 20_000_000, color: "var(--color-np-rank-dong)", bg: "var(--color-np-rank-dong-bg)" },
+  { name: "Bạc", min: 20_000_000, next: "Vàng", nextMin: 50_000_000, color: "var(--color-np-rank-bac)", bg: "var(--color-np-rank-bac-bg)" },
+  { name: "Vàng", min: 50_000_000, next: "Kim cương", nextMin: 100_000_000, color: "var(--color-np-rank-vang)", bg: "var(--color-np-rank-vang-bg)" },
+  { name: "Kim cương", min: 100_000_000, next: null, nextMin: 0, color: "var(--color-np-rank-kim)", bg: "var(--color-np-rank-kim-bg)" },
+];
+
+const RANK_REWARDS: Record<string, { commission: number; bonus: number }> = {
+  "Bạc": { commission: 5, bonus: 300_000 },
+  "Vàng": { commission: 6, bonus: 500_000 },
+  "Kim cương": { commission: 8, bonus: 1_000_000 },
 };
 
 function getRank(revenue: number) {
-  if (revenue >= 100000000) return { name: "Kim cương", color: "text-[#60a5fa]", bg: "bg-[#dbeafe]", icon: Crown, next: null, nextAmount: 0 };
-  if (revenue >= 50000000) return { name: "Vàng", color: "text-[#d97706]", bg: "bg-[#fef3c7]", icon: Trophy, next: "Kim cương", nextAmount: 100000000 };
-  if (revenue >= 20000000) return { name: "Bạc", color: "text-[#6b7280]", bg: "bg-[#f3f4f6]", icon: Award, next: "Vàng", nextAmount: 50000000 };
-  return { name: "Đồng", color: "text-[#b45309]", bg: "bg-[#fef3c7]", icon: Star, next: "Bạc", nextAmount: 20000000 };
+  for (let i = RANK_TIERS.length - 1; i >= 0; i -= 1) {
+    if (revenue >= RANK_TIERS[i].min) return RANK_TIERS[i];
+  }
+  return RANK_TIERS[0];
 }
 
-const rankRewards: Record<string, { commission: number; bonus: number }> = {
-  "Đồng": { commission: 3, bonus: 0 },
-  "Bạc": { commission: 5, bonus: 300000 },
-  "Vàng": { commission: 6, bonus: 500000 },
-  "Kim cương": { commission: 8, bonus: 1000000 },
-};
+function fmtShort(n: number) {
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + " tỷ";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + " tr";
+  if (n >= 1_000) return Math.round(n / 1_000) + "k";
+  return String(n);
+}
 
-const mockBadges = [
-  { name: "Đơn đầu tiên", icon: Rocket, achieved: true, color: "#008060", bg: "#e4f3d9", iconBg: "#00a67d" },
-  { name: "5 đơn liên tiếp", icon: Flame, achieved: true, color: "#008060", bg: "#e4f3d9", iconBg: "#00a67d" },
-  { name: "Top 1 tuần", icon: Crown, achieved: false, color: "#008060", bg: "#e4f3d9", iconBg: "#00a67d" },
-  { name: "Doanh thu 50tr", icon: Gem, achieved: false, color: "#008060", bg: "#e4f3d9", iconBg: "#00a67d" },
-  { name: "Khách VIP", icon: Heart, achieved: true, color: "#008060", bg: "#e4f3d9", iconBg: "#00a67d" },
-];
+function fmtFull(n: number) {
+  return new Intl.NumberFormat("vi-VN").format(n);
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 11) return "Chào buổi sáng";
+  if (h < 13) return "Chào buổi trưa";
+  if (h < 18) return "Chào buổi chiều";
+  return "Chào buổi tối";
+}
 
 export default function Dashboard() {
-  const [dateRange, setDateRange] = useState("last_30_days");
-  const { data: dashboardData, isLoading } = useQuery<{
-    user: { id: number; name: string; role: string; department: string; avatar: string | null; targetRevenue: number; currentRevenue: number; commissionRate: number };
-    recentOrders: { id: number; code: string; serviceName: string; serviceCode: string; patientName: string; totalPrice: number; commission: number; status: string; createdAt: string }[];
-    pendingOrdersCount: number;
-  }>({
-    queryKey: ["/api/dashboard"],
-  });
+  const { active, onTab } = useTabNav();
+  const [, navigate] = useLocation();
+  const { data, isLoading } = useQuery<DashboardData>({ queryKey: ["/api/dashboard"] });
 
-  if (isLoading || !dashboardData) {
+  if (isLoading || !data) {
     return (
-      <div className="min-h-screen bg-[#f6f6f7] flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 border-2 border-[#008060] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-[#4a4d50]">Đang tải dữ liệu...</p>
+      <Screen activeTab={active} onTab={onTab}>
+        <div className="flex h-full items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
+            <p className="text-np-sub text-np-text-muted">Đang tải dữ liệu...</p>
+          </div>
         </div>
-      </div>
+      </Screen>
     );
   }
 
-  const { user, recentOrders, pendingOrdersCount } = dashboardData;
-
-  const currentCommission = user.currentRevenue * (user.commissionRate / 100);
-
+  const { user, recentOrders, pendingOrdersCount } = data;
+  const commission = user.currentRevenue * (user.commissionRate / 100);
   const rank = getRank(user.currentRevenue);
-  const RankIcon = rank.icon;
   const rankProgress = rank.next
-    ? ((user.currentRevenue - (rank.nextAmount === 50000000 ? 20000000 : rank.nextAmount === 100000000 ? 50000000 : 0)) / (rank.nextAmount - (rank.nextAmount === 50000000 ? 20000000 : rank.nextAmount === 100000000 ? 50000000 : 0))) * 100
+    ? ((user.currentRevenue - rank.min) / (rank.nextMin - rank.min)) * 100
     : 100;
-  const remaining = rank.next ? rank.nextAmount - user.currentRevenue : 0;
+  const remaining = rank.next ? rank.nextMin - user.currentRevenue : 0;
+  const targetPct = Math.round((user.currentRevenue / user.targetRevenue) * 100);
+  const firstName = user.name.split(" ").slice(-1)[0];
+  const totalDeals = recentOrders.length;
+  const completedDeals = recentOrders.filter((o) => o.visitStatus === "completed").length;
 
   return (
-    <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-      <AppHeader userName={user.name} activePage="dashboard" />
+    <Screen activeTab={active} onTab={onTab} notifCount={3} onBell={() => navigate("/notifications")}>
+      <PageHeader
+        title="Trang chủ"
+        subtitle={`${getGreeting()}, ${firstName}`}
+      />
 
-      <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <div className="flex items-center gap-3">
-          <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        </div>
-
-        <div className="flex gap-3">
-          <Link href="/orders?status=pending" className="block flex-1">
-            <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white hover:bg-[#f6f6f7] transition-colors cursor-pointer">
-              <CardContent className="px-4 py-3 flex items-start justify-between">
-                <div>
-                  <p className="text-2xl font-bold text-[#1a1c1d] tabular-nums">{pendingOrdersCount}</p>
-                  <p className="text-xs text-[#8c9196] mt-0.5">Đơn chờ xử lý</p>
-                </div>
-                <ClipboardList className="h-5 w-5 text-[#8c9196] mt-1" />
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href="/customers" className="block flex-1">
-            <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white hover:bg-[#f6f6f7] transition-colors cursor-pointer">
-              <CardContent className="px-4 py-3 flex items-start justify-between">
-                <div>
-                  <p className="text-2xl font-bold text-[#1a1c1d] tabular-nums">3</p>
-                  <p className="text-xs text-[#8c9196] mt-0.5">Nhắc tái khám</p>
-                </div>
-                <Bell className="h-5 w-5 text-[#8c9196] mt-1" />
-              </CardContent>
-            </Card>
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          
-          <Card className="border-0 shadow-lg col-span-1 md:col-span-2 lg:col-span-2 bg-gradient-primary-teal text-white overflow-hidden relative rounded-2xl">
-            <div className="absolute right-0 top-0 -mr-4 -mt-4 opacity-10 pointer-events-none">
-              <img src={elementUrl} alt="" className="w-40 h-40 object-contain brightness-0 invert" />
-            </div>
-            <CardContent className="p-6 md:p-8 relative z-10">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <p className="text-white/80 text-xs font-bold uppercase tracking-wider">Hoa hồng tạm tính</p>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <h2 className="text-4xl font-bold tracking-tight tabular-nums" data-testid="text-commission">
-                      {formatCurrency(currentCommission).replace('₫', '')}
-                    </h2>
-                    <span className="text-lg font-medium text-white/80">VNĐ</span>
+      {/* Hero: Hoa hồng tạm tính */}
+      <div className="px-4 pb-2">
+        <div
+          className="relative overflow-hidden rounded-np-card p-[22px] text-white"
+          style={{ background: "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)" }}
+        >
+          <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
+          <div className="relative flex items-start justify-between">
+            <div className="flex items-center gap-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-[1.2px] text-white/85">
+                Hoa hồng tạm tính
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Cách tính hoa hồng"
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-white/90 transition-colors hover:bg-white/25"
+                  >
+                    <Info size={12} strokeWidth={2.25} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  sideOffset={8}
+                  className="w-[280px] rounded-np-card border border-np-border p-0 text-np-ink"
+                >
+                  <div className="border-b border-np-surface-pressed px-4 pb-3 pt-4">
+                    <p className="text-[14px] font-bold text-np-ink">Cách tính hoa hồng</p>
+                    <p className="mt-0.5 text-[12px] text-np-text-muted">
+                      Hoa hồng tạm tính theo doanh thu trong kỳ
+                    </p>
                   </div>
-                </div>
-                <Badge className="bg-white/30 text-white border-0 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm">
-                  <TrendingUp className="h-3 w-3 mr-1 inline" /> +12.5%
-                </Badge>
-              </div>
-              
-            </CardContent>
-          </Card>
-
-          <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white">
-            <CardContent className="p-5">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-xs font-bold text-[#4a4d50] uppercase tracking-wider">Doanh số</p>
-                <Badge className="bg-[#e4f3d9] text-[#008060] border-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
-                  <TrendingUp className="h-3 w-3 mr-1 inline" /> +8.2%
-                </Badge>
-              </div>
-              <h3 className="text-2xl font-bold text-[#1a1c1d] tabular-nums" data-testid="text-revenue">{formatCurrency(user.currentRevenue).replace('₫', '')}</h3>
-            </CardContent>
-          </Card>
-
-          <Card className="border-[#d2d5d8] shadow-sm rounded-xl bg-white">
-            <CardContent className="p-5">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-xs font-bold text-[#4a4d50] uppercase tracking-wider">Đã chốt</p>
-                <Badge className="bg-[#e4f3d9] text-[#008060] border-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
-                  <TrendingUp className="h-3 w-3 mr-1 inline" /> +2
-                </Badge>
-              </div>
-              <h3 className="text-2xl font-bold text-[#1a1c1d] tabular-nums" data-testid="text-deals-count">{recentOrders.length}</h3>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border-[#d2d5d8] shadow-sm rounded-xl overflow-hidden bg-white" data-testid="card-achievements">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#e3e3e3]">
-            <h3 className="text-sm font-bold text-[#1a1c1d]">Thành tích của bạn</h3>
+                  <div className="space-y-3 px-4 py-3">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+                        Công thức
+                      </p>
+                      <p className="mt-1 text-[13px] font-semibold text-np-ink">
+                        Doanh thu × Tỉ lệ hoa hồng
+                      </p>
+                    </div>
+                    <div className="border-t border-np-surface-pressed pt-3">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+                        Tỉ lệ theo cấp bậc
+                      </p>
+                      <ul className="mt-1.5 space-y-1 text-[12px] text-np-text-sub">
+                        <li className="flex justify-between">
+                          <span>Đồng (dưới 20 triệu)</span>
+                          <span className="font-bold text-np-ink tabular-nums">3%</span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span>Bạc (20–50 triệu)</span>
+                          <span className="font-bold text-np-ink tabular-nums">5%</span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span>Vàng (50–100 triệu)</span>
+                          <span className="font-bold text-np-ink tabular-nums">6%</span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span>Kim cương (trên 100 triệu)</span>
+                          <span className="font-bold text-np-ink tabular-nums">8%</span>
+                        </li>
+                      </ul>
+                    </div>
+                    <div className="border-t border-np-surface-pressed pt-3 text-[11px] leading-relaxed text-np-text-muted">
+                      Hoa hồng hiển thị là <span className="font-bold text-np-ink">tạm tính</span>
+                      , sẽ chốt khi đơn chuyển trạng thái "Hoàn tất" và được duyệt chi trả cuối kỳ.
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold">
+              <TrendingUp size={12} strokeWidth={2.25} /> +12.5%
+            </span>
           </div>
-          <CardContent className="p-4 sm:p-6 space-y-5">
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-[#f6f6f7] border border-[#e3e3e3]" data-testid="card-rank">
-              <div className={`h-14 w-14 rounded-2xl ${rank.bg} flex items-center justify-center shrink-0`}>
-                <RankIcon className={`h-7 w-7 ${rank.color}`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-base font-bold ${rank.color}`}>{rank.name}</span>
-                  {rank.next && (
-                    <span className="text-[11px] text-[#8c9196]">· còn {formatCurrency(remaining).replace('₫', '')} ₫ để lên {rank.next}</span>
-                  )}
-                </div>
-                <div className="w-full bg-[#e3e3e3] rounded-full h-2 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                      rank.name === "Kim cương" ? "bg-[#60a5fa]" :
-                      rank.name === "Vàng" ? "bg-[#d97706]" :
-                      rank.name === "Bạc" ? "bg-[#6b7280]" : "bg-[#b45309]"
-                    }`}
-                    style={{ width: `${Math.min(rankProgress, 100)}%` }}
-                  />
-                </div>
-                {rank.next && rankRewards[rank.next] && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <Gift className="h-3.5 w-3.5 text-[#008060] shrink-0" />
-                    <span className="text-[11px] font-medium text-[#008060]">
-                      Lên {rank.next}: Hoa hồng {rankRewards[rank.next].commission}%{rankRewards[rank.next].bonus > 0 ? `, thưởng ${new Intl.NumberFormat('vi-VN').format(rankRewards[rank.next].bonus)}₫` : ""}
-                    </span>
-                  </div>
-                )}
-              </div>
+          <div className="mt-3.5 flex items-baseline gap-1">
+            <span className="text-[36px] font-extrabold leading-none tracking-[-1px] tabular-nums">
+              {fmtFull(commission)}
+            </span>
+            <span className="text-base font-bold text-white/80">VNĐ</span>
+          </div>
+          <div className="mt-2.5 text-[12px] font-medium text-white/75">
+            Dựa trên {totalDeals} đơn hàng · Tỉ lệ {user.commissionRate}%
+          </div>
+        </div>
+      </div>
+
+      {/* Quick metrics */}
+      <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
+        <MetricCard label="Doanh số" value={fmtShort(user.currentRevenue)} delta="+8.2%" tone="success" />
+        <MetricCard label="Đã chốt" value={`${completedDeals}/${totalDeals}`} delta={`${targetPct}% KPI`} />
+      </div>
+
+      {/* Cần xử lý */}
+      <SectionTitle
+        action={
+          <button type="button" onClick={() => navigate("/orders")} className="text-[13px] font-semibold text-np-link">
+            Xem tất cả
+          </button>
+        }
+      >
+        Cần xử lý
+      </SectionTitle>
+      <Card className="overflow-hidden p-0">
+        <Row
+          leading={<IconTile icon={ClipboardList} />}
+          title={`${pendingOrdersCount} đơn chờ xử lý`}
+          subtitle="Cần xác nhận hoặc nhắc lịch"
+          trailing={<Chev />}
+          onClick={() => navigate("/orders?status=pending")}
+        />
+        <Row
+          leading={<IconTile icon={Bell} />}
+          title="3 khách cần tái khám"
+          subtitle="Trong 7 ngày tới"
+          trailing={<Chev />}
+          onClick={() => navigate("/customers")}
+          last
+        />
+      </Card>
+
+      {/* Thành tích tháng */}
+      <SectionTitle>Thành tích tháng</SectionTitle>
+      <Card className="p-4">
+        <div className="flex items-center gap-3.5">
+          <div
+            className="flex h-13 w-13 flex-shrink-0 items-center justify-center rounded-[14px]"
+            style={{ width: 52, height: 52, background: rank.bg }}
+          >
+            <Trophy size={26} strokeWidth={2.2} style={{ color: rank.color }} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex items-baseline gap-2">
+              <span className="text-base font-bold" style={{ color: rank.color }}>
+                {rank.name}
+              </span>
+              {rank.next && (
+                <span className="text-[11px] font-medium text-np-text-muted">
+                  còn {fmtShort(remaining)}₫ lên {rank.next}
+                </span>
+              )}
             </div>
+            <NPProgress value={rankProgress} color={rank.color} />
+            {rank.next && RANK_REWARDS[rank.next] && (
+              <div className="mt-2 flex items-center gap-1.5">
+                <Gift size={14} strokeWidth={2.2} className="flex-shrink-0 text-np-brand-ink" />
+                <span className="text-[11px] font-semibold text-np-brand-ink">
+                  Lên {rank.next}: HH {RANK_REWARDS[rank.next].commission}%
+                  {RANK_REWARDS[rank.next].bonus > 0
+                    ? ` · thưởng ${fmtFull(RANK_REWARDS[rank.next].bonus)}₫`
+                    : ""}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
 
-            {/* Badges row hidden */}
-          </CardContent>
-        </Card>
+      {/* Đơn gần đây */}
+      <SectionTitle
+        action={
+          <button type="button" onClick={() => navigate("/orders")} className="text-[13px] font-semibold text-np-link">
+            Xem tất cả
+          </button>
+        }
+      >
+        Đơn gần đây
+      </SectionTitle>
+      <Card className="overflow-hidden p-0">
+        {recentOrders.map((o, i) => (
+          <Row
+            key={o.id}
+            onClick={() => navigate(`/orders/${o.id}`)}
+            leading={<Avatar name={o.patientName} size={38} />}
+            title={o.patientName}
+            subtitle={`${o.serviceName} · ${o.createdAt}`}
+            meta={
+              <div className="mt-1.5">
+                <OrderStatusBadges appointmentStatus={o.appointmentStatus} visitStatus={o.visitStatus} />
+              </div>
+            }
+            trailing={
+              <div className="flex-shrink-0 text-right">
+                <div className="text-[14px] font-bold text-np-ink tabular-nums">
+                  {fmtShort(o.totalPrice)}₫
+                </div>
+                <div className="mt-0.5 text-[11px] font-semibold text-np-brand-ink">
+                  +{fmtShort(o.commission)}₫
+                </div>
+              </div>
+            }
+            last={i === recentOrders.length - 1}
+          />
+        ))}
+      </Card>
 
-      </main>
+      <div className="h-5" />
+    </Screen>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  delta,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  delta: string;
+  tone?: "neutral" | "success";
+}) {
+  return (
+    <div className="rounded-np-card bg-white px-3.5 pb-3 pt-3.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-np-text-muted">
+          {label}
+        </span>
+      </div>
+      <div className="mt-1.5 text-[22px] font-extrabold tracking-[-0.4px] text-np-ink tabular-nums">
+        {value}
+      </div>
+      <Badge tone={tone === "success" ? "success" : "neutral"} className="mt-1">
+        {delta}
+      </Badge>
     </div>
   );
 }

@@ -3,11 +3,121 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  /* ========================================================================
+     NP Clinic Design Tokens — mobile-first (390×844)
+     Source of truth: design-ref/tokens.js
+     ======================================================================== */
+
+  /* Neutrals (Polaris-aligned) */
+  --color-np-bg: #F1F1F1;
+  --color-np-surface: #FFFFFF;
+  --color-np-surface-sub: #F6F6F7;
+  --color-np-surface-pressed: #EBEBED;
+
+  /* Text */
+  --color-np-ink: #1A1C1D;
+  --color-np-ink-sub: #303030;
+  --color-np-text-sub: #616161;
+  --color-np-text-muted: #8C9196;
+  --color-np-text-disabled: #B5B5B5;
+
+  /* Borders */
+  --color-np-border: #E3E3E3;
+  --color-np-border-strong: #D2D5D8;
+
+  /* Brand */
+  --color-np-brand: #1A8A7D;
+  --color-np-brand-hover: #168173;
+  --color-np-brand-soft: #E4F3D9;
+  --color-np-brand-ink: #008060;
+  --color-np-link: #005BD3;
+
+  /* Status */
+  --color-np-success: #008060;
+  --color-np-success-bg: #E4F3D9;
+  --color-np-warning: #B45309;
+  --color-np-warning-bg: #FFF4BD;
+  --color-np-warning-fg: #8A6116;
+  --color-np-danger: #D72C0D;
+  --color-np-danger-bg: #FFD9D9;
+  --color-np-danger-fg: #8E1F0B;
+
+  /* Header */
+  --color-np-header: #1A1C1D;
+  --color-np-header-hover: #303030;
+
+  /* Rank badges (Vietnamese tiers) */
+  --color-np-rank-dong: #B45309;
+  --color-np-rank-dong-bg: #FEF3C7;
+  --color-np-rank-bac: #6B7280;
+  --color-np-rank-bac-bg: #F3F4F6;
+  --color-np-rank-vang: #D97706;
+  --color-np-rank-vang-bg: #FEF3C7;
+  --color-np-rank-kim: #2563EB;
+  --color-np-rank-kim-bg: #DBEAFE;
+
+  /* Typography scale (Inter) */
+  --text-np-display: 32px;
+  --text-np-display--line-height: 38px;
+  --text-np-display--letter-spacing: -0.6px;
+  --text-np-display--font-weight: 700;
+
+  --text-np-title: 20px;
+  --text-np-title--line-height: 26px;
+  --text-np-title--letter-spacing: -0.2px;
+  --text-np-title--font-weight: 700;
+
+  --text-np-heading: 17px;
+  --text-np-heading--line-height: 22px;
+  --text-np-heading--letter-spacing: -0.1px;
+  --text-np-heading--font-weight: 700;
+
+  --text-np-subheading: 13px;
+  --text-np-subheading--line-height: 18px;
+  --text-np-subheading--letter-spacing: 0.6px;
+  --text-np-subheading--font-weight: 700;
+
+  --text-np-body: 15px;
+  --text-np-body--line-height: 22px;
+  --text-np-body--font-weight: 500;
+
+  --text-np-body-bold: 15px;
+  --text-np-body-bold--line-height: 22px;
+  --text-np-body-bold--font-weight: 700;
+
+  --text-np-sub: 13px;
+  --text-np-sub--line-height: 18px;
+  --text-np-sub--font-weight: 500;
+
+  --text-np-caption: 12px;
+  --text-np-caption--line-height: 16px;
+  --text-np-caption--font-weight: 500;
+
+  /* Radii */
+  --radius-np-sheet: 20px;
+  --radius-np-card: 10px;
+  --radius-np-chip: 9999px;
+  --radius-np-button: 10px;
+  --radius-np-badge: 6px;
+
+  /* Spacing */
+  --spacing-np-hx: 16px;
+  --spacing-np-row: 64px;
+  --spacing-np-gap: 20px;
+
+  /* Fonts */
+  --font-sans: 'Inter', sans-serif;
+  --font-heading: 'Be Vietnam Pro', 'Inter', sans-serif;
+}
+
 @theme inline {
+  /* shadcn/ui mapping — remap to NP tokens so all 48 shadcn components inherit NP palette */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
@@ -35,52 +145,61 @@
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
-
-  --font-sans: 'Inter', sans-serif;
-  --font-heading: 'Inter', sans-serif;
 }
 
-/* LIGHT MODE - Shopify-inspired Slate/Gray Scale */
+/* ==========================================================================
+   shadcn CSS variables — remapped to NP palette (HSL format required by shadcn)
+   NP ink #1A1C1D -> hsl(210 6% 11%)
+   NP bg #F1F1F1 -> hsl(0 0% 95%)
+   NP surface #FFFFFF -> hsl(0 0% 100%)
+   NP surface-sub #F6F6F7 -> hsl(210 9% 97%)
+   NP border #E3E3E3 -> hsl(0 0% 89%)
+   NP text-muted #8C9196 -> hsl(210 5% 57%)
+   NP danger #D72C0D -> hsl(9 88% 45%)
+   ========================================================================== */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
 
-  --background: 0 0% 98%;
-  --foreground: 224 71% 4%;
-  
-  --card: 0 0% 100%;
-  --card-foreground: 224 71% 4%;
-  
+  --background: 0 0% 95%;              /* NP bg */
+  --foreground: 210 6% 11%;            /* NP ink */
+
+  --card: 0 0% 100%;                   /* NP surface */
+  --card-foreground: 210 6% 11%;
+
   --popover: 0 0% 100%;
-  --popover-foreground: 224 71% 4%;
-  
-  --primary: 224 71% 4%; /* Black/Deep Slate */
+  --popover-foreground: 210 6% 11%;
+
+  --primary: 210 6% 11%;               /* NP ink — dark buttons */
   --primary-foreground: 0 0% 100%;
-  
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 224 71% 4%;
-  
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
-  
-  --accent: 220 14% 96%;
-  --accent-foreground: 224 71% 4%;
-  
-  --destructive: 0 84% 60%;
+
+  --secondary: 210 9% 97%;             /* NP surface-sub */
+  --secondary-foreground: 210 6% 11%;
+
+  --muted: 210 9% 97%;                 /* NP surface-sub */
+  --muted-foreground: 210 5% 57%;      /* NP text-muted */
+
+  --accent: 210 9% 97%;
+  --accent-foreground: 210 6% 11%;
+
+  --destructive: 9 88% 45%;            /* NP danger */
   --destructive-foreground: 0 0% 100%;
 
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --ring: 224 71% 4%;
+  --border: 0 0% 89%;                  /* NP border */
+  --input: 0 0% 89%;
+  --ring: 210 6% 11%;
 
-  --chart-1: 224 71% 4%;
-  --chart-2: 220 9% 46%;
-  
-  --radius: 0.5rem;
-  
+  --chart-1: 210 6% 11%;
+  --chart-2: 174 68% 32%;              /* NP brand */
+  --chart-3: 158 100% 25%;             /* NP brand-ink */
+  --chart-4: 210 5% 57%;
+  --chart-5: 215 16% 47%;
+
+  --radius: 10px;                      /* NP button radius = shadcn base */
+
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -91,13 +210,13 @@
     @apply border-border;
   }
   body {
-    @apply font-sans antialiased bg-[#f6f6f7] text-slate-900;
+    @apply font-sans antialiased bg-np-bg text-np-ink;
   }
 }
 
 @layer utilities {
   .bg-gradient-primary-teal {
-    background: linear-gradient(135deg, hsl(174 100% 29%) 0%, hsl(174 80% 40%) 100%);
+    background: linear-gradient(135deg, var(--color-np-brand) 0%, #22a594 100%);
   }
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -108,7 +227,7 @@
   }
 }
 
-/* Search bar glow animation */
+/* Search bar glow animation (preserved from previous design) */
 @property --glow-angle {
   syntax: "<angle>";
   initial-value: 0deg;
@@ -139,22 +258,13 @@
   transition: opacity 0.4s ease;
 }
 
-/* Layer 1: sharp border */
 .search-glow-wrapper::before {
   inset: 0;
   z-index: 0;
 }
 
-/* Layer 2: blurred glow */
 .search-glow-wrapper::after {
   inset: -3px;
   z-index: -1;
   filter: blur(8px);
 }
-
-/* Activate on hover - disabled */
-/* .search-glow-wrapper:hover::before,
-.search-glow-wrapper:hover::after {
-  opacity: 1;
-  animation-play-state: running;
-} */

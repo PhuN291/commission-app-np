@@ -28,6 +28,7 @@ import AdminVouchers from "@/pages/admin-vouchers";
 import AdminVoucherDetail from "@/pages/admin-voucher-detail";
 import AdminCommissionApproval from "@/pages/admin-commission-approval";
 import AdminSettings from "@/pages/admin-settings";
+import NpPlayground from "@/pages/np-playground";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const isAuthenticated = localStorage.getItem("np_authenticated") === "true";
@@ -63,6 +64,7 @@ function Router() {
       <Route path="/admin/vouchers/:id">{() => <ProtectedRoute component={AdminVoucherDetail} />}</Route>
       <Route path="/admin/commission-approval">{() => <ProtectedRoute component={AdminCommissionApproval} />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={AdminSettings} />}</Route>
+      <Route path="/np-playground" component={NpPlayground} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,23 +1,21 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { KeyRound, UserPlus, Users } from "lucide-react";
 import {
-  Search,
-  UserPlus,
-  KeyRound,
-  Users,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+  Avatar,
+  Badge,
+  Card,
+  Chips,
+  DetailHeader,
+  NPButton,
+  PageHeader,
+  Screen,
+  SearchField,
+  type ChipItem,
+  useTabNav,
+} from "@/components/np";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -28,16 +26,13 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetFooter,
 } from "@/components/ui/sheet";
-import { Label } from "@/components/ui/label";
-import AppHeader from "@/components/app-header";
-import { Breadcrumb } from "@/components/breadcrumb";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 
-// ── Types ──
 type Role = "Admin" | "Bác sĩ" | "Điều dưỡng" | "Lễ tân" | "CSKH";
 
 interface StaffMember {
@@ -50,12 +45,8 @@ interface StaffMember {
   active: boolean;
 }
 
-// ── Role config ──
 const ROLES: Role[] = ["Admin", "Bác sĩ", "Điều dưỡng", "Lễ tân", "CSKH"];
 
-const ROLE_STYLE = { bg: "bg-[#e7e7e7]", text: "text-[#1a1c1d]" };
-
-// ── Mock data ──
 const initialStaff: StaffMember[] = [
   { id: 1, name: "Trần Minh Tuấn", email: "tuan.tm@nguyenphuong.vn", phone: "0901234567", role: "Admin", isoftId: "ISF-001", active: true },
   { id: 2, name: "Nguyễn Thị Lan", email: "lan.nt@nguyenphuong.vn", phone: "0912345678", role: "Bác sĩ", isoftId: "ISF-002", active: true },
@@ -65,67 +56,68 @@ const initialStaff: StaffMember[] = [
   { id: 6, name: "Võ Quốc Bảo", email: "bao.vq@nguyenphuong.vn", phone: "0956789012", role: "Bác sĩ", isoftId: "ISF-006", active: true },
 ];
 
-// ── Empty form ──
 const emptyForm = { name: "", email: "", phone: "", role: "Lễ tân" as Role, isoftId: "" };
 
-// ── Component ──
 export default function AdminStaff() {
+  const { active: navActive, onTab } = useTabNav();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-
-  // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  // ── Filtering ──
-  const filtered = staff.filter((s) => {
-    const matchesSearch =
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.phone.includes(searchTerm);
-    const matchesRole = roleFilter === "all" || s.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  const filtered = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    return staff.filter((s) => {
+      const matchesSearch =
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        s.phone.includes(searchTerm);
+      const matchesRole = roleFilter === "all" || s.role === roleFilter;
+      return matchesSearch && matchesRole;
+    });
+  }, [staff, searchTerm, roleFilter]);
 
-  // ── Handlers ──
+  const chips: ChipItem[] = [
+    { key: "all", label: "Tất cả", count: staff.length },
+    ...ROLES.map((r) => ({
+      key: r,
+      label: r,
+      count: staff.filter((s) => s.role === r).length,
+    })),
+  ];
+
   const openAdd = () => {
     setEditingId(null);
     setForm(emptyForm);
     setSheetOpen(true);
   };
 
-  const openEdit = (member: StaffMember) => {
-    setEditingId(member.id);
-    setForm({
-      name: member.name,
-      email: member.email,
-      phone: member.phone,
-      role: member.role,
-      isoftId: member.isoftId,
-    });
+  const openEdit = (m: StaffMember) => {
+    setEditingId(m.id);
+    setForm({ name: m.name, email: m.email, phone: m.phone, role: m.role, isoftId: m.isoftId });
     setSheetOpen(true);
   };
 
   const handleSave = () => {
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
-      toast({ title: "Thiếu thông tin", description: "Vui lòng điền đầy đủ Họ tên, Email và SĐT.", variant: "destructive" });
+      toast({
+        title: "Thiếu thông tin",
+        description: "Vui lòng điền đầy đủ Họ tên, Email và SĐT.",
+        variant: "destructive",
+      });
       return;
     }
-
     if (editingId) {
-      setStaff((prev) =>
-        prev.map((s) => (s.id === editingId ? { ...s, ...form } : s))
-      );
+      setStaff((prev) => prev.map((s) => (s.id === editingId ? { ...s, ...form } : s)));
       toast({ title: "Cập nhật thành công", description: `Đã cập nhật thông tin ${form.name}.` });
     } else {
       const newId = Math.max(...staff.map((s) => s.id)) + 1;
-      setStaff((prev) => [
-        ...prev,
-        { id: newId, ...form, active: true },
-      ]);
+      setStaff((prev) => [...prev, { id: newId, ...form, active: true }]);
       toast({ title: "Thêm thành công", description: `Đã thêm nhân viên ${form.name}.` });
     }
     setSheetOpen(false);
@@ -141,269 +133,168 @@ export default function AdminStaff() {
           description: `${s.name} đã được ${next.active ? "kích hoạt" : "vô hiệu hóa"}.`,
         });
         return next;
-      })
+      }),
     );
   };
 
-  const resetPassword = (member: StaffMember, e: React.MouseEvent) => {
+  const resetPassword = (m: StaffMember, e: React.MouseEvent) => {
     e.stopPropagation();
     toast({
       title: "Đặt lại mật khẩu",
-      description: `Mật khẩu của ${member.name} đã được reset về mặc định.`,
+      description: `Mật khẩu của ${m.name} đã được reset về mặc định.`,
     });
   };
 
-  // ── Render ──
   return (
-    <div className="min-h-screen bg-[#1a1c1d] text-[#1a1c1d] font-sans flex flex-col">
-      <AppHeader activePage="admin-staff" />
+    <Screen activeTab={navActive} onTab={onTab} noHeader>
+      <DetailHeader title="Nhân viên" onBack={() => navigate("/")} />
 
-      <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full bg-[#f6f6f7] rounded-t-2xl">
-        <Breadcrumb items={[{ label: "Quản lý" }, { label: "Nhân viên" }]} />
+      <div className="bg-np-surface-sub pb-5">
+        <PageHeader
+          title="Quản lý nhân viên"
+          subtitle={`${filtered.length} / ${staff.length} nhân viên`}
+          action={
+            <NPButton tone="primary" size="sm" icon={UserPlus} onClick={openAdd}>
+              Thêm
+            </NPButton>
+          }
+        />
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-lg font-bold text-[#1a1c1d]" data-testid="text-staff-title">
-            Quản lý nhân viên
-          </h1>
-          <Button
-            className="rounded-lg h-8 bg-[#1a1c1d] hover:bg-[#2a2c2d] text-white text-xs px-4 font-bold shadow-sm shrink-0"
-            onClick={openAdd}
-            data-testid="button-add-staff"
-          >
-            <UserPlus className="h-4 w-4 mr-1.5" />
-            Thêm nhân viên
-          </Button>
-        </div>
+        <SearchField value={searchTerm} onChange={setSearchTerm} placeholder="Tìm tên, email, SĐT..." />
+        <Chips items={chips} active={roleFilter} onChange={setRoleFilter} />
 
-        <Card className="border-[#d2d5d8] shadow-sm bg-white overflow-hidden rounded-xl">
-          {/* Search + Role filter */}
-          <div className="p-4 border-b border-[#d2d5d8] flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8c9196]" />
-              <Input
-                placeholder="Tìm nhân viên..."
-                className="pl-9 bg-[#f6f6f7] border-[#d2d5d8] focus:bg-white transition-all rounded-lg h-9 text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                data-testid="input-search-staff"
-              />
+        <Card className="overflow-hidden p-0">
+          {filtered.length === 0 ? (
+            <div className="px-5 py-12 text-center">
+              <Users size={36} className="mx-auto text-np-border-strong" />
+              <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
+                Không tìm thấy nhân viên nào
+              </div>
             </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-full sm:w-[160px] h-9 bg-[#f6f6f7] border-[#d2d5d8] rounded-lg text-sm" data-testid="select-role-filter">
-                <SelectValue placeholder="Lọc theo role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả chức danh</SelectItem>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Desktop table */}
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader className="bg-[#f6f6f7]">
-                <TableRow className="hover:bg-transparent border-b-[#d2d5d8]">
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6">Họ tên</TableHead>
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6">Role</TableHead>
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6">Email</TableHead>
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6">SĐT</TableHead>
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6">ISoft ID</TableHead>
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6 text-center">Trạng thái</TableHead>
-                  <TableHead className="text-[10px] font-bold text-[#4a4d50] uppercase h-10 px-6 text-center">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((member) => {
-                  const rc = ROLE_STYLE;
-                  return (
-                    <TableRow
-                      key={member.id}
-                      className="border-b-[#d2d5d8] hover:bg-[#f6f6f7] cursor-pointer"
-                      onClick={() => openEdit(member)}
-                      data-testid={`row-staff-${member.id}`}
-                    >
-                      <TableCell className="px-6 py-4">
-                        <p className="text-sm font-bold text-[#1a1c1d]">{member.name}</p>
-                      </TableCell>
-                      <TableCell className="px-6 py-4">
-                        <Badge className={`${rc.bg} ${rc.text} border-transparent text-[10px] font-bold`}>
-                          {member.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-[#616161]">{member.email}</TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-[#616161]">{member.phone}</TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-[#616161] font-mono">{member.isoftId}</TableCell>
-                      <TableCell className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <Switch
-                          checked={member.active}
-                          onCheckedChange={() => toggleActive(member.id)}
-                          data-testid={`switch-staff-${member.id}`}
-                        />
-                      </TableCell>
-                      <TableCell className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[10px] font-bold border-[#d2d5d8] text-[#616161] hover:text-[#1a1c1d]"
-                          onClick={(e) => resetPassword(member, e)}
-                          data-testid={`button-reset-pw-${member.id}`}
-                        >
-                          <KeyRound className="h-3 w-3 mr-1" />
-                          Reset MK
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="md:hidden">
-            {filtered.map((member) => {
-              const rc = ROLE_STYLE;
-              return (
-                <div
-                  key={member.id}
-                  className="px-4 py-3.5 border-b-2 border-[#d2d5d8] hover:bg-[#f6f6f7] active:bg-[#ebebed] transition-colors cursor-pointer"
-                  onClick={() => openEdit(member)}
-                  data-testid={`card-staff-${member.id}`}
+          ) : (
+            filtered.map((m, i) => (
+              <div
+                key={m.id}
+                className={
+                  "px-4 py-3.5 transition-colors active:bg-np-surface-pressed" +
+                  (i === filtered.length - 1 ? "" : " border-b border-np-surface-pressed")
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => openEdit(m)}
+                  className="flex w-full items-start gap-3 text-left"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-[#1a1c1d]">{member.name}</span>
-                    <Badge className={`${rc.bg} ${rc.text} border-transparent text-[10px] font-bold`}>
-                      {member.role}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-[#8c9196] mt-1">{member.email}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <p className="text-xs text-[#616161]">{member.phone} · {member.isoftId}</p>
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-1.5 text-[9px] font-bold border-[#d2d5d8]"
-                        onClick={(e) => resetPassword(member, e)}
-                      >
-                        <KeyRound className="h-2.5 w-2.5 mr-0.5" />
-                        Reset
-                      </Button>
-                      <Switch
-                        checked={member.active}
-                        onCheckedChange={() => toggleActive(member.id)}
-                      />
+                  <Avatar name={m.name} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-[15px] font-bold text-np-ink">{m.name}</span>
+                      <Badge tone="neutral">{m.role}</Badge>
+                    </div>
+                    <div className="mt-0.5 truncate text-[12px] text-np-text-sub">{m.email}</div>
+                    <div className="mt-0.5 text-[11px] text-np-text-muted">
+                      {m.phone} · <span className="font-mono">{m.isoftId}</span>
                     </div>
                   </div>
+                </button>
+                <div
+                  className="mt-2 flex items-center justify-end gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <NPButton
+                    size="sm"
+                    tone="ghost"
+                    icon={KeyRound}
+                    onClick={(e) => resetPassword(m, e)}
+                  >
+                    Reset MK
+                  </NPButton>
+                  <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-np-text-sub">
+                    <span>{m.active ? "Đang bật" : "Đã tắt"}</span>
+                    <Switch checked={m.active} onCheckedChange={() => toggleActive(m.id)} />
+                  </label>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Empty state */}
-          {filtered.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="h-10 w-10 text-[#d2d5d8] mx-auto mb-3" />
-              <p className="text-sm text-[#8c9196]">Không tìm thấy nhân viên nào</p>
-            </div>
+              </div>
+            ))
           )}
-
-          {/* Footer */}
-          <div className="p-4 border-t border-[#d2d5d8] bg-white">
-            <p className="text-xs text-[#8c9196]" data-testid="text-staff-count">
-              Hiển thị {filtered.length}/{staff.length} nhân viên
-            </p>
-          </div>
         </Card>
-      </main>
 
-      {/* ── Add / Edit Sheet ── */}
+        <div className="h-5" />
+      </div>
+
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-md bg-white overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto bg-white sm:max-w-md">
           <SheetHeader>
-            <SheetTitle className="text-base font-bold text-[#1a1c1d]">
+            <SheetTitle className="text-[16px] font-bold text-np-ink">
               {editingId ? "Chỉnh sửa nhân viên" : "Thêm nhân viên"}
             </SheetTitle>
           </SheetHeader>
 
           <div className="space-y-4 py-6">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#4a4d50]">Họ tên</Label>
+            <FormField label="Họ tên">
               <Input
                 placeholder="Nhập họ tên"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="bg-[#f6f6f7] border-[#d2d5d8] focus:bg-white rounded-lg h-9 text-sm"
-                data-testid="input-staff-name"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#4a4d50]">Email</Label>
+            </FormField>
+            <FormField label="Email">
               <Input
                 type="email"
                 placeholder="email@nguyenphuong.vn"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="bg-[#f6f6f7] border-[#d2d5d8] focus:bg-white rounded-lg h-9 text-sm"
-                data-testid="input-staff-email"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#4a4d50]">Số điện thoại</Label>
+            </FormField>
+            <FormField label="Số điện thoại">
               <Input
                 placeholder="0901234567"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="bg-[#f6f6f7] border-[#d2d5d8] focus:bg-white rounded-lg h-9 text-sm"
-                data-testid="input-staff-phone"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#4a4d50]">Role</Label>
+            </FormField>
+            <FormField label="Chức danh">
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as Role })}>
-                <SelectTrigger className="bg-[#f6f6f7] border-[#d2d5d8] rounded-lg h-9 text-sm" data-testid="select-staff-role">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#4a4d50]">ISoft User ID</Label>
+            </FormField>
+            <FormField label="ISoft User ID">
               <Input
                 placeholder="ISF-XXX"
                 value={form.isoftId}
                 onChange={(e) => setForm({ ...form, isoftId: e.target.value })}
-                className="bg-[#f6f6f7] border-[#d2d5d8] focus:bg-white rounded-lg h-9 text-sm"
-                data-testid="input-staff-isoft"
               />
-            </div>
+            </FormField>
           </div>
 
           <SheetFooter className="flex gap-2 sm:justify-end">
-            <Button
-              variant="ghost"
-              className="text-sm"
-              onClick={() => setSheetOpen(false)}
-            >
+            <NPButton tone="ghost" onClick={() => setSheetOpen(false)}>
               Hủy
-            </Button>
-            <Button
-              className="bg-[#1a1c1d] hover:bg-[#2a2c2d] text-white text-sm font-bold rounded-lg"
-              onClick={handleSave}
-              data-testid="button-save-staff"
-            >
+            </NPButton>
+            <NPButton tone="primary" onClick={handleSave}>
               Lưu
-            </Button>
+            </NPButton>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+    </Screen>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[12px] font-semibold text-np-text-sub">{label}</Label>
+      {children}
     </div>
   );
 }
