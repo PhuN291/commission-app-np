@@ -1,340 +1,422 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { Calculator, Pencil, Plus, Trash2 } from "lucide-react";
+/**
+ * Admin: Commission tier config.
+ *
+ * Spec: B4 R-1-2 (Sale/TC/BS có HH, KT/CEO không) + R-1-3 (snapshot per CR creation time).
+ * Permission: CEO edit; TC + KT view-only; others 403 (server-enforced).
+ *
+ * Schema fixed: 4 sale ranks (M0-M3) + 1 TC flat + 3 doctor ranks (L1-L3) = 8 rows.
+ * History via effective_from/to — edit nào chỉ áp cho đơn tạo SAU thời điểm Lưu.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { Redirect, useLocation } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { authFetch } from "@/lib/queryClient";
+import { History, Info } from "lucide-react";
 import {
   Card,
-  Chips,
   DetailHeader,
   NPButton,
-  PageHeader,
   Screen,
   SectionTitle,
   useTabNav,
-  type ChipItem,
 } from "@/components/np";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
+import {
+  COMMISSIONABLE_ROLES,
+  COMMISSION_RANKINGS,
+  RANKING_LABEL,
+  ROLE_LABEL,
+  tierKeyToString,
+  type CommissionableRole,
+  type Ranking,
+  type TierKey,
+  type UserRole,
+} from "@shared/types";
 
-type TabKey = "doctor" | "nurse";
+// ─────────────────────────────────────────────────────────────────
+// Types matching server response
+// ─────────────────────────────────────────────────────────────────
 
-interface RankRow {
+type CommissionTier = {
   id: number;
-  name: string;
-  minRevenue: number;
-  commissionPercent: number;
-}
-
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
-
-const initialData: Record<TabKey, RankRow[]> = {
-  doctor: [
-    { id: 1, name: "Đồng", minRevenue: 0, commissionPercent: 3 },
-    { id: 2, name: "Bạc", minRevenue: 20_000_000, commissionPercent: 5 },
-    { id: 3, name: "Vàng", minRevenue: 50_000_000, commissionPercent: 8 },
-  ],
-  nurse: [
-    { id: 1, name: "Đồng", minRevenue: 0, commissionPercent: 2 },
-    { id: 2, name: "Bạc", minRevenue: 15_000_000, commissionPercent: 4 },
-    { id: 3, name: "Vàng", minRevenue: 40_000_000, commissionPercent: 6 },
-  ],
+  role: string;
+  ranking: string | null;
+  percentBp: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  createdByUserId: number | null;
 };
 
-const TAB_CHIPS: ChipItem[] = [
-  { key: "doctor", label: "Bác sĩ" },
-  { key: "nurse", label: "Điều dưỡng" },
-];
+type HistoryEntry = CommissionTier & { createdByName: string };
 
-const emptyForm = { name: "", minRevenue: "", commissionPercent: "" };
+// ─────────────────────────────────────────────────────────────────
+// Fixed matrix — 8 rows (Sale 4 + TC 1 + Doctor 3)
+// ─────────────────────────────────────────────────────────────────
+
+const TIER_KEYS: TierKey[] = COMMISSIONABLE_ROLES.flatMap((role) =>
+  COMMISSION_RANKINGS[role].map((ranking) => ({ role, ranking } as TierKey)),
+);
+
+function bpToPercent(bp: number): string {
+  return (bp / 100).toFixed(2).replace(/\.?0+$/, ""); // 500 → "5", 350 → "3.5"
+}
+
+function percentToBp(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return Math.round(n * 100);
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────
 
 export default function AdminCommissionConfig() {
   const { active: navActive, onTab: onNavTab } = useTabNav();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<TabKey>("doctor");
-  const [data, setData] = useState(initialData);
+  const queryClient = useQueryClient();
 
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  // Permission gate (UX layer — server enforces too)
+  const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
+  const canView = role === "ceo" || role === "tc" || role === "kt";
+  const canEdit = role === "ceo";
 
-  const [calcPrice, setCalcPrice] = useState("");
-  const [calcCost, setCalcCost] = useState("");
-  const [calcRank, setCalcRank] = useState("");
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  const ranks = data[activeTab];
+  const { data: tiers = [], isLoading } = useQuery<CommissionTier[]>({
+    queryKey: ["/api/admin/commission-tiers"],
+    enabled: canView,
+    queryFn: async () => {
+      const res = await authFetch("/api/admin/commission-tiers");
+      if (!res.ok) throw new Error("fetch_failed");
+      return res.json();
+    },
+  });
 
-  const openAdd = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setSheetOpen(true);
-  };
+  const { data: history = [] } = useQuery<HistoryEntry[]>({
+    queryKey: ["/api/admin/commission-tiers/history"],
+    enabled: canView && historyOpen,
+    queryFn: async () => {
+      const res = await authFetch("/api/admin/commission-tiers/history");
+      if (!res.ok) throw new Error("fetch_failed");
+      return res.json();
+    },
+  });
 
-  const openEdit = (row: RankRow) => {
-    setEditingId(row.id);
-    setForm({
-      name: row.name,
-      minRevenue: row.minRevenue.toString(),
-      commissionPercent: row.commissionPercent.toString(),
-    });
-    setSheetOpen(true);
-  };
+  // Lookup map: tierKey → percentBp from server.
+  const currentMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of tiers) {
+      m.set(tierKeyToString({ role: t.role as CommissionableRole, ranking: t.ranking as Ranking | null }), t.percentBp);
+    }
+    return m;
+  }, [tiers]);
 
-  const handleSave = () => {
-    if (!form.name.trim() || !form.commissionPercent.trim()) {
+  const updateMut = useMutation({
+    mutationFn: async (changes: Array<{ role: string; ranking: string | null; percentBp: number }>) => {
+      const res = await authFetch("/api/admin/commission-tiers", {
+        method: "PATCH",
+        body: JSON.stringify({ tiers: changes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw data;
+      return data;
+    },
+    onSuccess: () => {
       toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng điền đầy đủ Tên rank và % Commission.",
+        title: "Đã lưu cấu hình",
+        description: "Tỉ lệ mới chỉ áp cho đơn tạo SAU thời điểm này.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/commission-tiers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/commission-tiers/history"] });
+      setEdits({});
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Lỗi lưu cấu hình",
+        description: err?.message || err?.error || "Vui lòng thử lại",
         variant: "destructive",
       });
+    },
+  });
+
+  // Permission redirect
+  if (typeof window !== "undefined" && !canView) {
+    return <Redirect to="/" />;
+  }
+
+  // ───── Helpers ─────
+
+  function getDisplayValue(key: TierKey): string {
+    const k = tierKeyToString(key);
+    if (k in edits) return edits[k];
+    const bp = currentMap.get(k);
+    return bp !== undefined ? bpToPercent(bp) : "";
+  }
+
+  function setEditValue(key: TierKey, value: string) {
+    const k = tierKeyToString(key);
+    setEdits((prev) => ({ ...prev, [k]: value }));
+  }
+
+  function handleCancel() {
+    setEdits({});
+  }
+
+  function handleSave() {
+    // Build changes — only include tiers that changed AND are valid.
+    const changes: Array<{ role: string; ranking: string | null; percentBp: number }> = [];
+    for (const key of TIER_KEYS) {
+      const k = tierKeyToString(key);
+      if (!(k in edits)) continue;
+      const bp = percentToBp(edits[k]);
+      if (bp === null) {
+        toast({
+          title: "Giá trị không hợp lệ",
+          description: `${ROLE_LABEL[key.role]}${key.ranking ? " " + RANKING_LABEL[key.ranking as Ranking] : ""}: phải là số từ 0 đến 100`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const currentBp = currentMap.get(k);
+      if (bp === currentBp) continue; // no real change
+      changes.push({ role: key.role, ranking: key.ranking, percentBp: bp });
+    }
+    if (changes.length === 0) {
+      toast({ title: "Không có thay đổi" });
       return;
     }
-    const newRow: RankRow = {
-      id: editingId ?? Math.max(0, ...ranks.map((r) => r.id)) + 1,
-      name: form.name.trim(),
-      minRevenue: Number(form.minRevenue) || 0,
-      commissionPercent: Number(form.commissionPercent) || 0,
-    };
-    setData((prev) => ({
-      ...prev,
-      [activeTab]: editingId
-        ? prev[activeTab].map((r) => (r.id === editingId ? newRow : r))
-        : [...prev[activeTab], newRow],
-    }));
-    toast({
-      title: editingId ? "Cập nhật thành công" : "Thêm thành công",
-      description: `Rank "${newRow.name}" đã được ${editingId ? "cập nhật" : "thêm"}.`,
-    });
-    setSheetOpen(false);
-  };
+    updateMut.mutate(changes);
+  }
 
-  const handleDelete = (row: RankRow) => {
-    setData((prev) => ({
-      ...prev,
-      [activeTab]: prev[activeTab].filter((r) => r.id !== row.id),
-    }));
-    toast({ title: "Đã xóa", description: `Rank "${row.name}" đã được xóa.` });
-  };
+  const hasEdits = Object.keys(edits).length > 0;
 
-  const calcResult = (() => {
-    const price = Number(calcPrice) || 0;
-    const cost = Number(calcCost) || 0;
-    const rank = ranks.find((r) => r.id.toString() === calcRank);
-    if (!rank || price <= 0) return null;
-    const profit = price - cost;
-    const commission = Math.round((profit * rank.commissionPercent) / 100);
-    return { profit, commission, percent: rank.commissionPercent, rankName: rank.name };
-  })();
+  // ───── Render ─────
 
   return (
     <Screen activeTab={navActive} onTab={onNavTab} noHeader>
       <DetailHeader title="Cấu hình hoa hồng" onBack={() => navigate("/")} />
 
       <div className="bg-np-surface-sub pb-5">
-        <PageHeader
-          title="Cấu hình hoa hồng"
-          subtitle="Mức % theo rank cho từng chức danh"
-          action={
-            <NPButton tone="primary" size="sm" icon={Plus} onClick={openAdd}>
-              Thêm rank
-            </NPButton>
-          }
-        />
-
-        <Chips
-          items={TAB_CHIPS}
-          active={activeTab}
-          onChange={(k) => {
-            setActiveTab(k as TabKey);
-            setCalcRank("");
-          }}
-        />
-
-        {/* Rank list */}
-        <Card className="overflow-hidden p-0">
-          {ranks.length === 0 ? (
-            <div className="px-5 py-12 text-center text-[13px] text-np-text-muted">
-              Chưa có rank nào. Bấm "Thêm rank" để bắt đầu.
-            </div>
-          ) : (
-            ranks.map((row, i) => (
-              <div
-                key={row.id}
-                className={
-                  "px-4 py-3.5" +
-                  (i === ranks.length - 1 ? "" : " border-b border-np-surface-pressed")
-                }
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-bold text-np-ink">{row.name}</div>
-                    <div className="mt-0.5 text-[12px] text-np-text-muted">
-                      Mốc tối thiểu: {fmt(row.minRevenue)}₫
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 text-right text-[18px] font-extrabold text-np-brand-ink tabular-nums">
-                    {row.commissionPercent}%
-                  </div>
-                </div>
-                <div className="mt-2 flex justify-end gap-2">
-                  <NPButton size="sm" tone="ghost" icon={Pencil} onClick={() => openEdit(row)}>
-                    Sửa
-                  </NPButton>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(row)}
-                    className="flex h-8 items-center gap-1.5 rounded-np-button border border-np-danger-bg bg-white px-3 text-[13px] font-bold text-np-danger transition-colors hover:bg-np-danger-bg/20"
-                  >
-                    <Trash2 size={14} strokeWidth={2.25} />
-                    Xóa
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </Card>
-
-        {/* Calculator */}
-        <SectionTitle>
-          <span className="flex items-center gap-1.5">
-            <Calculator size={14} strokeWidth={2.25} className="text-np-brand-ink" />
-            Thử tính commission
+        {/* Banner info */}
+        <div className="mx-4 mt-3 flex items-start gap-2 rounded-np-card border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] font-medium text-np-text-sub">
+          <Info size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
+          <span>
+            Tỉ lệ mới chỉ áp cho đơn tạo <strong>SAU</strong> thời điểm Lưu. Đơn cũ giữ tỉ lệ hoa hồng tại thời điểm tạo.
+            {!canEdit && <span className="ml-1 italic text-np-text-muted">(Bạn chỉ có quyền xem.)</span>}
           </span>
-        </SectionTitle>
-        <Card className="space-y-4 p-4">
-          <div className="space-y-1.5">
-            <Label className="text-[12px] font-semibold text-np-text-sub">Giá bán (₫)</Label>
-            <Input
-              type="number"
-              placeholder="vd: 5000000"
-              value={calcPrice}
-              onChange={(e) => setCalcPrice(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[12px] font-semibold text-np-text-sub">Giá cost (₫)</Label>
-            <Input
-              type="number"
-              placeholder="vd: 2000000"
-              value={calcCost}
-              onChange={(e) => setCalcCost(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[12px] font-semibold text-np-text-sub">Chọn rank</Label>
-            <Select value={calcRank} onValueChange={setCalcRank}>
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn rank" />
-              </SelectTrigger>
-              <SelectContent>
-                {ranks.map((r) => (
-                  <SelectItem key={r.id} value={r.id.toString()}>
-                    {r.name} ({r.commissionPercent}%)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        </div>
 
-          {calcResult && (
-            <div className="rounded-lg border border-np-brand-ink/20 bg-np-brand-soft p-3.5">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-sub">
-                    Lợi nhuận
-                  </p>
-                  <p className="mt-0.5 text-[14px] font-bold text-np-ink tabular-nums">
-                    {fmt(calcResult.profit)}₫
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-sub">
-                    Rank × %
-                  </p>
-                  <p className="mt-0.5 text-[14px] font-bold text-np-ink">
-                    {calcResult.rankName} × {calcResult.percent}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-sub">
-                    Commission
-                  </p>
-                  <p className="mt-0.5 text-[14px] font-bold text-np-brand-ink tabular-nums">
-                    {fmt(calcResult.commission)}₫
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+        {/* Section: Sale */}
+        <SectionTitle>Điều dưỡng</SectionTitle>
+        <Card className="space-y-3 p-4">
+          {COMMISSION_RANKINGS.sale.map((r) => (
+            <TierRow
+              key={`sale:${r}`}
+              label={r ? RANKING_LABEL[r] : ""}
+              value={getDisplayValue({ role: "sale", ranking: r })}
+              onChange={(v) => setEditValue({ role: "sale", ranking: r }, v)}
+              disabled={!canEdit}
+              placeholder="0"
+            />
+          ))}
         </Card>
 
-        <div className="h-5" />
+        {/* Section: TC */}
+        <SectionTitle>Trưởng ca</SectionTitle>
+        <Card className="space-y-2 p-4">
+          <TierRow
+            label="Mức cố định"
+            value={getDisplayValue({ role: "tc", ranking: null })}
+            onChange={(v) => setEditValue({ role: "tc", ranking: null }, v)}
+            disabled={!canEdit}
+            placeholder="0"
+          />
+          <div className="text-[11px] text-np-text-muted">
+            Trưởng ca không có bậc, áp dụng mức cố định cho mọi trưởng ca.
+          </div>
+        </Card>
+
+        {/* Section: Doctor */}
+        <SectionTitle>Bác sĩ</SectionTitle>
+        <Card className="space-y-3 p-4">
+          {COMMISSION_RANKINGS.doctor.map((r) => (
+            <TierRow
+              key={`doctor:${r}`}
+              label={r ? RANKING_LABEL[r] : ""}
+              value={getDisplayValue({ role: "doctor", ranking: r })}
+              onChange={(v) => setEditValue({ role: "doctor", ranking: r }, v)}
+              disabled={!canEdit}
+              placeholder="0"
+            />
+          ))}
+        </Card>
+
+        {/* Action row */}
+        <div className="mx-4 mt-4 flex flex-col gap-2">
+          <NPButton
+            tone="ghost"
+            size="md"
+            icon={History}
+            onClick={() => setHistoryOpen(true)}
+            className="w-full justify-center"
+          >
+            Lịch sử thay đổi
+          </NPButton>
+
+          {canEdit && (
+            <div className="flex gap-2">
+              <NPButton
+                tone="ghost"
+                size="lg"
+                onClick={handleCancel}
+                disabled={!hasEdits || updateMut.isPending}
+                className="flex-1 justify-center"
+              >
+                Hủy
+              </NPButton>
+              <NPButton
+                tone="primary"
+                size="lg"
+                onClick={handleSave}
+                disabled={!hasEdits || updateMut.isPending}
+                className="flex-1 justify-center"
+              >
+                {updateMut.isPending ? "Đang lưu..." : "Lưu"}
+              </NPButton>
+            </div>
+          )}
+        </div>
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
+          </div>
+        )}
       </div>
 
-      {/* Add / Edit sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full overflow-y-auto bg-white sm:max-w-md">
-          <SheetHeader>
+      {/* History modal */}
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 bg-white p-0 sm:max-w-md"
+        >
+          <SheetHeader className="flex-shrink-0 border-b border-np-surface-pressed px-6 pb-4 pr-12 pt-6">
             <SheetTitle className="text-[16px] font-bold text-np-ink">
-              {editingId ? "Chỉnh sửa rank" : "Thêm rank"}
+              Lịch sử thay đổi tỉ lệ
             </SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-4 py-6">
-            <div className="space-y-1.5">
-              <Label className="text-[12px] font-semibold text-np-text-sub">Tên rank</Label>
-              <Input
-                placeholder="vd: Bạch Kim"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[12px] font-semibold text-np-text-sub">
-                Mốc doanh số tối thiểu (₫)
-              </Label>
-              <Input
-                type="number"
-                placeholder="vd: 50000000"
-                value={form.minRevenue}
-                onChange={(e) => setForm({ ...form, minRevenue: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[12px] font-semibold text-np-text-sub">% Commission</Label>
-              <Input
-                type="number"
-                placeholder="vd: 5"
-                value={form.commissionPercent}
-                onChange={(e) => setForm({ ...form, commissionPercent: e.target.value })}
-              />
-            </div>
+          <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+            {history.length === 0 ? (
+              <div className="px-3 py-8 text-center text-[13px] text-np-text-muted">
+                Chưa có thay đổi nào
+              </div>
+            ) : (
+              history.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-np-card border border-np-border bg-white p-3"
+                >
+                  <div className="flex items-baseline justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] font-bold text-np-ink">
+                        {ROLE_LABEL[entry.role as CommissionableRole] ?? entry.role}
+                        {entry.ranking ? ` · ${RANKING_LABEL[entry.ranking as Ranking]}` : ""}
+                      </span>
+                      <span className="text-[14px] font-extrabold text-np-brand-ink tabular-nums">
+                        {bpToPercent(entry.percentBp)}%
+                      </span>
+                    </div>
+                    {entry.effectiveTo === null && (
+                      <span className="rounded-np-badge bg-np-brand-soft px-1.5 py-0.5 text-[10px] font-bold text-np-brand-ink">
+                        Hiện tại
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-[11px] text-np-text-muted">
+                    Hiệu lực từ: {formatDate(entry.effectiveFrom)}
+                    {entry.effectiveTo && (
+                      <> · Hết hiệu lực: {formatDate(entry.effectiveTo)}</>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-np-text-muted">
+                    Bởi: {entry.createdByName}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
-          <SheetFooter className="flex gap-2 sm:justify-end">
-            <NPButton tone="ghost" onClick={() => setSheetOpen(false)}>
-              Hủy
+          <div className="z-10 flex flex-shrink-0 gap-2 border-t border-np-border bg-white px-6 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+            <NPButton
+              tone="ghost"
+              onClick={() => setHistoryOpen(false)}
+              className="flex-1 justify-center"
+            >
+              Đóng
             </NPButton>
-            <NPButton tone="primary" onClick={handleSave}>
-              Lưu
-            </NPButton>
-          </SheetFooter>
+          </div>
         </SheetContent>
       </Sheet>
     </Screen>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Tier row — label left, percent input right
+// ─────────────────────────────────────────────────────────────────
+
+function TierRow({
+  label,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex-1 text-[14px] font-medium text-np-ink">{label}</div>
+      <div className="relative w-24">
+        <Input
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min="0"
+          max="100"
+          placeholder={placeholder}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          className="pr-7 text-right tabular-nums"
+        />
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] font-semibold text-np-text-muted">
+          %
+        </span>
+      </div>
+    </div>
   );
 }

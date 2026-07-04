@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   BadgePercent,
-  Bot,
   CheckCircle2,
   Clock,
   Hash,
@@ -619,7 +618,7 @@ export default function ServiceDetail() {
                       </div>
                       <div className="flex items-center gap-1 text-[12px]">
                         <BadgePercent size={12} strokeWidth={2.25} className="text-np-brand-ink" />
-                        <span className="text-np-brand-ink">HH:</span>
+                        <span className="text-np-brand-ink">Hoa hồng:</span>
                         <span className="font-bold text-np-brand-ink">{fmtVND(pkg.commission)}</span>
                       </div>
                     </div>
@@ -685,16 +684,6 @@ export default function ServiceDetail() {
         </NPButton>
       </div>
 
-      {/* FAB Hỏi AI */}
-      <button
-        type="button"
-        onClick={() => navigate(`/ai-chat?service=${encodeURIComponent(service.title)}`)}
-        className="absolute bottom-[132px] right-4 z-20 flex items-center gap-2 rounded-full bg-np-brand-ink px-4 py-3 text-white shadow-lg transition-colors hover:bg-np-brand-hover"
-      >
-        <Bot size={20} strokeWidth={2.25} />
-        <span className="text-[14px] font-bold">Hỏi AI</span>
-      </button>
-
       <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
         <DialogContent className="overflow-hidden rounded-np-card p-0 sm:max-w-md">
           <DialogHeader className="px-5 pb-0 pt-5">
@@ -734,7 +723,7 @@ export default function ServiceDetail() {
                         <span className="font-bold text-np-ink">{fmtVND(pkg.price)}</span>
                       </span>
                       <span>
-                        <span className="text-np-brand-ink">HH: </span>
+                        <span className="text-np-brand-ink">Hoa hồng: </span>
                         <span className="font-bold text-np-brand-ink">{fmtVND(pkg.commission)}</span>
                       </span>
                     </div>

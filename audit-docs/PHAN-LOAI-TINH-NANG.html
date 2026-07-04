@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>NP Commission App - Phân loại tính năng v1 / v1.5 / Tương lai</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #1F2937; background: #FFFFFF; line-height: 1.5; }
+  .container { max-width: 1320px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { padding: 24px 0 24px; border-bottom: 2px solid #E5E7EB; margin-bottom: 24px; }
+  .nav-back { display: inline-block; margin-bottom: 8px; font-size: 13px; color: #1F4E78; text-decoration: none; }
+  .nav-back:hover { text-decoration: underline; }
+  header h1 { font-size: 26px; font-weight: 700; color: #1F2937; margin-bottom: 6px; }
+  header .meta { font-size: 14px; color: #6B7280; }
+  .intro { background: #FFFBEB; border-left: 4px solid #D97706; padding: 16px 20px; margin-bottom: 28px; border-radius: 4px; font-size: 14px; color: #374151; }
+  .intro strong { color: #92400E; }
+  .intro .defs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 12px; }
+  .intro .def { background: #FFFFFF; padding: 12px; border-radius: 6px; border: 1px solid #FDE68A; }
+  .intro .def b { display: block; margin-bottom: 4px; }
+
+  .board { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 16px; }
+  .col { border-radius: 10px; padding: 16px; }
+  .col-v1 { background: #FEF2F2; border: 2px solid #DC2626; }
+  .col-v15 { background: #FFFBEB; border: 2px solid #D97706; }
+  .col-future { background: #F1F5F9; border: 2px solid #64748B; }
+  .col h2 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .col-v1 h2 { color: #991B1B; }
+  .col-v15 h2 { color: #92400E; }
+  .col-future h2 { color: #334155; }
+  .col .col-sub { font-size: 12px; color: #6B7280; margin-bottom: 16px; }
+
+  .subhead { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; color: #4B5563; }
+  .card { background: #FFFFFF; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid #E5E7EB; }
+  .card .title { font-size: 13px; font-weight: 700; color: #1F2937; }
+  .card .desc { font-size: 11.5px; color: #6B7280; margin-top: 2px; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-top: 6px; }
+  .badge-decide { background: #FEE2E2; color: #991B1B; }
+  .badge-done { background: #DCFCE7; color: #166534; }
+  .badge-building { background: #DBEAFE; color: #1E40AF; }
+  .badge-fix { background: #FEF3C7; color: #92400E; }
+  .badge-who { background: #EDE9FE; color: #5B21B6; margin-left: 4px; }
+
+  .summary { margin-top: 36px; background: #F9FAFB; border-radius: 8px; padding: 20px; }
+  .summary h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #1F2937; }
+  .summary table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary th { background: #1F4E78; color: #FFFFFF; padding: 8px 12px; text-align: left; }
+  .summary td { padding: 8px 12px; border-bottom: 1px solid #E5E7EB; }
+  .summary tr:nth-child(even) { background: #FFFFFF; }
+
+  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #E5E7EB; font-size: 13px; color: #6B7280; }
+  footer a { color: #1F4E78; }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; } .intro .defs { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <a href="VISUAL-OVERVIEW.html" class="nav-back">← Quay lại Tổng quan</a>
+  <h1>Phân loại tính năng: làm bây giờ, vá sau, để dành</h1>
+  <div class="meta">Bỏ "phase 2" mơ hồ. Gom tất cả hạng mục vào 3 rổ rõ ràng. Cập nhật 14/05/2026.</div>
+</header>
+
+<div class="intro">
+  <strong>Cách đọc bảng này:</strong> Mọi hạng mục trong dự án được xếp vào đúng 1 trong 3 rổ. Không còn "phase 2" mơ hồ.
+  <div class="defs">
+    <div class="def"><b style="color:#991B1B;">v1 - LÀM BÂY GIỜ</b>Bản đầu tiên NP dùng chạy thật. Đủ để tính HH, duyệt, chi lương, khiếu nại. Đây là mục tiêu hiện tại.</div>
+    <div class="def"><b style="color:#92400E;">v1.5 - VÁ SAU</b>Bản vá sau 1-2 tháng v1 chạy ổn. Sửa theo feedback thật + thêm thứ thiếu nhỏ.</div>
+    <div class="def"><b style="color:#334155;">TƯƠNG LAI - ĐỂ DÀNH</b>Chỉ làm khi NP lớn lên hoặc bán SaaS. Không có deadline, không bàn bây giờ.</div>
+  </div>
+  <div style="margin-top:12px;font-size:12.5px;">
+    <span class="badge badge-done">Đã xong</span>
+    <span class="badge badge-building">Đang build</span>
+    <span class="badge badge-fix">Cần fix</span>
+    <span class="badge badge-decide">Cần quyết</span>
+    <span class="badge badge-who">Ai quyết</span>
+  </div>
+</div>
+
+<div class="board">
+
+  <!-- ============ CỘT v1 ============ -->
+  <div class="col col-v1">
+    <h2>v1 - LÀM BÂY GIỜ</h2>
+    <div class="col-sub">Bắt buộc để NP chạy thật</div>
+
+    <div class="subhead">Tính năng lõi (đã xong / đang build)</div>
+
+    <div class="card">
+      <div class="title">Đăng nhập + phân quyền 5 vai trò</div>
+      <div class="desc">Login Zalo OTP, phân quyền Sale/TC/BS/KT/CEO</div>
+      <span class="badge badge-fix">Cần fix lỗi OTP</span>
+    </div>
+    <div class="card">
+      <div class="title">Quản lý NV, khách, dịch vụ</div>
+      <div class="desc">Thêm/sửa NV, khách hàng, danh mục dịch vụ</div>
+      <span class="badge badge-done">Đã xong</span>
+    </div>
+    <div class="card">
+      <div class="title">Tạo đơn + phân vai + tính HH tự động</div>
+      <div class="desc">Đơn vào, gán vai trò tham gia, tính HH theo %</div>
+      <span class="badge badge-fix">Cần fix bảng phân vai</span>
+    </div>
+    <div class="card">
+      <div class="title">Duyệt HH ngày 5</div>
+      <div class="desc">KT duyệt batch, export, chuyển khoản</div>
+      <span class="badge badge-done">Đã xong</span>
+    </div>
+    <div class="card">
+      <div class="title">NV xem HH (màn Income)</div>
+      <div class="desc">NV tự xem HH realtime của mình</div>
+      <span class="badge badge-done">Đã xong</span>
+    </div>
+    <div class="card">
+      <div class="title">Khiếu nại 3 ngày</div>
+      <div class="desc">NV khiếu nại khi HH bị reject</div>
+      <span class="badge badge-done">Đã xong</span>
+    </div>
+    <div class="card">
+      <div class="title">Clawback 30 ngày</div>
+      <div class="desc">Trừ ngược HH khi đơn refund sau payday</div>
+      <span class="badge badge-building">Đang build</span>
+    </div>
+    <div class="card">
+      <div class="title">Dashboard CEO</div>
+      <div class="desc">Xem doanh thu + HH realtime</div>
+      <span class="badge badge-done">Đã xong</span>
+    </div>
+    <div class="card">
+      <div class="title">Điều chỉnh thủ công + auto rule thưởng target</div>
+      <div class="desc">KT tạo, CEO duyệt. Cuối tháng tự thưởng NV đạt target</div>
+      <span class="badge badge-building">Đang build</span>
+    </div>
+    <div class="card">
+      <div class="title">Notification Zalo OA</div>
+      <div class="desc">Reminder, recall, pay slip qua Zalo</div>
+      <span class="badge badge-building">Đang build</span>
+    </div>
+
+    <div class="subhead" style="color:#991B1B;">Cần QUYẾT trước launch</div>
+
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">Con số %HH thật từng vai trò + hạng</div>
+      <div class="desc">Đang dùng số giả định. Sai số này = toàn bộ HH sai</div>
+      <span class="badge badge-decide">Cần quyết</span><span class="badge badge-who">CEO khách hàng</span>
+    </div>
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">Zalo OA đã đăng ký chưa</div>
+      <div class="desc">Chưa có là chặn toàn bộ notify + go-live. Đăng ký mất 5-7 ngày</div>
+      <span class="badge badge-decide">Cần quyết</span><span class="badge badge-who">CEO khách hàng</span>
+    </div>
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">Ngưỡng lên hạng (kéo từ "phase 2" về)</div>
+      <div class="desc">Doanh thu bao nhiêu lên bạc/vàng. App có màn Ranking nên cần</div>
+      <span class="badge badge-decide">Cần quyết</span><span class="badge badge-who">CEO khách hàng</span>
+    </div>
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">Quy tắc phạt cơ bản (kéo từ "phase 2" về)</div>
+      <div class="desc">Vài quy tắc đơn giản: đi muộn, complaint. Phiên bản đầy đủ để v1.5</div>
+      <span class="badge badge-decide">Cần quyết</span><span class="badge badge-who">CEO + KT</span>
+    </div>
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">Recall days cho 5-7 dịch vụ chính (kéo về)</div>
+      <div class="desc">Dịch vụ chính tái khám sau bao nhiêu ngày. Còn lại fill dần</div>
+      <span class="badge badge-decide">Cần quyết</span><span class="badge badge-who">CEO + BS</span>
+    </div>
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">Baseline hiện tại (đo để so sánh sau)</div>
+      <div class="desc">Tính HH mất bao lâu, sai mấy lần, mấy khiếu nại/tháng</div>
+      <span class="badge badge-decide">Cần đo</span><span class="badge badge-who">PM phỏng vấn KT+TC</span>
+    </div>
+
+    <div class="subhead" style="color:#991B1B;">Lỗi phải fix trước launch</div>
+
+    <div class="card" style="border-color:#DC2626;">
+      <div class="title">3 lỗi nặng (P0)</div>
+      <div class="desc">Bảng phân vai thiếu, lỗ hổng OTP, thiếu API tạo tier HH</div>
+      <span class="badge badge-fix">Dev fix</span>
+    </div>
+    <div class="card">
+      <div class="title">7 lỗi vừa (P1)</div>
+      <div class="desc">Edge case duyệt, permission CEO reject, audit log, format VND...</div>
+      <span class="badge badge-fix">Dev fix trước UAT</span>
+    </div>
+  </div>
+
+  <!-- ============ CỘT v1.5 ============ -->
+  <div class="col col-v15">
+    <h2>v1.5 - VÁ SAU</h2>
+    <div class="col-sub">Sau 1-2 tháng v1 chạy ổn</div>
+
+    <div class="subhead">Thêm khi v1 ổn định</div>
+
+    <div class="card">
+      <div class="title">Tích hợp iHOS realtime (webhook)</div>
+      <div class="desc">Nếu v1 đang nhập tay từ Excel iHOS export, v1.5 tự động hoá</div>
+      <span class="badge badge-who">Chờ vendor iHOS</span>
+    </div>
+    <div class="card">
+      <div class="title">Tự động chuyển khoản HH</div>
+      <div class="desc">v1 KT chuyển tay qua banking. v1.5 tích hợp API ngân hàng</div>
+    </div>
+    <div class="card">
+      <div class="title">Quy tắc phạt đầy đủ</div>
+      <div class="desc">Đi muộn, complaint, vi phạm SOP, tư vấn sai, làm hỏng dụng cụ...</div>
+      <span class="badge badge-who">CEO + KT định nghĩa</span>
+    </div>
+    <div class="card">
+      <div class="title">Recall days cho TOÀN BỘ dịch vụ</div>
+      <div class="desc">v1 chỉ 5-7 dịch vụ chính. v1.5 fill hết catalog</div>
+    </div>
+    <div class="card">
+      <div class="title">Báo cáo thuế</div>
+      <div class="desc">Sau khi xác định scope thuế NP cần gì</div>
+    </div>
+    <div class="card">
+      <div class="title">Màn xem audit log (lịch sử thao tác)</div>
+      <div class="desc">v1 đã log nhưng chưa có màn xem. v1.5 thêm UI</div>
+    </div>
+    <div class="card">
+      <div class="title">Auto rule thêm (ngoài thưởng target)</div>
+      <div class="desc">Thêm rule tự động khác sau khi v1 chạy thấy cần gì</div>
+    </div>
+
+    <div class="subhead">Bỏ hẳn (không làm)</div>
+
+    <div class="card" style="opacity:0.7;">
+      <div class="title">Onboarding tour trong app</div>
+      <div class="desc">5 NV training tay 2 giờ là đủ, không cần tour tự động</div>
+    </div>
+  </div>
+
+  <!-- ============ CỘT TƯƠNG LAI ============ -->
+  <div class="col col-future">
+    <h2>TƯƠNG LAI - ĐỂ DÀNH</h2>
+    <div class="col-sub">Chỉ khi NP lớn lên / bán SaaS</div>
+
+    <div class="subhead">Khi scale lớn</div>
+
+    <div class="card">
+      <div class="title">Multi-clinic / SaaS hóa</div>
+      <div class="desc">Bán app cho phòng khám khác. Cần multi-tenant</div>
+      <span class="badge badge-who">Roadmap kinh doanh 1PDM</span>
+    </div>
+    <div class="card">
+      <div class="title">Mobile app native</div>
+      <div class="desc">Khi web responsive không đủ. Hiện tại web là đủ</div>
+    </div>
+    <div class="card">
+      <div class="title">AI gợi ý HH / dự báo doanh thu</div>
+      <div class="desc">Cần ít nhất 6 tháng data lịch sử mới làm được</div>
+    </div>
+    <div class="card">
+      <div class="title">Tự cấu hình vai trò + quyền (Sapo-style)</div>
+      <div class="desc">CEO tự tạo vai trò mới. v1 hardcode 5 vai trò là đủ</div>
+    </div>
+    <div class="card">
+      <div class="title">Dispatch ca nâng cao</div>
+      <div class="desc">Xếp ca theo ngày trong tuần, theo chi nhánh. v1 chỉ 1 ca cả ngày</div>
+    </div>
+    <div class="card">
+      <div class="title">Nhiều ca / nhiều chi nhánh</div>
+      <div class="desc">Ca tối, ca sáng, chi nhánh 2. Hiện NP 1 ca cả ngày</div>
+    </div>
+    <div class="card">
+      <div class="title">Combo / gói liệu trình dịch vụ</div>
+      <div class="desc">Bán gói nhiều buổi. Hiện NP bán dịch vụ lẻ</div>
+    </div>
+
+    <div class="subhead">Giả định cần xác nhận (1 câu)</div>
+
+    <div class="card">
+      <div class="title">NP mở 7 ngày/tuần?</div>
+      <div class="desc">Ảnh hưởng có cần xếp ca theo ngày không</div>
+      <span class="badge badge-who">CEO xác nhận</span>
+    </div>
+    <div class="card">
+      <div class="title">TC Hà có lịch nghỉ định kì?</div>
+      <div class="desc">Ảnh hưởng cần nhiều ca hay 1 ca</div>
+      <span class="badge badge-who">CEO xác nhận</span>
+    </div>
+    <div class="card">
+      <div class="title">Số BS cơ hữu vs part-time?</div>
+      <div class="desc">Ảnh hưởng cách tính HH BS</div>
+      <span class="badge badge-who">CEO xác nhận</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ TÓM TẮT ============ -->
+<div class="summary">
+  <h3>Tóm tắt: 6 quyết định cần CEO khách hàng chốt cho v1</h3>
+  <table>
+    <tr><th>#</th><th>Quyết định</th><th>Ai quyết</th><th>Vì sao cần cho v1</th></tr>
+    <tr><td>1</td><td>Con số %HH thật từng vai trò + hạng</td><td>CEO khách hàng</td><td>Gốc tính HH. Sai là sai hết</td></tr>
+    <tr><td>2</td><td>Zalo OA đăng ký</td><td>CEO khách hàng</td><td>Chặn notify + go-live nếu chưa có</td></tr>
+    <tr><td>3</td><td>Ngưỡng lên hạng</td><td>CEO khách hàng</td><td>Màn Ranking vô nghĩa nếu thiếu</td></tr>
+    <tr><td>4</td><td>Quy tắc phạt cơ bản</td><td>CEO + KT</td><td>NV làm sai tháng đầu là có ngay</td></tr>
+    <tr><td>5</td><td>Recall days 5-7 dịch vụ chính</td><td>CEO + BS</td><td>Module nhắc tái khám cần</td></tr>
+    <tr><td>6</td><td>3 giả định (giờ mở cửa, lịch nghỉ TC, số BS)</td><td>CEO khách hàng</td><td>Xác nhận nhanh, ảnh hưởng cách tính</td></tr>
+  </table>
+  <p style="margin-top:12px; font-size:13px; color:#4B5563;">Ngoài ra: 3 lỗi P0 + 7 lỗi P1 là việc dev (PM giao, không cần khách quyết). Vendor iHOS trả lời 4 câu webhook là việc PM liên hệ.</p>
+</div>
+
+<footer>
+  <p>File này thay thế khái niệm "phase 2" mơ hồ bằng 3 rổ rõ ràng: v1 (làm bây giờ), v1.5 (vá sau), Tương lai (để dành).</p>
+  <p style="margin-top:8px;"><a href="VISUAL-OVERVIEW.html">← Tổng quan</a> &nbsp;|&nbsp; <a href="FLOW-DETAIL.html">8 flow chi tiết →</a></p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,17 +1,20 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Home, Menu, ShoppingBag, Users, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoreMenuSheet } from "./more-menu-sheet";
+import type { UserRole } from "@shared/types";
 
 export type TabKey = "dashboard" | "orders" | "commission" | "customers" | "more";
 
-type TabDef = { key: TabKey; label: string; icon: LucideIcon };
+/** roles undefined = public; set = chỉ visible cho role match (R-9-1). */
+type TabDef = { key: TabKey; label: string; icon: LucideIcon; roles?: UserRole[] };
 
 const TABS: TabDef[] = [
   { key: "dashboard", label: "Trang chủ", icon: Home },
   { key: "orders", label: "Đơn hàng", icon: ShoppingBag },
-  { key: "commission", label: "Hoa hồng", icon: Wallet },
+  // Hoa hồng (/income) chỉ cho sale/doctor/tc. KT/CEO dùng /admin/commission-approval.
+  { key: "commission", label: "Hoa hồng", icon: Wallet, roles: ["sale", "doctor", "tc"] },
   { key: "customers", label: "Khách hàng", icon: Users },
   { key: "more", label: "Thêm", icon: Menu },
 ];
@@ -24,6 +27,15 @@ type TabBarProps = {
 
 export function TabBar({ active, onTab, className }: TabBarProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // FE-side gate per R-9-1. Server vẫn enforce qua requireRole.
+  const role = (typeof window !== "undefined"
+    ? localStorage.getItem("np_role")
+    : null) as UserRole | null;
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => !t.roles || (role && t.roles.includes(role))),
+    [role],
+  );
 
   const handleClick = (key: TabKey) => {
     if (key === "more") {
@@ -38,11 +50,13 @@ export function TabBar({ active, onTab, className }: TabBarProps) {
       <nav
         aria-label="Điều hướng chính"
         className={cn(
-          "absolute bottom-0 left-0 right-0 flex h-[64px] border-t border-np-border bg-white/95 pb-2 pt-1.5 backdrop-blur-[20px]",
+          // z-30 để bar luôn trên page content (tránh icon `z-10` trong timeline punch qua).
+          // Below modals (Sheet/Dialog z-50).
+          "absolute bottom-0 left-0 right-0 z-30 flex h-[64px] border-t border-np-border bg-white/95 pb-2 pt-1.5 backdrop-blur-[20px]",
           className,
         )}
       >
-        {TABS.map((t) => {
+        {visibleTabs.map((t) => {
           const on = t.key === "more" ? moreOpen : t.key === active;
           const Icon = t.icon;
           return (

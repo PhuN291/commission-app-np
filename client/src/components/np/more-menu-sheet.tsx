@@ -1,66 +1,90 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
-  Bot,
   BriefcaseMedical,
   ChevronDown,
   Home,
   LogOut,
   Package,
+  PhoneCall,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { queryClient } from "@/lib/queryClient";
+import type { UserRole } from "@shared/types";
 
+/**
+ * MenuNode permission gate (R-9-1):
+ * - `roles` undefined → visible cho mọi role (public).
+ * - `roles` set → chỉ visible nếu current role match.
+ * - Group: tự ẩn nếu toàn bộ children bị filter mất (tránh group rỗng).
+ *
+ * Lý do FE-side filter: tránh "hiện ra rồi click không được, dễ tưởng bug".
+ * Server vẫn enforce permission qua requireRole() — đây chỉ là UX layer.
+ */
 type MenuNode =
-  | { type: "link"; icon?: LucideIcon; label: string; href: string }
-  | { type: "group"; icon?: LucideIcon; label: string; children: MenuNode[] };
+  | { type: "link"; icon?: LucideIcon; label: string; href: string; roles?: UserRole[] }
+  | { type: "group"; icon?: LucideIcon; label: string; children: MenuNode[]; roles?: UserRole[] };
 
 const MENU: MenuNode[] = [
   { type: "link", icon: Home, label: "Trang chủ", href: "/" },
   { type: "link", icon: BriefcaseMedical, label: "Dịch vụ", href: "/services" },
   { type: "link", icon: Package, label: "Đơn hàng", href: "/orders" },
+  { type: "link", icon: PhoneCall, label: "Tái khám cần gọi", href: "/recalls" },
   {
     type: "group",
     icon: BarChart3,
     label: "Báo cáo",
     children: [
       { type: "link", label: "Bảng xếp hạng", href: "/ranking" },
-      { type: "link", label: "Hiệu suất cá nhân", href: "/performance" },
       {
         type: "group",
         label: "Phân tích",
+        roles: ["ceo", "tc", "kt"],
         children: [
           { type: "link", label: "Tổng quan", href: "/analytics/overview" },
-          { type: "link", label: "Bác sĩ", href: "/analytics/doctors" },
-          { type: "link", label: "Bệnh nhân", href: "/analytics/patients" },
           { type: "link", label: "Lịch hẹn", href: "/analytics/appointments" },
         ],
       },
     ],
   },
-  { type: "link", icon: Bot, label: "Trợ lý AI", href: "/ai-chat" },
   {
     type: "group",
     icon: Settings,
     label: "Quản trị",
     children: [
-      { type: "link", label: "Nhân viên", href: "/admin/staff" },
+      { type: "link", label: "Nhân viên", href: "/admin/staff", roles: ["ceo", "tc"] },
       {
         type: "group",
         label: "Hoa hồng",
         children: [
-          { type: "link", label: "Cấu hình", href: "/admin/commission-config" },
-          { type: "link", label: "Duyệt", href: "/admin/commission-approval" },
+          { type: "link", label: "Cấu hình", href: "/admin/commission-config", roles: ["ceo", "tc", "kt"] },
+          { type: "link", label: "Duyệt", href: "/admin/commission-approval", roles: ["ceo", "tc", "kt"] },
         ],
       },
-      { type: "link", label: "Voucher", href: "/admin/vouchers" },
-      { type: "link", label: "Cài đặt hệ thống", href: "/admin/settings" },
+      { type: "link", label: "Voucher", href: "/admin/vouchers", roles: ["ceo", "tc"] },
+      { type: "link", label: "Cài đặt hệ thống", href: "/admin/settings", roles: ["ceo", "tc", "kt"] },
     ],
   },
 ];
+
+/** Filter recursive: drop nodes role không khớp; drop group nếu children rỗng sau filter. */
+function filterMenu(nodes: MenuNode[], role: UserRole | null): MenuNode[] {
+  const out: MenuNode[] = [];
+  for (const node of nodes) {
+    if (node.roles && (!role || !node.roles.includes(role))) continue;
+    if (node.type === "link") {
+      out.push(node);
+    } else {
+      const kids = filterMenu(node.children, role);
+      if (kids.length > 0) out.push({ ...node, children: kids });
+    }
+  }
+  return out;
+}
 
 // Default: top-level groups open, nested groups closed
 const DEFAULT_OPEN = new Set(["Báo cáo", "Quản trị"]);
@@ -73,6 +97,12 @@ type MoreMenuSheetProps = {
 export function MoreMenuSheet({ open, onOpenChange }: MoreMenuSheetProps) {
   const [, navigate] = useLocation();
   const [expanded, setExpanded] = useState<Set<string>>(DEFAULT_OPEN);
+
+  // FE-side menu gate per R-9-1. Server vẫn enforce permission.
+  const role = (typeof window !== "undefined"
+    ? localStorage.getItem("np_role")
+    : null) as UserRole | null;
+  const visibleMenu = useMemo(() => filterMenu(MENU, role), [role]);
 
   const toggle = (key: string) => {
     setExpanded((prev) => {
@@ -89,7 +119,15 @@ export function MoreMenuSheet({ open, onOpenChange }: MoreMenuSheetProps) {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("np_authenticated");
+    // Clear toàn bộ session: token, role, user info, legacy flag.
+    localStorage.removeItem("np_token");
+    localStorage.removeItem("np_role");
+    localStorage.removeItem("np_phone");
+    localStorage.removeItem("np_user_id");
+    localStorage.removeItem("np_name");
+    localStorage.removeItem("np_authenticated"); // legacy
+    // Clear TanStack Query cache để session sau không reuse data của user cũ.
+    queryClient.clear();
     onOpenChange(false);
     navigate("/login");
   };
@@ -114,7 +152,7 @@ export function MoreMenuSheet({ open, onOpenChange }: MoreMenuSheetProps) {
 
         {/* Tree */}
         <div className="scrollbar-hide flex-1 overflow-y-auto py-1">
-          {MENU.map((node, i) => (
+          {visibleMenu.map((node, i) => (
             <MenuItem
               key={i}
               node={node}

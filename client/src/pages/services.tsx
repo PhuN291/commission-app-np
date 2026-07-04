@@ -63,7 +63,7 @@ export default function ServicesPage() {
   );
 
   return (
-    <Screen activeTab={active} onTab={onTab} notifCount={3}>
+    <Screen activeTab={active} onTab={onTab}>
       <PageHeader title="Dịch vụ" subtitle={`${filtered.length} dịch vụ có sẵn`} />
       <SearchField value={searchTerm} onChange={setSearchTerm} placeholder="Tìm dịch vụ..." />
       <Chips items={chipItems} active={categoryFilter} onChange={setCategoryFilter} />

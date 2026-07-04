@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Plus, Ticket } from "lucide-react";
 import {
   Badge,
@@ -15,30 +16,17 @@ import {
   useTabNav,
 } from "@/components/np";
 import { Switch } from "@/components/ui/switch";
+import { authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { VoucherRow } from "@shared/schema";
 
-type DiscountType = "percent" | "fixed";
 type VoucherStatus = "active" | "expired" | "used_up";
-
-interface Voucher {
-  id: number;
-  code: string;
-  discountType: DiscountType;
-  value: number;
-  maxDiscount: number | null;
-  minOrder: number;
-  usedCount: number;
-  usageLimit: number;
-  startDate: string;
-  endDate: string;
-  active: boolean;
-}
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
-function getVoucherStatus(v: Voucher): VoucherStatus {
-  if (v.usedCount >= v.usageLimit) return "used_up";
-  if (new Date(v.endDate) < new Date()) return "expired";
+function getVoucherStatus(v: VoucherRow): VoucherStatus {
+  if (v.usageLimit > 0 && v.usedCount >= v.usageLimit) return "used_up";
+  if (v.endDate && new Date(v.endDate) < new Date()) return "expired";
   return "active";
 }
 
@@ -48,20 +36,41 @@ const STATUS_TONE: Record<VoucherStatus, { label: string; tone: BadgeTone }> = {
   used_up: { label: "Hết lượt", tone: "critical" },
 };
 
-const initialVouchers: Voucher[] = [
-  { id: 1, code: "WELCOME20", discountType: "percent", value: 20, maxDiscount: 500000, minOrder: 1000000, usedCount: 12, usageLimit: 50, startDate: "2026-01-01", endDate: "2026-06-30", active: true },
-  { id: 2, code: "FLAT100K", discountType: "fixed", value: 100000, maxDiscount: null, minOrder: 500000, usedCount: 30, usageLimit: 30, startDate: "2026-01-15", endDate: "2026-03-31", active: false },
-  { id: 3, code: "VIP10", discountType: "percent", value: 10, maxDiscount: 300000, minOrder: 2000000, usedCount: 5, usageLimit: 100, startDate: "2026-02-01", endDate: "2026-12-31", active: true },
-  { id: 4, code: "SUMMER50K", discountType: "fixed", value: 50000, maxDiscount: null, minOrder: 300000, usedCount: 45, usageLimit: 45, startDate: "2026-03-01", endDate: "2026-04-01", active: false },
-];
-
 export default function AdminVouchers() {
   const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [vouchers, setVouchers] = useState<Voucher[]>(initialVouchers);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  const { data: vouchers = [] } = useQuery<VoucherRow[]>({
+    queryKey: ["/api/admin/vouchers"],
+    queryFn: async () => {
+      const res = await authFetch("/api/admin/vouchers");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const toggleMut = useMutation({
+    mutationFn: async ({ id, active: nextActive }: { id: number; active: boolean }) => {
+      const res = await authFetch(`/api/admin/vouchers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: nextActive }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vouchers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vouchers"] });
+      toast({
+        title: vars.active ? "Đã bật voucher" : "Đã tắt voucher",
+      });
+    },
+    onError: () => toast({ title: "Lỗi", description: "Không cập nhật được voucher", variant: "destructive" }),
+  });
 
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -80,20 +89,6 @@ export default function AdminVouchers() {
     { key: "used_up", label: "Hết lượt", count: vouchers.filter((v) => getVoucherStatus(v) === "used_up").length },
   ];
 
-  const toggleActive = (id: number) => {
-    setVouchers((prev) =>
-      prev.map((v) => {
-        if (v.id !== id) return v;
-        const next = { ...v, active: !v.active };
-        toast({
-          title: next.active ? "Đã bật voucher" : "Đã tắt voucher",
-          description: `${v.code} đã được ${next.active ? "kích hoạt" : "vô hiệu hóa"}.`,
-        });
-        return next;
-      }),
-    );
-  };
-
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
       <DetailHeader title="Voucher" onBack={() => navigate("/")} />
@@ -109,7 +104,7 @@ export default function AdminVouchers() {
           }
         />
 
-        <SearchField value={searchTerm} onChange={setSearchTerm} placeholder="Tìm theo mã code..." />
+        <SearchField value={searchTerm} onChange={setSearchTerm} placeholder="Tìm theo mã..." />
         <Chips items={chips} active={statusFilter} onChange={setStatusFilter} />
 
         <Card className="overflow-hidden p-0">
@@ -153,12 +148,14 @@ export default function AdminVouchers() {
                         Đơn tối thiểu {fmt(v.minOrder)}₫
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-np-text-muted">
-                        <span className="flex items-center gap-1">
-                          <CalendarDays size={11} strokeWidth={2.25} />
-                          {v.startDate} — {v.endDate}
-                        </span>
+                        {v.startDate && v.endDate && (
+                          <span className="flex items-center gap-1">
+                            <CalendarDays size={11} strokeWidth={2.25} />
+                            {v.startDate} → {v.endDate}
+                          </span>
+                        )}
                         <span className="tabular-nums">
-                          {v.usedCount}/{v.usageLimit} lượt
+                          {v.usageLimit > 0 ? `${v.usedCount}/${v.usageLimit} lượt` : `${v.usedCount} lượt · không giới hạn`}
                         </span>
                       </div>
                     </div>
@@ -172,7 +169,11 @@ export default function AdminVouchers() {
                   >
                     <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-np-text-sub">
                       <span>{v.active ? "Đang bật" : "Đã tắt"}</span>
-                      <Switch checked={v.active} onCheckedChange={() => toggleActive(v.id)} />
+                      <Switch
+                        checked={v.active}
+                        disabled={toggleMut.isPending}
+                        onCheckedChange={() => toggleMut.mutate({ id: v.id, active: !v.active })}
+                      />
                     </label>
                   </div>
                 </div>

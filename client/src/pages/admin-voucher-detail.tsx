@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Badge,
   Card,
@@ -13,46 +14,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import type { VoucherRow } from "@shared/schema";
 
 type DiscountType = "percent" | "fixed";
-
-interface VoucherData {
-  id: number;
-  code: string;
-  discountType: DiscountType;
-  value: number;
-  maxDiscount: number | null;
-  minOrder: number;
-  usedCount: number;
-  usageLimit: number;
-  startDate: string;
-  endDate: string;
-  active: boolean;
-}
-
-const STORAGE_KEY = "np_vouchers";
-
-const defaultVouchers: VoucherData[] = [
-  { id: 1, code: "WELCOME20", discountType: "percent", value: 20, maxDiscount: 500000, minOrder: 1000000, usedCount: 12, usageLimit: 50, startDate: "2026-01-01", endDate: "2026-06-30", active: true },
-  { id: 2, code: "FLAT100K", discountType: "fixed", value: 100000, maxDiscount: null, minOrder: 500000, usedCount: 30, usageLimit: 30, startDate: "2026-01-15", endDate: "2026-03-31", active: false },
-  { id: 3, code: "VIP10", discountType: "percent", value: 10, maxDiscount: 300000, minOrder: 2000000, usedCount: 5, usageLimit: 100, startDate: "2026-02-01", endDate: "2026-12-31", active: true },
-  { id: 4, code: "SUMMER50K", discountType: "fixed", value: 50000, maxDiscount: null, minOrder: 300000, usedCount: 45, usageLimit: 45, startDate: "2026-03-01", endDate: "2026-04-01", active: false },
-];
-
-function loadVouchers(): VoucherData[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : defaultVouchers;
-  } catch {
-    return defaultVouchers;
-  }
-}
-
-function saveVouchers(data: VoucherData[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
@@ -60,6 +27,7 @@ export default function AdminVoucherDetail() {
   const { active, onTab } = useTabNav();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const isNew = !params.id || params.id === "new";
 
@@ -74,28 +42,83 @@ export default function AdminVoucherDetail() {
     endDate: "",
     active: true,
   });
-  const [existingVoucher, setExistingVoucher] = useState<VoucherData | null>(null);
+  const populatedRef = useRef(false);
 
+  const { data: list = [] } = useQuery<VoucherRow[]>({
+    queryKey: ["/api/admin/vouchers"],
+    queryFn: async () => {
+      const res = await authFetch("/api/admin/vouchers");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !isNew,
+  });
+
+  const existingVoucher = useMemo(
+    () => (isNew ? null : list.find((v) => v.id === Number(params.id)) ?? null),
+    [isNew, list, params.id],
+  );
+
+  // Đổ dữ liệu vào form 1 lần khi voucher đã tải (không ghi đè khi user đang sửa).
   useEffect(() => {
-    if (!isNew) {
-      const all = loadVouchers();
-      const found = all.find((v) => v.id === Number(params.id));
-      if (found) {
-        setExistingVoucher(found);
-        setForm({
-          code: found.code,
-          discountType: found.discountType,
-          value: found.value.toString(),
-          maxDiscount: found.maxDiscount?.toString() ?? "",
-          minOrder: found.minOrder.toString(),
-          usageLimit: found.usageLimit.toString(),
-          startDate: found.startDate,
-          endDate: found.endDate,
-          active: found.active,
-        });
-      }
+    if (existingVoucher && !populatedRef.current) {
+      populatedRef.current = true;
+      setForm({
+        code: existingVoucher.code,
+        discountType: existingVoucher.discountType as DiscountType,
+        value: existingVoucher.value.toString(),
+        maxDiscount: existingVoucher.maxDiscount?.toString() ?? "",
+        minOrder: existingVoucher.minOrder.toString(),
+        usageLimit: existingVoucher.usageLimit.toString(),
+        startDate: existingVoucher.startDate ?? "",
+        endDate: existingVoucher.endDate ?? "",
+        active: existingVoucher.active,
+      });
     }
-  }, [isNew, params.id]);
+  }, [existingVoucher]);
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      // description + minServices không sửa ở form này → không gửi để PATCH giữ nguyên giá trị seed.
+      const payload = {
+        code: form.code.trim().toUpperCase(),
+        discountType: form.discountType,
+        value: Number(form.value) || 0,
+        maxDiscount: form.discountType === "percent" ? Number(form.maxDiscount) || null : null,
+        minOrder: Number(form.minOrder) || 0,
+        usageLimit: Number(form.usageLimit) || 0,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        active: form.active,
+      };
+      const res = existingVoucher
+        ? await authFetch(`/api/admin/vouchers/${existingVoucher.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          })
+        : await authFetch("/api/admin/vouchers", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Không lưu được voucher");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vouchers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vouchers"] });
+      toast({
+        title: existingVoucher ? "Đã cập nhật" : "Đã tạo voucher",
+        description: `Voucher ${form.code.trim().toUpperCase()} đã được lưu.`,
+      });
+      navigate("/admin/vouchers");
+    },
+    onError: (e: unknown) => {
+      toast({ title: "Lỗi", description: e instanceof Error ? e.message : "Không lưu được", variant: "destructive" });
+    },
+  });
 
   const handleSave = () => {
     if (!form.code.trim() || !form.value || !form.usageLimit || !form.startDate || !form.endDate) {
@@ -106,39 +129,14 @@ export default function AdminVoucherDetail() {
       });
       return;
     }
-
-    const all = loadVouchers();
-    const entry: VoucherData = {
-      id: existingVoucher?.id ?? Math.max(0, ...all.map((v) => v.id)) + 1,
-      code: form.code.trim().toUpperCase(),
-      discountType: form.discountType,
-      value: Number(form.value) || 0,
-      maxDiscount: form.discountType === "percent" ? Number(form.maxDiscount) || null : null,
-      minOrder: Number(form.minOrder) || 0,
-      usedCount: existingVoucher?.usedCount ?? 0,
-      usageLimit: Number(form.usageLimit) || 0,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      active: form.active,
-    };
-
-    const updated = existingVoucher
-      ? all.map((v) => (v.id === existingVoucher.id ? entry : v))
-      : [...all, entry];
-    saveVouchers(updated);
-
-    toast({
-      title: existingVoucher ? "Đã cập nhật" : "Đã tạo voucher",
-      description: `Voucher ${entry.code} đã được lưu.`,
-    });
-    navigate("/admin/vouchers");
+    saveMut.mutate();
   };
 
   const getStatusBadge = (): { label: string; tone: BadgeTone } | null => {
     if (!existingVoucher) return null;
-    if (existingVoucher.usedCount >= existingVoucher.usageLimit)
+    if (existingVoucher.usageLimit > 0 && existingVoucher.usedCount >= existingVoucher.usageLimit)
       return { label: "Hết lượt", tone: "critical" };
-    if (new Date(existingVoucher.endDate) < new Date())
+    if (existingVoucher.endDate && new Date(existingVoucher.endDate) < new Date())
       return { label: "Hết hạn", tone: "neutral" };
     return { label: "Đang hoạt động", tone: "success" };
   };
@@ -165,7 +163,7 @@ export default function AdminVoucherDetail() {
         )}
 
         {/* Mã code */}
-        <SectionTitle>Mã code</SectionTitle>
+        <SectionTitle>Mã</SectionTitle>
         <Card className="space-y-1.5 p-4">
           <Label className="text-[12px] font-semibold text-np-text-sub">Mã voucher</Label>
           <Input
@@ -319,18 +317,27 @@ export default function AdminVoucherDetail() {
                     ? `Giảm ${existingVoucher.value}%${existingVoucher.maxDiscount ? `, tối đa ${fmt(existingVoucher.maxDiscount)}₫` : ""}`
                     : `Giảm ${fmt(existingVoucher.value)}₫`}
                 </li>
+                {existingVoucher.description && (
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
+                    {existingVoucher.description}
+                  </li>
+                )}
                 <li className="flex items-start gap-2">
                   <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
                   Đơn tối thiểu {fmt(existingVoucher.minOrder)}₫
+                  {existingVoucher.minServices > 0 ? `, từ ${existingVoucher.minServices} dịch vụ` : ""}
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
                   Đã dùng {existingVoucher.usedCount} / {existingVoucher.usageLimit} lượt
                 </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
-                  Hiệu lực: {existingVoucher.startDate} — {existingVoucher.endDate}
-                </li>
+                {existingVoucher.startDate && existingVoucher.endDate && (
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
+                    Hiệu lực: {existingVoucher.startDate} → {existingVoucher.endDate}
+                  </li>
+                )}
               </ul>
             </Card>
           </>
@@ -342,9 +349,10 @@ export default function AdminVoucherDetail() {
             tone="primary"
             size="lg"
             className="flex-1 justify-center"
+            disabled={saveMut.isPending}
             onClick={handleSave}
           >
-            {existingVoucher ? "Lưu thay đổi" : "Tạo voucher"}
+            {saveMut.isPending ? "Đang lưu..." : existingVoucher ? "Lưu thay đổi" : "Tạo voucher"}
           </NPButton>
           <NPButton tone="ghost" size="lg" onClick={() => navigate("/admin/vouchers")}>
             Hủy

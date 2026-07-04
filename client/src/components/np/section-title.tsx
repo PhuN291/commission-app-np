@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SectionTitleProps = {
@@ -6,9 +7,11 @@ type SectionTitleProps = {
   action?: ReactNode;
   className?: string;
   style?: CSSProperties;
+  /** Optional Lucide icon rendered trước title. */
+  icon?: LucideIcon;
 };
 
-export function SectionTitle({ children, action, className, style }: SectionTitleProps) {
+export function SectionTitle({ children, action, className, style, icon: Icon }: SectionTitleProps) {
   return (
     <div
       className={cn(
@@ -17,7 +20,10 @@ export function SectionTitle({ children, action, className, style }: SectionTitl
       )}
       style={style}
     >
-      <span className="text-[13px] font-bold tracking-[-0.1px] text-np-ink">{children}</span>
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-bold tracking-[-0.1px] text-np-ink">
+        {Icon && <Icon size={14} strokeWidth={2.25} className="text-np-text-muted" />}
+        {children}
+      </span>
       {action}
     </div>
   );

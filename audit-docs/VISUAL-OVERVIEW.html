@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>NP Commission App - Visual Overview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #1F2937; background: #FFFFFF; line-height: 1.5; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { padding: 24px 0 32px; border-bottom: 2px solid #E5E7EB; margin-bottom: 32px; }
+  header h1 { font-size: 28px; font-weight: 700; color: #1F2937; margin-bottom: 6px; }
+  header .meta { font-size: 14px; color: #6B7280; }
+  .toc { background: #F9FAFB; border-left: 4px solid #1F4E78; padding: 16px 20px; margin-bottom: 32px; border-radius: 4px; }
+  .toc h3 { font-size: 14px; font-weight: 700; color: #1F4E78; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .toc ol { margin-left: 20px; }
+  .toc li { font-size: 14px; color: #374151; margin: 4px 0; }
+  .toc a { color: #1F4E78; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  section { margin: 48px 0; padding: 24px 0; border-bottom: 1px dashed #E5E7EB; }
+  section:last-of-type { border-bottom: none; }
+  section h2 { font-size: 22px; font-weight: 700; color: #1F2937; margin-bottom: 6px; }
+  section .sub { font-size: 14px; color: #6B7280; margin-bottom: 20px; }
+  .svg-wrap { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; overflow-x: auto; }
+  .svg-wrap svg { display: block; width: 100%; height: auto; max-width: 100%; }
+  .caption { background: #F9FAFB; padding: 16px 20px; border-radius: 6px; margin-top: 16px; font-size: 14px; color: #374151; }
+  .caption strong { color: #1F2937; }
+  .caption ul { margin: 8px 0 0 20px; }
+  .caption li { margin: 4px 0; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid #E5E7EB; font-size: 13px; color: #6B7280; }
+  footer a { color: #1F4E78; }
+  @media print {
+    body { font-size: 11px; }
+    section { page-break-inside: avoid; }
+    header { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>NP Commission App - Sơ đồ trực quan toàn hệ thống</h1>
+  <div class="meta">Tài liệu tóm tắt 18 file audit-docs thành 6 hình. Cập nhật 14/05/2026.</div>
+</header>
+
+<div class="toc">
+  <h3>Mục lục</h3>
+  <ol>
+    <li><a href="#v1">Sơ đồ hệ thống tổng thể (ai - app - cái gì ngoài)</a></li>
+    <li><a href="#v2">Data model lõi (các bảng + quan hệ)</a></li>
+    <li><a href="#v3">3 vòng đời: Đơn, Hoa hồng, Điều chỉnh</a></li>
+    <li><a href="#v4">Hành trình 1 đơn từ đầu đến cuối</a></li>
+    <li><a href="#v5">Ai có quyền làm gì (5 vai trò)</a></li>
+    <li><a href="#v6">Lịch ngày 5 + các cửa sổ thời gian</a></li>
+  </ol>
+</div>
+
+<div style="background: #FFFBEB; border-left: 4px solid #D97706; padding: 16px 20px; margin-bottom: 32px; border-radius: 4px;">
+  <h3 style="font-size: 14px; font-weight: 700; color: #92400E; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bảng giải thích thuật ngữ (đọc trước khi xem hình)</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <tr style="background: #FEF3C7;">
+      <th style="padding: 8px 12px; text-align: left; border-bottom: 1px solid #F59E0B; width: 25%;">Từ trong file</th>
+      <th style="padding: 8px 12px; text-align: left; border-bottom: 1px solid #F59E0B;">Nghĩa đời thường</th>
+    </tr>
+    <tr><td style="padding: 6px 12px;"><strong>HH</strong></td><td style="padding: 6px 12px;">Hoa hồng (commission record). 1 đơn sinh nhiều bản ghi HH cho NV Sale, TC, BS tham gia.</td></tr>
+    <tr style="background: #FFFBEB;"><td style="padding: 6px 12px;"><strong>HH Tạm tính</strong></td><td style="padding: 6px 12px;">Bản ghi HH ngay khi NV xác nhận đơn. Số tiền chưa chính xác vì đơn có thể huỷ, refund, BS thêm dịch vụ.</td></tr>
+    <tr><td style="padding: 6px 12px;"><strong>HH Chờ duyệt</strong></td><td style="padding: 6px 12px;">Đơn đã khám xong, HH tính lại theo dữ liệu cuối. Đang đợi KT trưởng xem và duyệt.</td></tr>
+    <tr style="background: #FFFBEB;"><td style="padding: 6px 12px;"><strong>HH Được duyệt</strong></td><td style="padding: 6px 12px;">KT đã OK. HH vào bảng lương kì lương.</td></tr>
+    <tr><td style="padding: 6px 12px;"><strong>OrderRoleAssignment</strong></td><td style="padding: 6px 12px;">Bảng "Phân vai trong đơn". Mỗi người tham gia 1 đơn = 1 dòng. Là gốc tính HH.</td></tr>
+    <tr style="background: #FFFBEB;"><td style="padding: 6px 12px;"><strong>AdjustmentRequest</strong></td><td style="padding: 6px 12px;">Yêu cầu điều chỉnh HH (thưởng hoặc phạt). KT tạo, CEO duyệt.</td></tr>
+    <tr><td style="padding: 6px 12px;"><strong>Clawback</strong></td><td style="padding: 6px 12px;">Trả ngược HH đã chi. Vd khách refund 1 phần sau payday → NV phải trả lại 1 phần HH.</td></tr>
+    <tr style="background: #FFFBEB;"><td style="padding: 6px 12px;"><strong>net_profit</strong></td><td style="padding: 6px 12px;">Lợi nhuận thực = Tiền khách trả thực (sau BH + voucher) - Chi phí dịch vụ. HH = net_profit × %.</td></tr>
+    <tr><td style="padding: 6px 12px;"><strong>Payday</strong></td><td style="padding: 6px 12px;">Ngày chốt lương, mặc định ngày 5 hằng tháng.</td></tr>
+    <tr style="background: #FFFBEB;"><td style="padding: 6px 12px;"><strong>Auto rule</strong></td><td style="padding: 6px 12px;">Quy tắc tự động tạo điều chỉnh (vd cuối tháng tự thưởng NV đạt target). Không cần KT thao tác.</td></tr>
+    <tr><td style="padding: 6px 12px;"><strong>Webhook</strong></td><td style="padding: 6px 12px;">Cách hệ thống vendor iHOS gửi data đơn sang App NP tự động khi có sự kiện (đơn tạo, khám xong, refund).</td></tr>
+    <tr style="background: #FFFBEB;"><td style="padding: 6px 12px;"><strong>Zalo OA</strong></td><td style="padding: 6px 12px;">Zalo Official Account. Kênh chính thức để gửi notify cho khách + NV.</td></tr>
+    <tr><td style="padding: 6px 12px;"><strong>DRAFT, CONFIRMED, COMPLETED...</strong></td><td style="padding: 6px 12px;">Tên trạng thái đơn trong code. Dịch: Đơn nháp / Đã xác nhận / Đã hoàn thành / Đã huỷ / Khách không đến / Hoàn toàn phần / Hoàn một phần.</td></tr>
+  </table>
+</div>
+
+<!-- ============ VISUAL 1: SYSTEM OVERVIEW ============ -->
+<section id="v1">
+  <h2>1. Sơ đồ hệ thống tổng thể</h2>
+  <div class="sub">5 vai trò người dùng + App + 2 hệ thống bên ngoài kết nối vào.</div>
+
+  <div class="svg-wrap">
+  <svg viewBox="0 0 1200 540" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#6B7280"/>
+      </marker>
+    </defs>
+    <style>
+      .h { font-size: 18px; font-weight: 700; fill: #1F2937; }
+      .b { font-size: 13px; font-weight: 600; fill: #1F2937; }
+      .s { font-size: 11px; fill: #6B7280; }
+      .w { font-size: 13px; font-weight: 600; fill: #FFFFFF; }
+      .sw { font-size: 11px; fill: #FFFFFF; opacity: 0.85; }
+    </style>
+
+    <text x="40" y="32" class="h">Người dùng</text>
+
+    <!-- 5 user role boxes -->
+    <rect x="40" y="60" width="180" height="60" rx="6" fill="#3B82F6"/>
+    <text x="130" y="86" text-anchor="middle" class="w">NV Sale (3 người)</text>
+    <text x="130" y="104" text-anchor="middle" class="sw">Xem HH, khiếu nại</text>
+
+    <rect x="40" y="135" width="180" height="60" rx="6" fill="#8B5CF6"/>
+    <text x="130" y="161" text-anchor="middle" class="w">Trưởng ca (TC)</text>
+    <text x="130" y="179" text-anchor="middle" class="sw">Dispatch ca, voucher</text>
+
+    <rect x="40" y="210" width="180" height="60" rx="6" fill="#0EA5E9"/>
+    <text x="130" y="236" text-anchor="middle" class="w">Bác sĩ (3 người)</text>
+    <text x="130" y="254" text-anchor="middle" class="sw">Xem HH, ranking</text>
+
+    <rect x="40" y="285" width="180" height="60" rx="6" fill="#10B981"/>
+    <text x="130" y="311" text-anchor="middle" class="w">KT trưởng</text>
+    <text x="130" y="329" text-anchor="middle" class="sw">Duyệt HH ngày 5</text>
+
+    <rect x="40" y="360" width="180" height="60" rx="6" fill="#DC2626"/>
+    <text x="130" y="386" text-anchor="middle" class="w">CEO khách hàng</text>
+    <text x="130" y="404" text-anchor="middle" class="sw">Dashboard, duyệt final</text>
+
+    <!-- App box (center) -->
+    <rect x="380" y="120" width="380" height="280" rx="10" fill="#F0F9FF" stroke="#1F4E78" stroke-width="2"/>
+    <text x="570" y="150" text-anchor="middle" class="h" fill="#1F4E78">NP Commission App</text>
+
+    <rect x="410" y="170" width="320" height="50" rx="6" fill="#1F4E78"/>
+    <text x="570" y="190" text-anchor="middle" class="w">Frontend (Web responsive)</text>
+    <text x="570" y="208" text-anchor="middle" class="sw">13 màn chính, mobile-friendly</text>
+
+    <rect x="410" y="235" width="320" height="50" rx="6" fill="#2563EB"/>
+    <text x="570" y="255" text-anchor="middle" class="w">Backend API</text>
+    <text x="570" y="273" text-anchor="middle" class="sw">Auth, HH calc, approval, audit</text>
+
+    <rect x="410" y="300" width="320" height="50" rx="6" fill="#475569"/>
+    <text x="570" y="320" text-anchor="middle" class="w">Database</text>
+    <text x="570" y="338" text-anchor="middle" class="sw">Postgres, ~25 bảng chính</text>
+
+    <text x="570" y="380" text-anchor="middle" class="s">Triển khai trên VPS riêng cho NP, có backup hằng ngày</text>
+
+    <!-- External systems -->
+    <text x="930" y="32" class="h">Hệ thống ngoài</text>
+
+    <rect x="900" y="135" width="240" height="100" rx="6" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2"/>
+    <text x="1020" y="162" text-anchor="middle" class="b">Vendor iHOS</text>
+    <text x="1020" y="184" text-anchor="middle" class="s">POS / EMR của phòng khám</text>
+    <text x="1020" y="202" text-anchor="middle" class="s">Gửi data đơn qua webhook</text>
+    <text x="1020" y="220" text-anchor="middle" class="s">Đang chờ vendor confirm API</text>
+
+    <rect x="900" y="285" width="240" height="100" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="2"/>
+    <text x="1020" y="312" text-anchor="middle" class="b">Zalo Official Account</text>
+    <text x="1020" y="334" text-anchor="middle" class="s">Notify khách + NV</text>
+    <text x="1020" y="352" text-anchor="middle" class="s">Reminder, recall, pay slip</text>
+    <text x="1020" y="370" text-anchor="middle" class="s">Cần đăng ký OA mới</text>
+
+    <!-- Arrows: users -> app -->
+    <path d="M 220 90 L 378 220" stroke="#6B7280" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+    <path d="M 220 165 L 378 230" stroke="#6B7280" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+    <path d="M 220 240 L 378 250" stroke="#6B7280" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+    <path d="M 220 315 L 378 270" stroke="#6B7280" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+    <path d="M 220 390 L 378 290" stroke="#6B7280" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+
+    <!-- Arrows: external -> app -->
+    <path d="M 898 185 L 762 240" stroke="#F59E0B" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+    <text x="830" y="200" class="s" fill="#92400E">Đơn + KH + BS</text>
+
+    <path d="M 762 270 L 898 320" stroke="#16A34A" stroke-width="1.5" fill="none" marker-end="url(#arr1)"/>
+    <text x="780" y="310" class="s" fill="#166534">Push notify</text>
+
+    <!-- Bottom note -->
+    <rect x="40" y="460" width="1120" height="60" rx="6" fill="#F9FAFB" stroke="#E5E7EB"/>
+    <text x="60" y="485" class="b">Lưu ý vận hành:</text>
+    <text x="60" y="505" class="s">App phụ thuộc iHOS gửi webhook đơn. Nếu iHOS chậm, dùng plan B: KT trưởng nhập tay từ file Excel iHOS export. Zalo OA cần đăng ký trước 5-7 ngày so với go-live.</text>
+  </svg>
+  </div>
+
+  <div class="caption">
+    <strong>Đọc hiểu:</strong>
+    <ul>
+      <li>5 vai trò người dùng (NV Sale, TC, BS, KT, CEO khách hàng) đăng nhập vào App qua trình duyệt.</li>
+      <li>App gồm 3 lớp: Frontend (giao diện), Backend (xử lý logic), Database (lưu data).</li>
+      <li>App nhận data đơn từ vendor iHOS (POS/EMR). App gửi notify ra Zalo Official Account.</li>
+      <li>Cả vendor iHOS và Zalo OA đều là rủi ro lớn nhất hiện tại vì chưa confirm tích hợp được.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ VISUAL 2: DATA MODEL ============ -->
+<section id="v2">
+  <h2>2. Data model lõi</h2>
+  <div class="sub">9 bảng quan trọng nhất. Trung tâm là OrderRoleAssignment (cốt lõi tính HH).</div>
+
+  <div class="svg-wrap">
+  <svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#6B7280"/>
+      </marker>
+    </defs>
+    <style>
+      .tn { font-size: 14px; font-weight: 700; fill: #FFFFFF; }
+      .tf { font-size: 11px; fill: #1F2937; }
+      .tf-h { font-size: 11px; font-weight: 700; fill: #374151; }
+      .rel { font-size: 11px; fill: #6B7280; }
+      .center-label { font-size: 12px; font-weight: 700; fill: #DC2626; }
+    </style>
+
+    <!-- Center: OrderRoleAssignment -->
+    <rect x="430" y="280" width="340" height="140" rx="8" fill="#FEF2F2" stroke="#DC2626" stroke-width="3"/>
+    <rect x="430" y="280" width="340" height="32" rx="8" fill="#DC2626"/>
+    <text x="600" y="302" text-anchor="middle" class="tn">OrderRoleAssignment (cốt lõi)</text>
+    <text x="450" y="332" class="tf-h">order_id, role_id, user_id</text>
+    <text x="450" y="350" class="tf">assigned_at, ended_at</text>
+    <text x="450" y="368" class="tf">ranking_snapshot_id</text>
+    <text x="450" y="395" class="center-label">Mỗi vai trò tham gia đơn = 1 row</text>
+    <text x="450" y="412" class="center-label">Là gốc để tính hoa hồng</text>
+
+    <!-- Order (top) -->
+    <rect x="430" y="60" width="340" height="170" rx="8" fill="#EFF6FF" stroke="#2563EB" stroke-width="2"/>
+    <rect x="430" y="60" width="340" height="32" rx="8" fill="#2563EB"/>
+    <text x="600" y="82" text-anchor="middle" class="tn">Order (Đơn hàng)</text>
+    <text x="450" y="112" class="tf-h">id, customer_id, status (8 trạng thái)</text>
+    <text x="450" y="130" class="tf">total_listed, total_paid (sau BH + voucher)</text>
+    <text x="450" y="148" class="tf">total_cost, net_profit (= cơ sở tính HH)</text>
+    <text x="450" y="166" class="tf">ihos_order_id, scheduled_exam_at</text>
+    <text x="450" y="184" class="tf">created_at, confirmed_at, completed_at</text>
+    <text x="450" y="208" class="tf-h" fill="#1D4ED8">Mỗi đơn có nhiều OrderItem (dịch vụ)</text>
+
+    <!-- Order Item (top left) -->
+    <rect x="60" y="60" width="280" height="140" rx="8" fill="#FFF7ED" stroke="#EA580C" stroke-width="2"/>
+    <rect x="60" y="60" width="280" height="32" rx="8" fill="#EA580C"/>
+    <text x="200" y="82" text-anchor="middle" class="tn">OrderItem (dịch vụ trong đơn)</text>
+    <text x="78" y="112" class="tf-h">order_id, service_id, doctor_user_id</text>
+    <text x="78" y="130" class="tf">price_listed, cost, quantity</text>
+    <text x="78" y="148" class="tf">status: planned / completed / skipped</text>
+    <text x="78" y="166" class="tf">refunded, refunded_amount</text>
+    <text x="78" y="184" class="tf">recall_due_date (từ iHOS)</text>
+
+    <!-- User (top right) -->
+    <rect x="860" y="60" width="280" height="140" rx="8" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+    <rect x="860" y="60" width="280" height="32" rx="8" fill="#16A34A"/>
+    <text x="1000" y="82" text-anchor="middle" class="tn">User (5 vai trò)</text>
+    <text x="878" y="112" class="tf-h">id, name, phone, role_id, ranking_id</text>
+    <text x="878" y="130" class="tf">status: active / pending_offboarding</text>
+    <text x="878" y="148" class="tf">ihos_user_id, device_id</text>
+    <text x="878" y="166" class="tf">monthly_target</text>
+
+    <!-- CommissionRecord (bottom center) -->
+    <rect x="430" y="490" width="340" height="160" rx="8" fill="#FEF3C7" stroke="#D97706" stroke-width="2"/>
+    <rect x="430" y="490" width="340" height="32" rx="8" fill="#D97706"/>
+    <text x="600" y="512" text-anchor="middle" class="tn">CommissionRecord (Hoa hồng)</text>
+    <text x="450" y="542" class="tf-h">order_id, role_id, beneficiary_user_id</text>
+    <text x="450" y="560" class="tf">role_at_time, ranking_at_time, pct_at_time</text>
+    <text x="450" y="578" class="tf">amount, stage (7 trạng thái)</text>
+    <text x="450" y="596" class="tf">salary_cycle_id, approved_by, approved_at</text>
+    <text x="450" y="614" class="tf">source_type: auto / adjustment</text>
+    <text x="450" y="632" class="tf">clawback_parent_id (nếu là record âm)</text>
+
+    <!-- AdjustmentRequest (bottom left) -->
+    <rect x="60" y="490" width="280" height="160" rx="8" fill="#FAF5FF" stroke="#7C3AED" stroke-width="2"/>
+    <rect x="60" y="490" width="280" height="32" rx="8" fill="#7C3AED"/>
+    <text x="200" y="512" text-anchor="middle" class="tn">AdjustmentRequest</text>
+    <text x="78" y="542" class="tf-h">beneficiary_user_id, type, amount</text>
+    <text x="78" y="560" class="tf">reason_code, reason_text</text>
+    <text x="78" y="578" class="tf">salary_cycle_id, status (6 trạng thái)</text>
+    <text x="78" y="596" class="tf">source: manual / auto_rule</text>
+    <text x="78" y="614" class="tf">auto_rule_id, parent_adjustment_id</text>
+    <text x="78" y="632" class="tf">edited_at, edited_by (window 30 ngày)</text>
+
+    <!-- Customer (left middle) -->
+    <rect x="60" y="280" width="280" height="140" rx="8" fill="#ECFEFF" stroke="#0891B2" stroke-width="2"/>
+    <rect x="60" y="280" width="280" height="32" rx="8" fill="#0891B2"/>
+    <text x="200" y="302" text-anchor="middle" class="tn">Customer (Khách hàng)</text>
+    <text x="78" y="332" class="tf-h">id, name, phone, primary_assigned_user_id</text>
+    <text x="78" y="350" class="tf">consent_at, consent_version</text>
+    <text x="78" y="368" class="tf">last_visit_at, next_recall_due_at</text>
+    <text x="78" y="386" class="tf">recall_status: pending / done / skipped</text>
+    <text x="78" y="404" class="tf">status: active / inactive / anonymized</text>
+
+    <!-- SalaryCycle (right middle) -->
+    <rect x="860" y="280" width="280" height="140" rx="8" fill="#FDF4FF" stroke="#A21CAF" stroke-width="2"/>
+    <rect x="860" y="280" width="280" height="32" rx="8" fill="#A21CAF"/>
+    <text x="1000" y="302" text-anchor="middle" class="tn">SalaryCycle (Kì lương)</text>
+    <text x="878" y="332" class="tf-h">start_date, end_date</text>
+    <text x="878" y="350" class="tf">deadline_date (mặc định ngày 5)</text>
+    <text x="878" y="368" class="tf">status, approved_by, approved_at</text>
+
+    <!-- Shift + ShiftHeadAssignment (right bottom) -->
+    <rect x="860" y="490" width="280" height="160" rx="8" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+    <rect x="860" y="490" width="280" height="32" rx="8" fill="#475569"/>
+    <text x="1000" y="512" text-anchor="middle" class="tn">Shift + HeadAssignment</text>
+    <text x="878" y="542" class="tf-h">Shift: id, name, start_time, end_time</text>
+    <text x="878" y="560" class="tf-h">ShiftHeadAssignment:</text>
+    <text x="878" y="578" class="tf">shift_id, head_user_id, effective_from</text>
+    <text x="878" y="596" class="tf">priority, condition (JSON)</text>
+    <text x="878" y="614" class="tf">Lookup khi đơn tạo, snapshot vào</text>
+    <text x="878" y="632" class="tf">OrderRoleAssignment role=TC</text>
+
+    <!-- Arrows -->
+    <!-- Order -> OrderRoleAssignment -->
+    <path d="M 600 230 L 600 280" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="610" y="258" class="rel">1 - N</text>
+
+    <!-- Order -> OrderItem -->
+    <path d="M 430 130 L 340 130" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="355" y="120" class="rel">1 - N</text>
+
+    <!-- User -> OrderRoleAssignment -->
+    <path d="M 860 130 L 770 320" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="800" y="240" class="rel">N - N</text>
+
+    <!-- OrderRoleAssignment -> CommissionRecord -->
+    <path d="M 600 420 L 600 490" stroke="#DC2626" stroke-width="2.5" marker-end="url(#arr2)"/>
+    <text x="610" y="460" class="center-label">sinh ra</text>
+
+    <!-- AdjustmentRequest -> CommissionRecord -->
+    <path d="M 340 570 L 430 570" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="355" y="558" class="rel">tạo HH</text>
+
+    <!-- Customer -> Order -->
+    <path d="M 340 320 L 430 150" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="345" y="220" class="rel">1 - N</text>
+
+    <!-- SalaryCycle -> CommissionRecord -->
+    <path d="M 860 380 L 770 540" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="800" y="460" class="rel">cycle</text>
+
+    <!-- Shift -> OrderRoleAssignment -->
+    <path d="M 860 540 L 770 380" stroke="#6B7280" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="800" y="460" class="rel"></text>
+
+  </svg>
+  </div>
+
+  <div class="caption">
+    <strong>Đọc hiểu:</strong>
+    <ul>
+      <li><strong>OrderRoleAssignment</strong> là bảng cốt lõi. Mỗi vai trò tham gia 1 đơn (Sale, TC, BS) tạo 1 row. Bảng này là gốc để tính hoa hồng từng người.</li>
+      <li><strong>Order</strong> chứa thông tin đơn + tổng tiền. <strong>OrderItem</strong> là từng dịch vụ trong đơn.</li>
+      <li><strong>CommissionRecord</strong> sinh từ OrderRoleAssignment. Mỗi đơn có nhiều record (1 cho mỗi role tham gia).</li>
+      <li><strong>AdjustmentRequest</strong> là thưởng/phạt thủ công hoặc tự động (auto rule), không liên quan đơn cụ thể.</li>
+      <li><strong>Shift + ShiftHeadAssignment</strong> giải quyết câu hỏi "đơn này TC nào phụ trách" (lookup theo giờ tạo đơn).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ VISUAL 3: STATE MACHINES ============ -->
+<section id="v3">
+  <h2>3. Ba vòng đời: Đơn, Hoa hồng, Điều chỉnh</h2>
+  <div class="sub">Mỗi đối tượng chính có các trạng thái và đường chuyển trạng thái rõ ràng.</div>
+
+  <div class="svg-wrap">
+  <svg viewBox="0 0 1200 1100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#6B7280"/>
+      </marker>
+    </defs>
+    <style>
+      .state-title { font-size: 18px; font-weight: 700; fill: #1F2937; }
+      .state-sub { font-size: 12px; fill: #6B7280; }
+      .state-box { fill: #FFFFFF; stroke-width: 2; }
+      .state-text { font-size: 13px; font-weight: 700; }
+      .state-desc { font-size: 10px; fill: #6B7280; }
+      .trans-label { font-size: 10px; fill: #4B5563; }
+    </style>
+
+    <!-- Order Lifecycle -->
+    <text x="600" y="32" text-anchor="middle" class="state-title">3.1 Vòng đời Đơn (Order) - 8 trạng thái</text>
+    <text x="600" y="52" text-anchor="middle" class="state-sub">Từ khi tạo đến khi đóng/refund</text>
+
+    <!-- DRAFT -->
+    <rect x="80" y="90" width="140" height="70" rx="6" class="state-box" stroke="#9CA3AF"/>
+    <text x="150" y="118" text-anchor="middle" class="state-text" fill="#374151">DRAFT</text>
+    <text x="150" y="138" text-anchor="middle" class="state-desc">Mới tạo</text>
+
+    <!-- CONFIRMED -->
+    <rect x="290" y="90" width="140" height="70" rx="6" class="state-box" stroke="#2563EB"/>
+    <text x="360" y="118" text-anchor="middle" class="state-text" fill="#2563EB">CONFIRMED</text>
+    <text x="360" y="138" text-anchor="middle" class="state-desc">Đã xác nhận, có HH tạm tính</text>
+
+    <!-- IN_PROGRESS -->
+    <rect x="500" y="90" width="140" height="70" rx="6" class="state-box" stroke="#F59E0B"/>
+    <text x="570" y="118" text-anchor="middle" class="state-text" fill="#F59E0B">IN_PROGRESS</text>
+    <text x="570" y="138" text-anchor="middle" class="state-desc">Khách đang khám</text>
+
+    <!-- COMPLETED -->
+    <rect x="710" y="90" width="140" height="70" rx="6" class="state-box" stroke="#10B981"/>
+    <text x="780" y="118" text-anchor="middle" class="state-text" fill="#10B981">COMPLETED</text>
+    <text x="780" y="138" text-anchor="middle" class="state-desc">Khám xong</text>
+
+    <!-- REFUND_FULL -->
+    <rect x="920" y="50" width="140" height="60" rx="6" class="state-box" stroke="#DC2626"/>
+    <text x="990" y="76" text-anchor="middle" class="state-text" fill="#DC2626">REFUND_FULL</text>
+    <text x="990" y="92" text-anchor="middle" class="state-desc">Hoàn toàn phần</text>
+
+    <!-- REFUND_PARTIAL -->
+    <rect x="920" y="130" width="140" height="60" rx="6" class="state-box" stroke="#DC2626"/>
+    <text x="990" y="156" text-anchor="middle" class="state-text" fill="#DC2626">REFUND_PARTIAL</text>
+    <text x="990" y="172" text-anchor="middle" class="state-desc">Hoàn 1 phần</text>
+
+    <!-- CANCELLED -->
+    <rect x="290" y="220" width="140" height="60" rx="6" class="state-box" stroke="#6B7280"/>
+    <text x="360" y="246" text-anchor="middle" class="state-text" fill="#6B7280">CANCELLED</text>
+    <text x="360" y="262" text-anchor="middle" class="state-desc">Huỷ trước khám</text>
+
+    <!-- NO_SHOW -->
+    <rect x="500" y="220" width="140" height="60" rx="6" class="state-box" stroke="#6B7280"/>
+    <text x="570" y="246" text-anchor="middle" class="state-text" fill="#6B7280">NO_SHOW</text>
+    <text x="570" y="262" text-anchor="middle" class="state-desc">Khách không đến</text>
+
+    <!-- Arrows -->
+    <path d="M 220 125 L 290 125" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="230" y="118" class="trans-label">NV ấn xác nhận</text>
+
+    <path d="M 430 125 L 500 125" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="438" y="118" class="trans-label">Khách đến</text>
+
+    <path d="M 640 125 L 710 125" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="650" y="118" class="trans-label">BS xong</text>
+
+    <path d="M 850 110 L 920 80" stroke="#DC2626" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <path d="M 850 140 L 920 160" stroke="#DC2626" stroke-width="1.5" marker-end="url(#arr3)"/>
+
+    <path d="M 360 160 L 360 220" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="370" y="195" class="trans-label">Huỷ</text>
+
+    <path d="M 360 160 L 530 220" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="430" y="200" class="trans-label">T+30p</text>
+
+    <!-- =================== CommissionRecord =================== -->
+    <text x="600" y="360" text-anchor="middle" class="state-title">3.2 Vòng đời Hoa hồng (CommissionRecord) - 7 trạng thái</text>
+    <text x="600" y="380" text-anchor="middle" class="state-sub">Từ tạm tính khi đơn xác nhận đến chốt lương</text>
+
+    <!-- TAM_TINH -->
+    <rect x="80" y="420" width="140" height="70" rx="6" class="state-box" stroke="#9CA3AF"/>
+    <text x="150" y="448" text-anchor="middle" class="state-text" fill="#374151">TẠM TÍNH</text>
+    <text x="150" y="468" text-anchor="middle" class="state-desc">Đơn vừa xác nhận</text>
+
+    <!-- CHO_DUYET -->
+    <rect x="290" y="420" width="140" height="70" rx="6" class="state-box" stroke="#2563EB"/>
+    <text x="360" y="448" text-anchor="middle" class="state-text" fill="#2563EB">CHỜ DUYỆT</text>
+    <text x="360" y="468" text-anchor="middle" class="state-desc">Khám xong, đợi KT</text>
+
+    <!-- DUOC_DUYET -->
+    <rect x="500" y="420" width="140" height="70" rx="6" class="state-box" stroke="#10B981"/>
+    <text x="570" y="448" text-anchor="middle" class="state-text" fill="#10B981">ĐƯỢC DUYỆT</text>
+    <text x="570" y="468" text-anchor="middle" class="state-desc">KT đã duyệt</text>
+
+    <!-- CLAWBACK_PENDING -->
+    <rect x="710" y="420" width="140" height="70" rx="6" class="state-box" stroke="#F59E0B"/>
+    <text x="780" y="445" text-anchor="middle" class="state-text" fill="#F59E0B">CLAWBACK</text>
+    <text x="780" y="461" text-anchor="middle" class="state-text" fill="#F59E0B">PENDING</text>
+    <text x="780" y="479" text-anchor="middle" class="state-desc">Refund/edit sau payday</text>
+
+    <!-- TU_CHOI -->
+    <rect x="290" y="540" width="140" height="60" rx="6" class="state-box" stroke="#DC2626"/>
+    <text x="360" y="566" text-anchor="middle" class="state-text" fill="#DC2626">TỪ CHỐI</text>
+    <text x="360" y="582" text-anchor="middle" class="state-desc">KT reject + lý do</text>
+
+    <!-- KHIEU_NAI -->
+    <rect x="500" y="540" width="140" height="60" rx="6" class="state-box" stroke="#F59E0B"/>
+    <text x="570" y="566" text-anchor="middle" class="state-text" fill="#F59E0B">KHIẾU NẠI</text>
+    <text x="570" y="582" text-anchor="middle" class="state-desc">NV khiếu nại trong 3 ngày</text>
+
+    <!-- CANCEL -->
+    <rect x="80" y="540" width="140" height="60" rx="6" class="state-box" stroke="#6B7280"/>
+    <text x="150" y="566" text-anchor="middle" class="state-text" fill="#6B7280">CANCEL</text>
+    <text x="150" y="582" text-anchor="middle" class="state-desc">Đơn huỷ/refund full</text>
+
+    <!-- Arrows CR -->
+    <path d="M 220 455 L 290 455" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="225" y="448" class="trans-label">Khám xong</text>
+
+    <path d="M 430 455 L 500 455" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="435" y="448" class="trans-label">KT duyệt</text>
+
+    <path d="M 640 455 L 710 455" stroke="#F59E0B" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="640" y="448" class="trans-label">Refund/Edit</text>
+
+    <path d="M 710 455 L 640 455" stroke="#10B981" stroke-width="1.5" marker-end="url(#arr3)" stroke-dasharray="3,3"/>
+
+    <path d="M 360 490 L 360 540" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="370" y="520" class="trans-label">Reject</text>
+
+    <path d="M 430 570 L 500 570" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="440" y="563" class="trans-label">Khiếu nại</text>
+
+    <path d="M 570 540 L 380 490" stroke="#10B981" stroke-width="1.5" marker-end="url(#arr3)" stroke-dasharray="3,3"/>
+    <text x="450" y="510" class="trans-label" fill="#10B981">Revert</text>
+
+    <path d="M 150 490 L 150 540" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="160" y="520" class="trans-label">Huỷ/Refund</text>
+
+    <!-- =================== AdjustmentRequest =================== -->
+    <text x="600" y="680" text-anchor="middle" class="state-title">3.3 Vòng đời Điều chỉnh (AdjustmentRequest) - 6 trạng thái</text>
+    <text x="600" y="700" text-anchor="middle" class="state-sub">Thưởng/phạt thủ công hoặc tự động</text>
+
+    <!-- PENDING -->
+    <rect x="80" y="740" width="140" height="70" rx="6" class="state-box" stroke="#9CA3AF"/>
+    <text x="150" y="768" text-anchor="middle" class="state-text" fill="#374151">PENDING</text>
+    <text x="150" y="788" text-anchor="middle" class="state-desc">KT tạo manual</text>
+
+    <!-- AUTO_PENDING -->
+    <rect x="80" y="850" width="140" height="70" rx="6" class="state-box" stroke="#9CA3AF"/>
+    <text x="150" y="878" text-anchor="middle" class="state-text" fill="#374151">AUTO PENDING</text>
+    <text x="150" y="898" text-anchor="middle" class="state-desc">Auto rule fire</text>
+
+    <!-- APPROVED -->
+    <rect x="370" y="740" width="140" height="70" rx="6" class="state-box" stroke="#10B981"/>
+    <text x="440" y="768" text-anchor="middle" class="state-text" fill="#10B981">APPROVED</text>
+    <text x="440" y="788" text-anchor="middle" class="state-desc">CEO duyệt</text>
+
+    <!-- REJECTED -->
+    <rect x="370" y="850" width="140" height="70" rx="6" class="state-box" stroke="#DC2626"/>
+    <text x="440" y="878" text-anchor="middle" class="state-text" fill="#DC2626">REJECTED</text>
+    <text x="440" y="898" text-anchor="middle" class="state-desc">CEO từ chối</text>
+
+    <!-- EDITED -->
+    <rect x="660" y="740" width="140" height="70" rx="6" class="state-box" stroke="#F59E0B"/>
+    <text x="730" y="768" text-anchor="middle" class="state-text" fill="#F59E0B">EDITED</text>
+    <text x="730" y="788" text-anchor="middle" class="state-desc">KT sửa trong 30 ngày</text>
+
+    <!-- LOCKED -->
+    <rect x="950" y="740" width="140" height="70" rx="6" class="state-box" stroke="#475569"/>
+    <text x="1020" y="768" text-anchor="middle" class="state-text" fill="#475569">LOCKED</text>
+    <text x="1020" y="788" text-anchor="middle" class="state-desc">Hết 30 ngày, đóng băng</text>
+
+    <!-- Arrows Adj -->
+    <path d="M 220 775 L 370 775" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="240" y="768" class="trans-label">CEO duyệt</text>
+
+    <path d="M 220 885 L 370 775" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="245" y="850" class="trans-label">CEO duyệt batch</text>
+
+    <path d="M 220 815 L 370 850" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="240" y="830" class="trans-label">CEO từ chối</text>
+
+    <path d="M 510 775 L 660 775" stroke="#F59E0B" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="525" y="768" class="trans-label">Sửa (30 ngày)</text>
+
+    <path d="M 800 775 L 950 775" stroke="#475569" stroke-width="1.5" marker-end="url(#arr3)"/>
+    <text x="815" y="768" class="trans-label">Hết 30 ngày</text>
+
+    <path d="M 440 810 L 440 850" stroke="#6B7280" stroke-width="1.5"/>
+
+    <!-- Reflection note -->
+    <rect x="80" y="980" width="1010" height="90" rx="6" fill="#FEF3C7" stroke="#D97706"/>
+    <text x="100" y="1005" class="state-text" fill="#92400E">Lưu ý quan trọng</text>
+    <text x="100" y="1025" class="state-desc">- Cửa sổ khiếu nại HH = 3 ngày tính từ khi NV bị reject (HH ở trạng thái TỪ CHỐI).</text>
+    <text x="100" y="1040" class="state-desc">- Cửa sổ sửa Adjustment = 30 ngày sau payday. Sau đó chuyển LOCKED, không sửa được nữa.</text>
+    <text x="100" y="1055" class="state-desc">- Refund 1 phần sau payday tạo Clawback Pending. Phải trừ ngược lại NV ở kì lương kế tiếp.</text>
+  </svg>
+  </div>
+
+  <div class="caption">
+    <strong>Đọc hiểu:</strong>
+    <ul>
+      <li><strong>Đơn (Order)</strong> đi qua 8 trạng thái. Trạng thái IN_PROGRESS gộp 2 sub-state của iHOS (CHECKED_IN + IN_EXAM) để đơn giản.</li>
+      <li><strong>Hoa hồng (HH)</strong> sinh khi đơn được xác nhận, đi qua 7 trạng thái. Chỉ HH ở trạng thái ĐƯỢC DUYỆT mới vào bảng lương.</li>
+      <li><strong>Điều chỉnh (AdjustmentRequest)</strong> có 6 trạng thái. KT trưởng tạo (PENDING) hoặc auto rule fire (AUTO PENDING). CEO duyệt.</li>
+      <li>3 cửa sổ thời gian quan trọng: khiếu nại 3 ngày, sửa adjustment 30 ngày, clawback 30 ngày.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ VISUAL 4: END TO END FLOW ============ -->
+<section id="v4">
+  <h2>4. Hành trình 1 đơn từ đầu đến cuối</h2>
+  <div class="sub">12 bước từ khi khách đặt lịch đến khi NV nhận tiền hoa hồng.</div>
+
+  <div class="svg-wrap">
+  <svg viewBox="0 0 1200 720" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#1F4E78"/>
+      </marker>
+    </defs>
+    <style>
+      .ph { font-size: 14px; font-weight: 700; fill: #FFFFFF; }
+      .stn { font-size: 12px; font-weight: 700; fill: #1F2937; }
+      .sd { font-size: 10px; fill: #4B5563; }
+      .actor { font-size: 9px; fill: #1F4E78; font-style: italic; }
+    </style>
+
+    <!-- Phase 1: Lead -->
+    <rect x="40" y="40" width="220" height="40" rx="6" fill="#3B82F6"/>
+    <text x="150" y="65" text-anchor="middle" class="ph">Phase 1: Lead → Đặt lịch</text>
+
+    <rect x="40" y="100" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2"/>
+    <text x="60" y="124" class="stn">B1. Khách đặt lịch</text>
+    <text x="60" y="140" class="sd">Khách book qua Zalo/Facebook/web</text>
+    <text x="60" y="156" class="sd">TC nhận lead, phân cho NV Sale</text>
+    <text x="60" y="172" class="sd">NV Sale gọi xác nhận</text>
+    <text x="60" y="190" class="actor">Actor: TC + NV Sale</text>
+
+    <rect x="40" y="220" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2"/>
+    <text x="60" y="244" class="stn">B2. Tạo đơn + Xác nhận</text>
+    <text x="60" y="260" class="sd">NV tạo đơn trong vendor iHOS</text>
+    <text x="60" y="276" class="sd">NV ấn "Đã xác nhận" trong app NP</text>
+    <text x="60" y="292" class="sd">App tạo OrderRoleAssignment +</text>
+    <text x="60" y="306" class="sd">HH Tạm tính + lên lịch 4 reminder</text>
+
+    <!-- Phase 2: Visit -->
+    <rect x="290" y="40" width="220" height="40" rx="6" fill="#F59E0B"/>
+    <text x="400" y="65" text-anchor="middle" class="ph">Phase 2: Khách đến khám</text>
+
+    <rect x="290" y="100" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#F59E0B" stroke-width="2"/>
+    <text x="310" y="124" class="stn">B3. Khám bệnh</text>
+    <text x="310" y="140" class="sd">Khách đến → App: IN_PROGRESS</text>
+    <text x="310" y="156" class="sd">BS bắt đầu khám → app thêm</text>
+    <text x="310" y="172" class="sd">row BS vào OrderRoleAssignment</text>
+    <text x="310" y="190" class="actor">Actor: BS (qua webhook iHOS)</text>
+
+    <rect x="290" y="220" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#F59E0B" stroke-width="2"/>
+    <text x="310" y="244" class="stn">B4. Bổ sung dịch vụ</text>
+    <text x="310" y="260" class="sd">BS chỉ định thêm dịch vụ (nếu có)</text>
+    <text x="310" y="276" class="sd">iHOS thêm OrderItem</text>
+    <text x="310" y="292" class="sd">App tính lại HH (vẫn tạm tính)</text>
+    <text x="310" y="310" class="actor">Actor: BS + iHOS</text>
+
+    <!-- Phase 3: Complete -->
+    <rect x="540" y="40" width="220" height="40" rx="6" fill="#10B981"/>
+    <text x="650" y="65" text-anchor="middle" class="ph">Phase 3: Hoàn thành đơn</text>
+
+    <rect x="540" y="100" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#10B981" stroke-width="2"/>
+    <text x="560" y="124" class="stn">B5. Đơn COMPLETED</text>
+    <text x="560" y="140" class="sd">BS sign-off tất cả dịch vụ</text>
+    <text x="560" y="156" class="sd">App apply BH + voucher</text>
+    <text x="560" y="172" class="sd">HH: Tạm tính → Chờ duyệt</text>
+    <text x="560" y="190" class="actor">Actor: BS + iHOS</text>
+
+    <rect x="540" y="220" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#10B981" stroke-width="2"/>
+    <text x="560" y="244" class="stn">B6. Auto follow-up</text>
+    <text x="560" y="260" class="sd">App gửi Zalo "Cảm ơn" cho khách</text>
+    <text x="560" y="276" class="sd">Schedule recall theo recall_due_date</text>
+    <text x="560" y="292" class="sd">(BS y lệnh tái khám trong iHOS)</text>
+    <text x="560" y="310" class="actor">Actor: App tự động</text>
+
+    <!-- Phase 4: Review pay -->
+    <rect x="790" y="40" width="220" height="40" rx="6" fill="#7C3AED"/>
+    <text x="900" y="65" text-anchor="middle" class="ph">Phase 4: Kì lương ngày 5</text>
+
+    <rect x="790" y="100" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+    <text x="810" y="124" class="stn">B7. KT review + duyệt</text>
+    <text x="810" y="140" class="sd">KT mở app sáng ngày 5</text>
+    <text x="810" y="156" class="sd">Xem danh sách HH Chờ duyệt</text>
+    <text x="810" y="172" class="sd">Bulk duyệt hoặc reject từng đơn</text>
+    <text x="810" y="190" class="actor">Actor: KT trưởng</text>
+
+    <rect x="790" y="220" width="220" height="100" rx="6" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+    <text x="810" y="244" class="stn">B8. CEO duyệt final</text>
+    <text x="810" y="260" class="sd">CEO duyệt adjustment</text>
+    <text x="810" y="276" class="sd">CEO ký final batch (mobile)</text>
+    <text x="810" y="292" class="sd">HH: Được duyệt</text>
+    <text x="810" y="310" class="actor">Actor: CEO khách hàng</text>
+
+    <!-- Phase 5: Pay -->
+    <rect x="1040" y="40" width="120" height="40" rx="6" fill="#DC2626"/>
+    <text x="1100" y="65" text-anchor="middle" class="ph">Phase 5: Chi</text>
+
+    <rect x="1040" y="100" width="120" height="100" rx="6" fill="#FFFFFF" stroke="#DC2626" stroke-width="2"/>
+    <text x="1060" y="124" class="stn">B9. Export</text>
+    <text x="1060" y="140" class="sd">KT export 4 file:</text>
+    <text x="1060" y="154" class="sd">- HH</text>
+    <text x="1060" y="168" class="sd">- Bảng kê</text>
+    <text x="1060" y="182" class="sd">- Clawback</text>
+    <text x="1060" y="195" class="sd">- Chuyển khoản</text>
+
+    <rect x="1040" y="220" width="120" height="100" rx="6" fill="#FFFFFF" stroke="#DC2626" stroke-width="2"/>
+    <text x="1060" y="244" class="stn">B10. Chuyển</text>
+    <text x="1060" y="260" class="sd">KT chuyển</text>
+    <text x="1060" y="274" class="sd">khoản bank</text>
+    <text x="1060" y="288" class="sd">Gửi pay slip</text>
+    <text x="1060" y="302" class="sd">qua Zalo/email</text>
+
+    <!-- Phase 6: Post-payday -->
+    <rect x="40" y="380" width="220" height="40" rx="6" fill="#A21CAF"/>
+    <text x="150" y="405" text-anchor="middle" class="ph">Phase 6: 30 ngày sau payday</text>
+
+    <rect x="40" y="440" width="500" height="100" rx="6" fill="#FFFFFF" stroke="#A21CAF" stroke-width="2"/>
+    <text x="60" y="464" class="stn">B11. Window khiếu nại + clawback</text>
+    <text x="60" y="482" class="sd">NV có 3 ngày khiếu nại nếu HH bị reject.</text>
+    <text x="60" y="500" class="sd">Refund 1 phần hoặc sửa adjustment trong 30 ngày → tạo HH clawback (trả ngược).</text>
+    <text x="60" y="518" class="sd">Clawback áp vào kì lương kế tiếp.</text>
+    <text x="60" y="536" class="actor">Actor: NV, KT trưởng, CEO khách hàng</text>
+
+    <!-- Phase 7: Recall -->
+    <rect x="570" y="380" width="220" height="40" rx="6" fill="#0891B2"/>
+    <text x="680" y="405" text-anchor="middle" class="ph">Phase 7: Recall khách quay lại</text>
+
+    <rect x="570" y="440" width="590" height="100" rx="6" fill="#FFFFFF" stroke="#0891B2" stroke-width="2"/>
+    <text x="590" y="464" class="stn">B12. Mời khách tái khám</text>
+    <text x="590" y="482" class="sd">Đến ngày recall_due_date, app push notify NV chăm gốc.</text>
+    <text x="590" y="500" class="sd">NV gọi mời, khách đặt lịch → tạo đơn mới (loop về B1, auto assign cho NV cũ).</text>
+    <text x="590" y="518" class="sd">HH cho NV: pay-per-conversion, không pay-per-call.</text>
+    <text x="590" y="536" class="actor">Actor: App tự động + NV Sale</text>
+
+    <!-- Arrows -->
+    <path d="M 260 150 L 290 150" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 260 270 L 290 270" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 150 200 L 150 220" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 400 200 L 400 220" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+
+    <path d="M 510 150 L 540 150" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 510 270 L 540 270" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 650 200 L 650 220" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+
+    <path d="M 760 150 L 790 150" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 760 270 L 790 270" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 900 200 L 900 220" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+
+    <path d="M 1010 150 L 1040 150" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 1010 270 L 1040 270" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+    <path d="M 1100 200 L 1100 220" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+
+    <!-- Arrow from B10 down to B11 -->
+    <path d="M 1100 320 L 1100 360 L 300 360 L 300 380" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)" fill="none"/>
+    <path d="M 540 490 L 570 490" stroke="#1F4E78" stroke-width="2" marker-end="url(#arr4)"/>
+
+    <!-- Loop back from B12 to B1 -->
+    <path d="M 1160 540 L 1180 580 L 30 580 L 30 150 L 40 150" stroke="#0891B2" stroke-width="2" marker-end="url(#arr4)" fill="none" stroke-dasharray="6,4"/>
+    <text x="80" y="600" class="actor" fill="#0891B2">Recall: khách quay lại → đơn mới, loop về B1 (auto assign NV chăm gốc)</text>
+
+    <!-- Bottom: HH formula box -->
+    <rect x="40" y="630" width="1120" height="70" rx="6" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+    <text x="60" y="654" class="stn">Công thức tính HH (thống nhất cho mọi vai trò)</text>
+    <text x="60" y="676" class="sd" font-family="monospace">HH = net_profit × %HH(role, ranking_snapshot)</text>
+    <text x="60" y="692" class="sd" font-family="monospace">net_profit = total_paid (sau BH + voucher) - total_cost (item completed)</text>
+  </svg>
+  </div>
+
+  <div class="caption">
+    <strong>Đọc hiểu:</strong>
+    <ul>
+      <li>1 đơn đi qua 12 bước, từ khách đặt lịch đến khi NV nhận hoa hồng.</li>
+      <li>Phase 1-3 là vận hành hằng ngày (khách đặt, đến, khám xong).</li>
+      <li>Phase 4-5 là chốt lương ngày 5 (KT duyệt, CEO duyệt, chuyển khoản).</li>
+      <li>Phase 6 là cửa sổ 30 ngày sau payday để xử lý khiếu nại + clawback.</li>
+      <li>Phase 7 là vòng lặp recall: khách cũ quay lại → đơn mới → quay lại Phase 1.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ VISUAL 5: PERMISSION MATRIX ============ -->
+<section id="v5">
+  <h2>5. Ai có quyền làm gì (5 vai trò x 10 quyền)</h2>
+  <div class="sub">Quyền của 5 vai trò chính. Ô màu xanh = có quyền, ô màu vàng = chỉ của mình, ô trống = không có.</div>
+
+  <div class="svg-wrap">
+  <svg viewBox="0 0 1200 540" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .ph5 { font-size: 13px; font-weight: 700; fill: #1F2937; }
+      .perm-h { font-size: 11px; font-weight: 700; fill: #1F2937; }
+      .perm-text { font-size: 11px; fill: #FFFFFF; font-weight: 700; }
+      .role-label { font-size: 12px; font-weight: 700; fill: #FFFFFF; }
+      .perm-note { font-size: 10px; fill: #6B7280; }
+      .legend { font-size: 11px; fill: #374151; }
+    </style>
+
+    <!-- Header -->
+    <text x="600" y="30" text-anchor="middle" class="ph5">Ma trận quyền 5 vai trò</text>
+
+    <!-- Column headers (permissions) -->
+    <g transform="translate(220, 60)">
+      <rect x="0" y="0" width="90" height="50" fill="#475569"/>
+      <text x="45" y="22" text-anchor="middle" class="role-label">Xem</text>
+      <text x="45" y="38" text-anchor="middle" class="role-label">đơn</text>
+
+      <rect x="90" y="0" width="90" height="50" fill="#475569"/>
+      <text x="135" y="22" text-anchor="middle" class="role-label">Xem</text>
+      <text x="135" y="38" text-anchor="middle" class="role-label">khách</text>
+
+      <rect x="180" y="0" width="90" height="50" fill="#475569"/>
+      <text x="225" y="22" text-anchor="middle" class="role-label">Xem</text>
+      <text x="225" y="38" text-anchor="middle" class="role-label">HH</text>
+
+      <rect x="270" y="0" width="100" height="50" fill="#475569"/>
+      <text x="320" y="22" text-anchor="middle" class="role-label">Xem</text>
+      <text x="320" y="38" text-anchor="middle" class="role-label">ranking</text>
+
+      <rect x="370" y="0" width="100" height="50" fill="#475569"/>
+      <text x="420" y="22" text-anchor="middle" class="role-label">Duyệt</text>
+      <text x="420" y="38" text-anchor="middle" class="role-label">HH</text>
+
+      <rect x="470" y="0" width="100" height="50" fill="#475569"/>
+      <text x="520" y="22" text-anchor="middle" class="role-label">Reject</text>
+      <text x="520" y="38" text-anchor="middle" class="role-label">HH</text>
+
+      <rect x="570" y="0" width="100" height="50" fill="#475569"/>
+      <text x="620" y="22" text-anchor="middle" class="role-label">Tạo</text>
+      <text x="620" y="38" text-anchor="middle" class="role-label">voucher</text>
+
+      <rect x="670" y="0" width="100" height="50" fill="#475569"/>
+      <text x="720" y="22" text-anchor="middle" class="role-label">Tạo</text>
+      <text x="720" y="38" text-anchor="middle" class="role-label">adjustment</text>
+
+      <rect x="770" y="0" width="100" height="50" fill="#475569"/>
+      <text x="820" y="22" text-anchor="middle" class="role-label">Duyệt</text>
+      <text x="820" y="38" text-anchor="middle" class="role-label">adjustment</text>
+
+      <rect x="870" y="0" width="80" height="50" fill="#475569"/>
+      <text x="910" y="22" text-anchor="middle" class="role-label">Setting</text>
+    </g>
+
+    <!-- Row 1: NV Sale -->
+    <g transform="translate(40, 120)">
+      <rect x="0" y="0" width="180" height="60" fill="#3B82F6"/>
+      <text x="90" y="28" text-anchor="middle" class="role-label">NV Sale</text>
+      <text x="90" y="46" text-anchor="middle" class="role-label" style="font-size:10px; font-weight:400;">(Lan, Hằng, Trang)</text>
+
+      <rect x="180" y="0" width="90" height="60" fill="#FBBF24"/>
+      <text x="225" y="35" text-anchor="middle" class="perm-text">của mình</text>
+      <rect x="270" y="0" width="90" height="60" fill="#FBBF24"/>
+      <text x="315" y="35" text-anchor="middle" class="perm-text">của mình</text>
+      <rect x="360" y="0" width="90" height="60" fill="#FBBF24"/>
+      <text x="405" y="35" text-anchor="middle" class="perm-text">của mình</text>
+      <rect x="450" y="0" width="100" height="60" fill="#FBBF24"/>
+      <text x="500" y="35" text-anchor="middle" class="perm-text">của mình</text>
+      <rect x="550" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="650" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="750" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="850" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="950" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="1050" y="0" width="80" height="60" fill="#F3F4F6"/>
+    </g>
+
+    <!-- Row 2: BS -->
+    <g transform="translate(40, 185)">
+      <rect x="0" y="0" width="180" height="60" fill="#0EA5E9"/>
+      <text x="90" y="28" text-anchor="middle" class="role-label">Bác sĩ</text>
+      <text x="90" y="46" text-anchor="middle" class="role-label" style="font-size:10px; font-weight:400;">(Minh, Hằng-D, Vinh)</text>
+
+      <rect x="180" y="0" width="90" height="60" fill="#FBBF24"/>
+      <text x="225" y="35" text-anchor="middle" class="perm-text">của BS</text>
+      <rect x="270" y="0" width="90" height="60" fill="#F3F4F6"/>
+      <text x="315" y="35" text-anchor="middle" class="perm-note">qua iHOS</text>
+      <rect x="360" y="0" width="90" height="60" fill="#FBBF24"/>
+      <text x="405" y="35" text-anchor="middle" class="perm-text">của mình</text>
+      <rect x="450" y="0" width="100" height="60" fill="#FBBF24"/>
+      <text x="500" y="35" text-anchor="middle" class="perm-text">của mình</text>
+      <rect x="550" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="650" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="750" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="850" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="950" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="1050" y="0" width="80" height="60" fill="#F3F4F6"/>
+    </g>
+
+    <!-- Row 3: TC -->
+    <g transform="translate(40, 250)">
+      <rect x="0" y="0" width="180" height="60" fill="#8B5CF6"/>
+      <text x="90" y="28" text-anchor="middle" class="role-label">Trưởng ca (TC)</text>
+      <text x="90" y="46" text-anchor="middle" class="role-label" style="font-size:10px; font-weight:400;">(Hà)</text>
+
+      <rect x="180" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="225" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="270" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="315" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="360" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="405" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="450" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="500" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="550" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="650" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="750" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="800" y="35" text-anchor="middle" class="perm-text">✓</text>
+      <rect x="850" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="950" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="1050" y="0" width="80" height="60" fill="#FBBF24"/>
+      <text x="1090" y="35" text-anchor="middle" class="perm-text">xem</text>
+    </g>
+
+    <!-- Row 4: KT -->
+    <g transform="translate(40, 315)">
+      <rect x="0" y="0" width="180" height="60" fill="#10B981"/>
+      <text x="90" y="28" text-anchor="middle" class="role-label">KT trưởng</text>
+      <text x="90" y="46" text-anchor="middle" class="role-label" style="font-size:10px; font-weight:400;">(Diễm)</text>
+
+      <rect x="180" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="225" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="270" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="315" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="360" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="405" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="450" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="500" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="550" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="600" y="35" text-anchor="middle" class="perm-text">✓</text>
+      <rect x="650" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="700" y="35" text-anchor="middle" class="perm-text">✓</text>
+      <rect x="750" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="850" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="900" y="35" text-anchor="middle" class="perm-text">✓</text>
+      <rect x="950" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="1050" y="0" width="80" height="60" fill="#FBBF24"/>
+      <text x="1090" y="35" text-anchor="middle" class="perm-text">xem</text>
+    </g>
+
+    <!-- Row 5: CEO -->
+    <g transform="translate(40, 380)">
+      <rect x="0" y="0" width="180" height="60" fill="#DC2626"/>
+      <text x="90" y="28" text-anchor="middle" class="role-label">CEO khách hàng</text>
+      <text x="90" y="46" text-anchor="middle" class="role-label" style="font-size:10px; font-weight:400;">(Nguyên)</text>
+
+      <rect x="180" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="225" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="270" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="315" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="360" y="0" width="90" height="60" fill="#10B981"/>
+      <text x="405" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="450" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="500" y="35" text-anchor="middle" class="perm-text">toàn PK</text>
+      <rect x="550" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="650" y="0" width="100" height="60" fill="#F3F4F6"/>
+      <rect x="750" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="800" y="35" text-anchor="middle" class="perm-text">✓</text>
+      <rect x="850" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="900" y="35" text-anchor="middle" class="perm-text">✓</text>
+      <rect x="950" y="0" width="100" height="60" fill="#10B981"/>
+      <text x="1000" y="35" text-anchor="middle" class="perm-text">✓ final</text>
+      <rect x="1050" y="0" width="80" height="60" fill="#10B981"/>
+      <text x="1090" y="35" text-anchor="middle" class="perm-text">edit</text>
+    </g>
+
+    <!-- Legend -->
+    <g transform="translate(40, 470)">
+      <rect x="0" y="0" width="20" height="20" fill="#10B981"/>
+      <text x="28" y="15" class="legend">Có quyền đầy đủ (toàn phòng khám)</text>
+
+      <rect x="240" y="0" width="20" height="20" fill="#FBBF24"/>
+      <text x="268" y="15" class="legend">Chỉ của mình</text>
+
+      <rect x="380" y="0" width="20" height="20" fill="#F3F4F6" stroke="#9CA3AF"/>
+      <text x="408" y="15" class="legend">Không có quyền</text>
+
+      <text x="40" y="48" class="perm-note">Lưu ý: KT trưởng (Diễm) và CEO khách hàng KHÔNG ăn HH theo đơn. Lương Diễm là cứng, CEO ăn lợi nhuận.</text>
+    </g>
+  </svg>
+  </div>
+
+  <div class="caption">
+    <strong>Đọc hiểu:</strong>
+    <ul>
+      <li>NV Sale và BS chỉ thấy của mình (đơn, HH, ranking). Không thấy người khác để tránh demotivate.</li>
+      <li>TC thấy toàn PK + có quyền tạo voucher + xem setting (không edit).</li>
+      <li>KT trưởng là người duyệt HH chính. KT có quyền tạo điều chỉnh (adjustment), không có quyền duyệt điều chỉnh (CEO duyệt).</li>
+      <li>CEO khách hàng là người duyệt adjustment final + edit setting + tạo voucher.</li>
+      <li>KT và CEO không ăn HH theo đơn, nhưng vẫn nhận adjustment thủ công (vd CEO thưởng KT cuối năm).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ VISUAL 6: PAY CYCLE TIMELINE ============ -->
+<section id="v6">
+  <h2>6. Lịch ngày 5 + các cửa sổ thời gian</h2>
+  <div class="sub">Pay cycle theo tháng dương lịch, chốt ngày 5. 3 cửa sổ thời gian quan trọng cần nhớ.</div>
+
+  <div class="svg-wrap">
+  <svg viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .ph6 { font-size: 16px; font-weight: 700; fill: #1F2937; }
+      .day-label { font-size: 11px; fill: #6B7280; }
+      .day-num { font-size: 12px; font-weight: 700; fill: #1F2937; }
+      .event-text { font-size: 11px; font-weight: 600; fill: #1F2937; }
+      .window-text { font-size: 12px; font-weight: 700; fill: #FFFFFF; }
+      .note-text { font-size: 11px; fill: #4B5563; }
+      .month-label { font-size: 14px; font-weight: 700; fill: #1F4E78; }
+    </style>
+
+    <!-- Month label: Tháng 3 -->
+    <rect x="40" y="40" width="1120" height="32" rx="4" fill="#1F4E78"/>
+    <text x="600" y="62" text-anchor="middle" class="month-label" fill="#FFFFFF">Tháng 3 (kì lương) → Ngày 5 tháng 4 (payday)</text>
+
+    <!-- Timeline base -->
+    <line x1="60" y1="160" x2="1160" y2="160" stroke="#374151" stroke-width="2"/>
+
+    <!-- Day markers: 1, 5, 10, 15, 20, 25, 30 (tháng 3) -->
+    <g transform="translate(0, 0)">
+      <line x1="100" y1="155" x2="100" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="100" y="180" text-anchor="middle" class="day-num">1/3</text>
+
+      <line x1="200" y1="155" x2="200" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="200" y="180" text-anchor="middle" class="day-label">5/3</text>
+
+      <line x1="300" y1="155" x2="300" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="300" y="180" text-anchor="middle" class="day-label">10/3</text>
+
+      <line x1="400" y1="155" x2="400" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="400" y="180" text-anchor="middle" class="day-label">15/3</text>
+
+      <line x1="500" y1="155" x2="500" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="500" y="180" text-anchor="middle" class="day-label">20/3</text>
+
+      <line x1="600" y1="155" x2="600" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="600" y="180" text-anchor="middle" class="day-label">25/3</text>
+
+      <line x1="700" y1="155" x2="700" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="700" y="180" text-anchor="middle" class="day-label">30/3</text>
+
+      <line x1="800" y1="155" x2="800" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="800" y="180" text-anchor="middle" class="day-num">1/4</text>
+
+      <!-- Payday marker -->
+      <line x1="900" y1="140" x2="900" y2="180" stroke="#DC2626" stroke-width="4"/>
+      <text x="900" y="200" text-anchor="middle" class="day-num" fill="#DC2626" font-size="14">5/4 PAYDAY</text>
+
+      <line x1="1000" y1="155" x2="1000" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="1000" y="180" text-anchor="middle" class="day-label">15/4</text>
+
+      <line x1="1100" y1="155" x2="1100" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="1100" y="180" text-anchor="middle" class="day-num">25/4</text>
+
+      <line x1="1160" y1="155" x2="1160" y2="165" stroke="#374151" stroke-width="2"/>
+      <text x="1160" y="180" text-anchor="middle" class="day-label">5/5</text>
+    </g>
+
+    <!-- Phase 1: Đơn diễn ra trong tháng -->
+    <rect x="100" y="100" width="700" height="40" rx="4" fill="#DBEAFE" stroke="#2563EB"/>
+    <text x="450" y="125" text-anchor="middle" class="event-text" fill="#1E40AF">Đơn được tạo + hoàn thành trong tháng (theo Order.created_at)</text>
+
+    <!-- Phase 2: T-5 review intensive -->
+    <rect x="800" y="100" width="100" height="40" rx="4" fill="#FEF3C7" stroke="#D97706"/>
+    <text x="850" y="125" text-anchor="middle" class="event-text" fill="#92400E">T-5: KT review</text>
+
+    <!-- Phase 3: Window khiếu nại 3 ngày sau reject -->
+    <rect x="900" y="220" width="60" height="36" rx="4" fill="#DC2626"/>
+    <text x="930" y="244" text-anchor="middle" class="window-text">3 ngày</text>
+    <text x="930" y="276" text-anchor="middle" class="note-text" fill="#DC2626">Khiếu nại</text>
+
+    <!-- Phase 4: Window edit adjustment 30 ngày -->
+    <rect x="900" y="310" width="300" height="36" rx="4" fill="#F59E0B"/>
+    <text x="1050" y="334" text-anchor="middle" class="window-text">30 ngày: Cửa sổ sửa Adjustment + Clawback nếu refund 1 phần</text>
+
+    <!-- Annotations -->
+    <text x="100" y="240" class="event-text">Vận hành hằng ngày:</text>
+    <text x="100" y="258" class="note-text">- NV Sale tạo đơn + xác nhận</text>
+    <text x="100" y="274" class="note-text">- BS khám, đánh dấu hoàn thành</text>
+    <text x="100" y="290" class="note-text">- HH tạm tính tự sinh</text>
+    <text x="100" y="306" class="note-text">- KT duyệt HH mỗi ngày 1-2 tiếng</text>
+
+    <text x="450" y="240" class="event-text">25/3 - 4/4 (pre-payday):</text>
+    <text x="450" y="258" class="note-text">- Auto rule fire (thưởng target tháng)</text>
+    <text x="450" y="274" class="note-text">- CEO duyệt batch adjustment</text>
+    <text x="450" y="290" class="note-text">- KT review HH cuối cùng</text>
+    <text x="450" y="306" class="note-text">- Check filter "đơn vượt 10%"</text>
+
+    <text x="900" y="380" class="event-text" fill="#DC2626">Ngày 5/4 PAYDAY:</text>
+    <text x="900" y="398" class="note-text">- KT export 4 file Excel</text>
+    <text x="900" y="414" class="note-text">- Chuyển khoản qua bank</text>
+    <text x="900" y="430" class="note-text">- Gửi pay slip Zalo/email</text>
+    <text x="900" y="446" class="note-text">- CEO ký final (mobile)</text>
+
+    <!-- Bottom note: 3 windows summary -->
+    <rect x="40" y="465" width="1120" height="40" rx="6" fill="#F9FAFB" stroke="#E5E7EB"/>
+    <text x="60" y="485" class="event-text">3 cửa sổ thời gian quan trọng:</text>
+    <text x="280" y="485" class="note-text"><tspan fill="#DC2626" font-weight="700">3 ngày</tspan>: NV khiếu nại nếu HH bị reject</text>
+    <text x="600" y="485" class="note-text"><tspan fill="#F59E0B" font-weight="700">30 ngày</tspan>: KT có thể sửa Adjustment sau payday</text>
+    <text x="900" y="485" class="note-text"><tspan fill="#F59E0B" font-weight="700">30 ngày</tspan>: Refund 1 phần tạo Clawback</text>
+  </svg>
+  </div>
+
+  <div class="caption">
+    <strong>Đọc hiểu:</strong>
+    <ul>
+      <li>1 kì lương = 1 tháng dương lịch. Đơn thuộc kì nào tính theo ngày tạo đơn (Order.created_at).</li>
+      <li>Ngày 5 tháng kế tiếp là payday. KT trưởng export 4 file (HH, bảng kê, clawback, chuyển khoản) và chi lương.</li>
+      <li>3 cửa sổ thời gian phải nhớ: <strong>3 ngày</strong> khiếu nại sau reject, <strong>30 ngày</strong> sửa adjustment, <strong>30 ngày</strong> clawback do refund 1 phần.</li>
+      <li>Sau 30 ngày, mọi adjustment LOCKED. Mọi clawback áp vào kì lương kế tiếp.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <p>Tài liệu này tóm tắt 18 file audit-docs thành 6 hình trực quan. Khi cần đào sâu, mở các file cũ trong folder /audit-docs:</p>
+  <p style="margin-top:8px;">B1 (Context, công thức HH), B2 (Personas, workflows), B2-2 (BPMN state machines), B2-3 (Edge cases), B2-4 (Pay cycle), B3 (Screen audit), B4 (75 business rules), B5-1 đến B5-5 (Screen specs), B6 (Implementation plan), B7 (Business effectiveness), ADR-001 (Shift architecture), POST-DEV-AUDIT-REPORT.</p>
+  <p style="margin-top:8px;">Convention ngôn ngữ: PM = Project Manager (Phú), CEO khách hàng = anh Nguyên (NP), KT trưởng = Diễm, TC = Hà, NV Sale = Lan/Hằng/Trang, BS = Minh/Hằng-D/Vinh.</p>
+</footer>
+
+</div>
+</body>
+</html>

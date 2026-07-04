@@ -15,12 +15,8 @@ import OrderCreate from "@/pages/order-create";
 import ServiceDetail from "@/pages/service-detail";
 import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
-import AiChat from "@/pages/ai-chat";
 import Ranking from "@/pages/ranking";
-import Performance from "@/pages/performance";
 import AnalyticsOverview from "@/pages/analytics-overview";
-import AnalyticsDoctors from "@/pages/analytics-doctors";
-import AnalyticsPatients from "@/pages/analytics-patients";
 import AnalyticsAppointments from "@/pages/analytics-appointments";
 import AdminStaff from "@/pages/admin-staff";
 import AdminCommissionConfig from "@/pages/admin-commission-config";
@@ -28,11 +24,14 @@ import AdminVouchers from "@/pages/admin-vouchers";
 import AdminVoucherDetail from "@/pages/admin-voucher-detail";
 import AdminCommissionApproval from "@/pages/admin-commission-approval";
 import AdminSettings from "@/pages/admin-settings";
-import NpPlayground from "@/pages/np-playground";
+import Notifications from "@/pages/notifications";
+import RecallWorklist from "@/pages/recall-worklist";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const isAuthenticated = localStorage.getItem("np_authenticated") === "true";
-  if (!isAuthenticated) return <Redirect to="/login" />;
+  // Auth gate — checks np_token issued by /api/auth/verify-otp.
+  // Legacy `np_authenticated` is cleaned up on login success.
+  const token = localStorage.getItem("np_token");
+  if (!token) return <Redirect to="/login" />;
   return <Component />;
 }
 
@@ -47,15 +46,13 @@ function Router() {
       <Route path="/orders/new">{() => <ProtectedRoute component={OrderCreate} />}</Route>
       <Route path="/orders/:id">{() => <ProtectedRoute component={OrderDetail} />}</Route>
       <Route path="/income">{() => <ProtectedRoute component={Income} />}</Route>
+      <Route path="/notifications">{() => <ProtectedRoute component={Notifications} />}</Route>
       <Route path="/customers">{() => <ProtectedRoute component={Customers} />}</Route>
       <Route path="/customers/:id">{() => <ProtectedRoute component={CustomerDetail} />}</Route>
-      <Route path="/ai-chat">{() => <ProtectedRoute component={AiChat} />}</Route>
+      <Route path="/recalls">{() => <ProtectedRoute component={RecallWorklist} />}</Route>
       <Route path="/ranking">{() => <ProtectedRoute component={Ranking} />}</Route>
-      <Route path="/performance">{() => <ProtectedRoute component={Performance} />}</Route>
       <Route path="/analytics">{() => <ProtectedRoute component={AnalyticsOverview} />}</Route>
       <Route path="/analytics/overview">{() => <ProtectedRoute component={AnalyticsOverview} />}</Route>
-      <Route path="/analytics/doctors">{() => <ProtectedRoute component={AnalyticsDoctors} />}</Route>
-      <Route path="/analytics/patients">{() => <ProtectedRoute component={AnalyticsPatients} />}</Route>
       <Route path="/analytics/appointments">{() => <ProtectedRoute component={AnalyticsAppointments} />}</Route>
       <Route path="/admin/staff">{() => <ProtectedRoute component={AdminStaff} />}</Route>
       <Route path="/admin/commission-config">{() => <ProtectedRoute component={AdminCommissionConfig} />}</Route>
@@ -64,7 +61,6 @@ function Router() {
       <Route path="/admin/vouchers/:id">{() => <ProtectedRoute component={AdminVoucherDetail} />}</Route>
       <Route path="/admin/commission-approval">{() => <ProtectedRoute component={AdminCommissionApproval} />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={AdminSettings} />}</Route>
-      <Route path="/np-playground" component={NpPlayground} />
       <Route component={NotFound} />
     </Switch>
   );

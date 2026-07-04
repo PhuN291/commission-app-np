@@ -1,14 +1,19 @@
 # BIÊN BẢN CONTEXT B1 - APP HOA HỒNG NP CLINIC (FINAL)
 
-Trạng thái: **FINAL** (chốt 24/04/2026 sau 9 vòng làm rõ).
+Trạng thái: **FINAL** (chốt 24/04/2026 sau 9 vòng, update 25/04/2026 sau B2.1 audit Group A).
 
 Sau khi chốt B1, bước kế tiếp là B2: Dựng kịch bản vận hành thực tế.
+
+Convention các tag dùng trong file:
+- `[CHỜ ISOFT]`: cần info từ iHOS team, xem `PENDING-ITEMS.md` section A
+- `[CHỜ ANH CHỐT]`: cần CEO Nguyên quyết định, xem `PENDING-ITEMS.md` section B
+- `[GIẢ ĐỊNH]`: assumption tạm thời, xem `PENDING-ITEMS.md` section C
 
 ---
 
 ## 1. Scope audit
 
-Audit App Hoa Hồng dành cho nội bộ NP Clinic. Website, Isoft, Webapp trả KQ bệnh án out of scope (chỉ liệt kê interface giao tiếp, không deep dive).
+Audit App Hoa Hồng dành cho nội bộ NP Clinic. Website, iHOS, Webapp trả KQ bệnh án out of scope (chỉ liệt kê interface giao tiếp, không deep dive).
 
 ---
 
@@ -59,10 +64,10 @@ Không phân biệt role. Mọi role dùng chung công thức.
 | Role | Khi thêm row | Số row active cùng lúc | Đổi theo shift không? |
 |---|---|---|---|
 | Sale | Khi đơn tạo. user_id = người tạo đơn hoặc người được trưởng ca assign | Tối đa 1 | Không (assignee đóng băng sau xác nhận) |
-| Trưởng ca | Khi đơn tạo. user_id = trưởng ca đang trực lúc tạo | Tối đa 1 | **Không**. Ca sau muốn hỗ trợ thì tự chủ động, không ăn HH đơn cũ |
-| Kế toán | Khi đơn tạo. user_id = kế toán tại thời điểm đó | Tối đa 1 | Không |
-| CEO | Khi đơn tạo. user_id = CEO | Tối đa 1 | Không |
-| Bác sĩ | Khi Isoft webhook `order.exam_started` kèm doctor_id. Mỗi doctor 1 row | 0 đến N (nhiều bác sĩ thực hiện các dịch vụ khác nhau) | Không |
+| Trưởng ca | Khi đơn tạo. user_id = lookup từ `ShiftHeadAssignment` active của shift match thời điểm `order.created_at`. Nếu shift không có TC active (NULL): không tạo row TC | Tối đa 1 | **Không**. Ca sau muốn hỗ trợ thì tự chủ động, không ăn HH đơn cũ |
+| Bác sĩ | Khi iHOS webhook `order.exam_started` kèm doctor_id. Mỗi doctor 1 row (per-doctor, không phụ thuộc số dịch vụ doctor làm). Row ĐÃ ADD thì giữ, item skipped sau đó không xoá row | 0 đến N (nhiều bác sĩ thực hiện các dịch vụ khác nhau) | Không |
+
+**Lưu ý vòng 13 (28/04/2026)**: KT trưởng (Diễm) và CEO (Nguyên) **KHÔNG** có HH theo đơn. Lương Diễm là cứng, CEO ăn lợi nhuận. OrderRoleAssignment KHÔNG populate row cho 2 role này. Adjustment manual vẫn áp dụng được cho Diễm/Nguyên (vd CEO tự thưởng cuối năm), tách biệt với HH theo đơn.
 
 ### 3.4 Role không có user_ID tham gia = không chi HH
 
@@ -74,22 +79,21 @@ Ví dụ đơn bán sản phẩm không qua bác sĩ: không có row bác sĩ tr
 - Thêm row mới cho người nhận với `assigned_at = now()`, `ended_at = NULL`
 - Khi tính HH chỉ dùng row có `ended_at IS NULL` (hoặc `ended_at > now()`) tại thời điểm snapshot
 
-### 3.6 Trần HH (soft warning, không hard cap)
+### 3.6 Trần HH (App không enforce)
 
-CEO đặt `expected_total_pct_per_order` mặc định 15% net_profit trong Settings.
+**Chốt B2.1 (VĐ-5)**: App **không** enforce cap. CEO tự tính cap 10% (đổi từ 15% bản FINAL cũ) ngoài Excel khi review trước khi gửi kế toán chốt lương.
 
-Khi đơn tính ra tổng HH chi / net_profit > trần:
-- Hiển thị icon cảnh báo trên chi tiết đơn (cho CEO + kế toán)
-- Màn duyệt HH có filter "Đơn vượt trần" để kế toán review
-- **Không auto cap.** CEO quyết case-by-case khi duyệt.
+App vẫn hiển thị icon cảnh báo khi đơn có tổng HH chi / net_profit > 10%, nhưng chỉ là visual cue, không auto cap, không block duyệt.
 
 Nguyên nhân vượt trần thường gặp: đơn có 2+ bác sĩ (mỗi bác sĩ ăn full %HH).
+
+Settings: `expected_total_pct_per_order` default 10% (hiển thị warning, không enforce).
 
 ### 3.7 Ví dụ minh hoạ
 
 Đơn 100k (dịch vụ A 60k/cost 30k + dịch vụ B 40k/cost 20k), BH 20k, voucher 0, KH trả 80k.
 
-Setting %HH (bạc): sale 5%, trưởng ca 2%, kế toán 1%, CEO 2%, bác sĩ 3%.
+Setting %HH (bạc): sale 5%, trưởng ca 2%, bác sĩ 3%. KT và CEO không có HH.
 
 Đơn có 2 bác sĩ: BS A làm dịch vụ A, BS B làm dịch vụ B.
 
@@ -101,27 +105,47 @@ net_profit = 80k - 50k = 30k
 OrderRoleAssignment active:
   (sale, NV X)       -> HH = 30k × 5% = 1.500đ
   (trưởng ca, NV Y)  -> HH = 30k × 2% = 600đ
-  (kế toán, NV Z)    -> HH = 30k × 1% = 300đ
-  (CEO, NV W)        -> HH = 30k × 2% = 600đ
   (bác sĩ, BS A)     -> HH = 30k × 3% = 900đ
   (bác sĩ, BS B)     -> HH = 30k × 3% = 900đ
 
-Tổng chi HH đơn = 4.800đ = 16% net_profit
-16% > 15% trần → system hiển thị cảnh báo, CEO duyệt.
+Tổng chi HH đơn = 3.900đ = 13% net_profit
+13% > 10% trần → system hiển thị cảnh báo, CEO tự review ngoài Excel.
 ```
 
 ---
 
 ## 4. Xử lý edge case tính HH
 
-### Đơn có BH
-- Tính trên KH thực trả (total_paid), không tính phần BH
+### Đơn có BH (chốt VĐ-9 Option B: Out-of-Pocket Only)
+
+- HH tính trên `total_paid` = phần khách trả ra túi (out-of-pocket), KHÔNG tính phần BH chi trả
+- "Out-of-pocket" là số tiền khách trả thực tế (có thể tiền mặt, chuyển khoản, cà thẻ - không phụ thuộc phương thức)
 - BH thanh toán sau 3-4 tháng, PK ghi nhận doanh thu nhưng không phát sinh HH thêm
 
-### Đơn có voucher
-- Voucher giảm trực tiếp total_paid (tất cả loại voucher)
-- net_profit tự động thấp hơn, HH tự động thấp hơn
+Ví dụ: đơn 1.000.000đ, BH chi trả 700.000đ, khách trả 300.000đ.
+- Base tính HH: 300.000đ (chỉ phần out-of-pocket)
+- HH = (300.000đ - cost share của 300.000đ) × %HH
+
+Lý do chốt Option B (thay vì A "full" hoặc C "separate %"):
+- BH thanh toán chậm 3-4 tháng, NP rủi ro cashflow nếu trả HH ngay
+- BH có thể bị reject (BHYT từ chối thanh toán), khó claw back HH đã trả
+- Out-of-pocket = tiền chắc chắn về NP, an toàn để chia HH
+
+### Đơn có voucher (chốt vòng 13 28/04/2026: voucher trừ khỏi base HH)
+
+- Voucher giảm trực tiếp `total_paid` (tất cả loại voucher)
+- Voucher trừ khỏi base HH (formula B1 vòng 9 chuẩn): `net_profit = total_paid - total_cost = (total_listed - BH - voucher) - cost`
+- HH = `net_profit × %HH`. Voucher giảm net_profit → HH giảm tương ứng
 - Người tạo voucher: Trưởng ca (và CEO)
+
+Ví dụ: đơn niêm yết 1.000.000đ, voucher 100k, khách trả 900.000đ. Cost 400k.
+- total_paid = 900k
+- net_profit = 900k - 400k = 500k
+- HH Sale (3%) = 15k
+
+Lưu ý vòng 13: trước đó (vòng 10) chốt VĐ-8 Option A (HH trên giá niêm yết, voucher không trừ). Vòng 13 REVERT: voucher trừ như mọi chi phí. Đơn giản, consistent với BH.
+
+Edge case đơn có cả BH và voucher: cả 2 đều trừ. Vd đơn 1tr, BH 700k, voucher 100k → total_paid = 200k. net_profit = 200k - cost. Có thể âm nếu cost cao → HH = max(net_profit, 0) × %HH = 0.
 
 ### Đơn huỷ trước khám
 - Huỷ trước xác nhận: chưa có HH
@@ -132,22 +156,22 @@ Tổng chi HH đơn = 4.800đ = 16% net_profit
 - Xử lý giống huỷ đơn
 
 ### Refund sau khám (toàn phần)
-- Isoft sync refund, total_paid giảm về 0, net_profit = âm hoặc 0
+- iHOS sync refund, total_paid giảm về 0, net_profit = âm hoặc 0
 - HH đang chờ duyệt: chuyển sang cancel
 - HH đã duyệt: tạo CommissionRecord âm để clawback vào kì lương kế tiếp
 
 ### Refund 1 phần (1 trong N dịch vụ)
-- Isoft gửi refunded_item_id + refund_amount
+- iHOS gửi refunded_item_id + refund_amount
 - Item bị refund: refunded = true, cost tương ứng cũng trừ khỏi total_cost
 - Recompute total_paid, total_cost, net_profit, HH tất cả row active
 - Clawback = HH_cũ - HH_mới
 
-Lưu ý G9: Cần xác nhận với vendor Isoft việc webhook refund có gửi chi tiết theo item không. Nếu chỉ gửi amount tổng thì NV/kế toán phải gán về item nào.
+Lưu ý G9: Cần xác nhận với vendor iHOS việc webhook refund có gửi chi tiết theo item không. Nếu chỉ gửi amount tổng thì NV/kế toán phải gán về item nào.
 
 ### Dịch vụ phát sinh sau khám
-- Isoft tạo OrderItem mới trong cùng đơn
+- iHOS tạo OrderItem mới trong cùng đơn
 - total_paid, total_cost, net_profit tự cập nhật
-- Nếu có bác sĩ mới thực hiện dịch vụ phát sinh: Isoft sync kèm doctor_id, add row mới vào OrderRoleAssignment
+- Nếu có bác sĩ mới thực hiện dịch vụ phát sinh: iHOS sync kèm doctor_id, add row mới vào OrderRoleAssignment
 - Recompute HH tất cả row active
 
 ### Không giảm giá tay
@@ -162,7 +186,7 @@ Không role nào có quyền giảm giá trên đơn. Muốn giảm giá phải 
 | Stage | Trigger | Ghi chú |
 |---|---|---|
 | Tạm tính | NV bấm "Đã xác nhận" đơn | One-way, bấm xong không quay lại |
-| Chờ duyệt | Isoft sync "hoàn thành khám" | Sync realtime, refund/điều chỉnh update ngược |
+| Chờ duyệt | iHOS sync "hoàn thành khám" | Sync realtime, refund/điều chỉnh update ngược |
 | Được duyệt | Kế toán duyệt trên app | Vào lương |
 
 ### Stage phụ
@@ -184,14 +208,35 @@ Không role nào có quyền giảm giá trên đơn. Muốn giảm giá phải 
 - Đơn thuộc kì nào: theo **ngày tạo đơn**
 - Không có backup approver khi kế toán vắng (Option A chốt cho gọn, chấp nhận delay lương khi kế toán nghỉ dài)
 
-### Điều chỉnh HH thủ công
-- Kế toán tạo "Adjustment request" trong app: loại (thưởng/phạt), lý do, số tiền, kì lương áp dụng
-- CEO duyệt request, adjustment có hiệu lực
-- CEO reject, adjustment huỷ
-- Log đầy đủ cả request và approve/reject vào AuditLog
-- Hiển thị riêng dòng "Điều chỉnh tay" + lý do trên màn HH của NV
-- Không giới hạn số lần, nhưng alert CEO nếu > 3 adjustment/NV/tháng
-- Cap: tổng adjustment/tháng không vượt HH tự động × 2
+### Điều chỉnh HH thủ công (chốt VĐ-4 25/04/2026)
+
+Workflow đơn nguồn:
+- **KT trưởng (Diễm) tạo** adjustment trong app: loại (thưởng/phạt), lý do, số tiền, beneficiary user, kì lương áp dụng
+- **CEO duyệt** request → adjustment có hiệu lực, vào pay slip kì áp dụng
+- **CEO reject** → adjustment huỷ
+- TC không tạo trực tiếp trong app. TC trao đổi với Diễm ngoài app (Zalo/nói tay), Diễm nhập vào app.
+
+Auto Reward/Penalty rule (separate engine):
+- Rule fire tự động (vd: thưởng đạt target tháng)
+- Tạo adjustment pending vào queue CEO
+- CEO duyệt batch (bulk approve hoặc per-record)
+- Không qua tay Diễm
+
+Edit window và clawback:
+- KT trưởng có thể edit/xoá adjustment trong **30 ngày sau payday** (kể cả đã apply lương)
+- Sau 30 ngày: lock cứng, không sửa được
+- Khi sửa adjustment đã apply lương: tạo `CommissionRecord` clawback delta ở kì lương kế tiếp (`source_type = adjustment_clawback`, `clawback_parent_id` link về adjustment cũ). Pay slip kì sau hiển thị dòng "Điều chỉnh kì trước"
+- Adjustment cũ (đã apply) giữ nguyên trong history, không sửa retroactive
+
+Audit và visibility:
+- Log đầy đủ cả request và approve/reject/edit vào AuditLog
+- Hiển thị **transparent** trên màn HH của NV: dòng "Điều chỉnh +/-X VND" + lý do + người tạo + ngày
+- Không giới hạn amount per adjustment, nhưng MỌI adjustment đều phải qua workflow tạo + duyệt
+- Alert CEO nếu > 3 adjustment/NV/tháng (cảnh báo abuse, không block)
+
+Phần phạt (deferred):
+- Rule phạt cụ thể (đi muộn, complaint, vi phạm SOP, tư vấn sai gói, etc.) sẽ discuss ở phase riêng (xem PENDING-ITEMS.md B-12)
+- MVP chỉ implement framework Auto rule engine, không hardcode rule phạt cụ thể
 
 ---
 
@@ -208,13 +253,13 @@ Không role nào có quyền giảm giá trên đơn. Muốn giảm giá phải 
 
 ## 7. Permission matrix
 
-| Role | Xem đơn | Xem KH | Xem HH | Duyệt HH | Xuất Excel | Assign | Tạo voucher | Setting %HH | Approve adjustment |
-|---|---|---|---|---|---|---|---|---|---|
-| Sale/Điều dưỡng | của mình | của mình | của mình | Không | Không | Không | Không | Không | Không |
-| Bác sĩ | của BS đó | Không | của mình | Không | Không | Không | Không | Không | Không |
-| Trưởng ca | toàn PK | toàn PK | toàn PK | Không | Không | Có | Có | Chỉ xem | Không |
-| Kế toán | toàn PK | toàn PK | toàn PK | Có | Có | Không | Không | Không | Không (tạo request) |
-| CEO | toàn PK | toàn PK | toàn PK | Không | Có | Không | Có | Có | Có |
+| Role | Xem đơn | Xem KH | Xem HH | Xem ranking | Duyệt HH | Xuất Excel | Assign | Tạo voucher | Setting %HH | Approve adjustment |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Sale/Điều dưỡng | của mình | của mình | của mình | **chỉ của mình** | Không | Không | Không | Không | Không | Không |
+| Bác sĩ | của BS đó | Không (qua iHOS) | của mình | **chỉ của mình** | Không | Không | Không | Không | Không | Không |
+| Trưởng ca | toàn PK | toàn PK | toàn PK | toàn PK | Không | Không | Có | Có | Chỉ xem | Không |
+| Kế toán | toàn PK | toàn PK | toàn PK | toàn PK | Có | Có | Không | Không | Không | Không (tạo request) |
+| CEO | toàn PK | toàn PK | toàn PK | toàn PK | Không | Có | Không | Có | Có | Có |
 
 Kiến trúc role mở: CEO thêm role mới với permission tuỳ chọn trong Settings.
 
@@ -228,13 +273,21 @@ Kiến trúc role mở: CEO thêm role mới với permission tuỳ chọn trong
 - **Trưởng ca tạo đơn hộ:** có thể chọn assignee khác.
 - **KH cũ quay lại:** NV chăm quay lại tạo đơn = NV đó là assignee. KH tự quay lại website = trưởng ca assign. KH tự quay lại qua chat = người trực tiếp tư vấn assign.
 
-### Trạng thái đơn
+### Trạng thái đơn (chốt v2 25/04/2026, simplified 9→8 states)
 
 Trước khám (quản lý trong app HH):
-- Mới tạo -> Đã xác nhận -> (Dời lịch | Huỷ | No-show)
+- DRAFT (mới tạo) → CONFIRMED (đã xác nhận) → (CANCELLED | NO_SHOW)
 
-Trong/sau khám (sync từ Isoft):
-- Checkin -> Đang khám -> Hoàn thành -> (Refund toàn phần | Refund 1 phần | Điều chỉnh)
+Trong/sau khám (sync từ iHOS):
+- CONFIRMED → IN_PROGRESS (gộp iHOS `order.checkin` + `order.exam_started`) → COMPLETED → (REFUND_FULL | REFUND_PARTIAL)
+
+Lý do gộp CHECKED_IN + IN_EXAM thành IN_PROGRESS: App HH không cần granular giữa 2 sub-state vì cùng cho phép recompute HH khi BS thêm item phát sinh. iHOS vẫn track riêng 2 state, App HH chỉ dùng 1.
+
+NO_SHOW auto-trigger: T+30p sau giờ hẹn nếu chưa checkin.
+
+OrderItem có field `status` (planned/completed/skipped) để handle case khách bỏ về giữa khám:
+- Item completed: tính HH bình thường
+- Item skipped: không tính HH (`skipped_reason`: customer_left/insurance_rejected/other)
 
 ### Reassign
 - Chỉ trước khi đơn được xác nhận
@@ -269,20 +322,38 @@ Trong/sau khám (sync từ Isoft):
 
 ---
 
-## 11. Integration Isoft
+## 11. Integration iHOS
 
 - Mode: realtime webhook 2 chiều
 - [Giả định G4, verify sau]: API doc đầy đủ từ vendor. Anh có kênh liên hệ nhưng **chưa liên hệ được**. Điểm này là **risk số 1** của dự án.
-- Mapping user: App HH user BẮT BUỘC có isoft_user_id khi tạo. Bác sĩ phải có tài khoản App HH trước khi khám.
-- Mỗi bác sĩ chỉ có 1 tài khoản Isoft.
+- Mapping user: App HH user BẮT BUỘC có ihos_user_id khi tạo. Bác sĩ phải có tài khoản App HH trước khi khám.
+- Mỗi bác sĩ chỉ có 1 tài khoản iHOS.
 
-### Event webhook cần (verify với Isoft)
+### Event webhook cần `[CHỜ ISOFT]` (xem PENDING-ITEMS.md I-1, I-2, I-3, I-4)
 - `order.checkin`
 - `order.exam_started` (kèm doctor_id để populate OrderRoleAssignment)
-- `order.completed`
+- `order.completed` (alias `order.exam_finished`)
 - `order.refunded` (full/partial với item_id)
 - `order.cancelled`
 - `order.adjusted` (thêm/xoá OrderItem)
+
+### Payload requirement minimum cho mỗi item trong đơn `[CHỜ ISOFT]`
+```
+{
+  "order_id": "...",
+  "items": [
+    {
+      "service_id": "...",
+      "amount": ...,           // giá bán
+      "cost": ...,             // giá vốn
+      "performed_by_user_id": "...",  // người thực hiện
+      "role": "BS" | "DD" | "KTV"
+    }
+  ]
+}
+```
+
+Nếu iHOS không gửi `performed_by_user_id`, fallback: build manual UI cho TC/lễ tân gán role per item trước khi đơn close (ước tính +3-4 ngày dev).
 
 ### Webhook integrity
 - Mọi webhook có event_id duy nhất, lưu idempotency key
@@ -299,11 +370,12 @@ Các section:
 - Matrix %HH (role × ranking)
 - Ranking (thêm bậc, đặt tên, set %)
 - Role (thêm role, permission)
-- User management (CRUD user, map isoft_user_id)
+- User management (CRUD user, map ihos_user_id)
+- **Shift management** (thêm/sửa/archive ca, gán TC theo phương án J: F + extension hooks)
 - Voucher management
 - Kì lương (ngày deadline, setting)
 - Mục tiêu HH mặc định
-- `expected_total_pct_per_order` (trần soft warning, default 15%)
+- `expected_total_pct_per_order` (trần warning, default 10%, App không enforce)
 
 Audit log: lưu mọi thay đổi, giữ 5 năm.
 
@@ -312,7 +384,7 @@ Hiệu lực: chỉ áp cho đơn tạo SAU thời điểm đổi. Đơn cũ gi�
 ---
 
 ## 13. Thanh toán
-Hoàn toàn trên Isoft. App HH không xử lý thanh toán, không có flow thẻ tín dụng/QR.
+Hoàn toàn trên iHOS. App HH không xử lý thanh toán, không có flow thẻ tín dụng/QR.
 
 ---
 
@@ -324,7 +396,7 @@ Quản lý tại Website. App HH chỉ view và tạo đơn từ dịch vụ. M�
 ## 15. Entity dictionary (rough)
 
 ```
-User: id, name, phone, role_id, ranking_id, isoft_user_id, device_id, 
+User: id, name, phone, role_id, ranking_id, ihos_user_id, device_id, 
       status (active/pending_offboarding/offboarded), offboarding_date, 
       monthly_target, created_at
 
@@ -334,11 +406,19 @@ Ranking: id, name, commission_pct_by_role (JSON), threshold_config,
          quarter_reset (bool), created_at
 
 Service: id, name, price_listed, cost, website_service_id, active
+       
+       Ghi chú: BỎ field recommended_recall_days (chốt 01/05/2026 vòng 16).
+                Recall date không còn theo Service default. App HH chỉ
+                consume recall_due_date từ iHOS (BS y lệnh per case).
 
-Order: id, customer_id, source (web/manual), status,
+Order: id, customer_id, source (web/manual), 
+       status (DRAFT/CONFIRMED/IN_PROGRESS/COMPLETED/CANCELLED/NO_SHOW/REFUND_FULL/REFUND_PARTIAL),
        total_listed, total_paid, insurance_amount, voucher_amount,
        total_cost, net_profit (computed = total_paid - total_cost),
-       isoft_order_id, created_at, confirmed_at, completed_at
+       ihos_order_id, scheduled_exam_at,
+       created_at, confirmed_at, completed_at
+       
+       Ghi chú: scheduled_exam_at = giờ hẹn khám (để schedule reminder T-24h, T-2h, T+30p).
 
 OrderRoleAssignment:
        id, order_id, role_id, user_id,
@@ -350,10 +430,16 @@ OrderRoleAssignment:
                 Tính HH chỉ lấy row active tại thời điểm snapshot.
 
 OrderItem: id, order_id, service_id, price_listed, cost, quantity, 
-           refunded (bool), refunded_amount, doctor_user_id, isoft_item_id
+           status (planned/completed/skipped),
+           skipped_reason (nullable: customer_left/insurance_rejected/other),
+           refunded (bool), refunded_amount, doctor_user_id, ihos_item_id,
+           recall_due_date (nullable, từ iHOS webhook khi BS y lệnh)
        
        Ghi chú: doctor_user_id giữ lại cho mục đích lịch sử và future use,
                 không dùng để tính HH (dùng OrderRoleAssignment).
+                status = skipped: không tính HH (case khách bỏ về giữa khám).
+                recall_due_date: chỉ có khi iHOS gửi qua webhook (BS chỉ định
+                tái khám per case). NULL = không có y lệnh tái khám.
 
 CommissionRecord: id, order_id, role_id, beneficiary_user_id,
                   role_at_time, ranking_at_time, pct_at_time, amount, 
@@ -363,7 +449,17 @@ CommissionRecord: id, order_id, role_id, beneficiary_user_id,
                   clawback_parent_id (nullable, cho record âm clawback)
 
 Customer: id, name, phone, created_from, consent_at, consent_version,
-          first_assigned_by, last_visit_at, status (active/inactive/anonymized)
+          first_assigned_by, primary_assigned_user_id (NV chăm gốc),
+          last_visit_at, last_completed_order_at,
+          next_recall_due_at (computed nullable),
+          recall_status (pending/done/skipped),
+          status (active/inactive/anonymized)
+       
+       Ghi chú: primary_assigned_user_id dùng cho rule "KH cũ quay lại NV chăm gốc".
+                next_recall_due_at = MIN(OrderItem.recall_due_date) của các OrderItem
+                                     có recall_due_date NOT NULL từ iHOS.
+                Nếu không có item nào có recall_due_date → NULL (không recall).
+                (Chốt vòng 16: chỉ consume từ iHOS, không có Service default fallback)
 
 Voucher: id, code, type (total/service/%), amount_or_pct, 
          assigned_to_customer_id, expires_at, used_at, created_by
@@ -376,11 +472,59 @@ InsuranceClaim: id, order_id, expected, actual, status
 
 AdjustmentRequest: id, beneficiary_user_id, type (thưởng/phạt), reason_code,
                    reason_text, amount, salary_cycle_id, status 
-                   (pending/approved/rejected), created_by, 
-                   approved_by, approved_at
+                   (pending/approved/rejected/edited/cancelled), 
+                   source (manual/auto_rule),
+                   auto_rule_id (nullable, link về AutoRule khi source=auto_rule),
+                   created_by, approved_by, approved_at,
+                   edited_at (nullable), edited_by (nullable),
+                   parent_adjustment_id (nullable, link bản gốc nếu là edit)
+       
+       Ghi chú: Edit window 30 ngày sau payday. Sửa adjustment đã apply lương
+                tạo CommissionRecord clawback ở kì lương kế tiếp.
+
+AutoRule: id, name, type (thưởng/phạt), trigger_type 
+          (target_achievement/late_check_in/complaint/...),
+          parameters (JSON, vd {"target_pct": 100, "bonus_pct": 5}),
+          active, created_by, created_at
+       
+       Ghi chú: MVP chỉ implement rule "thưởng đạt target tháng".
+                Phase 2 thêm rule phạt sau khi discuss riêng (xem PENDING-ITEMS B-12).
+
+NotificationLog: id, order_id (nullable), customer_id,
+                 type (reminder_24h/reminder_2h/manual_call/post_exam_thanks/recall),
+                 channel (zalo_oa/sms/manual_call),
+                 scheduled_at, sent_at,
+                 status (scheduled/sent/cancelled/failed),
+                 sent_by_user_id (nullable, NULL nếu auto),
+                 note (nullable, NV ghi feedback cuộc gọi)
+       
+       Ghi chú: Khi đơn CONFIRMED, schedule 4 row (T-24h, T-2h, T+15p, T+30p).
+                Khi đơn IN_PROGRESS/CANCELLED/NO_SHOW: cancel pending reminders.
+                Khi đơn COMPLETED: schedule post_exam_thanks ngay,
+                schedule recall theo Service.recommended_recall_days.
 
 AuditLog: id, entity_type, entity_id, action, actor_id, 
           before (JSON), after (JSON), timestamp
+
+Shift: id, name, start_time, end_time, archived_at
+       
+       Ghi chú: Day-1 NP có 1 row "Cả ngày" 08:00-19:00.
+                Future scale: thêm row cho ca tối, chi nhánh.
+
+ShiftHeadAssignment: id, shift_id, head_user_id (nullable),
+                     effective_from, effective_to (nullable),
+                     set_by_user_id, note,
+                     priority (default 0),
+                     condition (JSON, nullable, ví dụ {"day_of_week": ["mon","tue"]})
+       
+       Ghi chú: Phương án J (F + extension hooks).
+                Day-1 không dùng priority/condition (default value).
+                Future: scheduling theo day-of-week, location, custom rule.
+                Lookup logic: filter active rows (effective_to IS NULL hoặc > now),
+                              filter by condition nếu có,
+                              pick highest priority.
+                Snapshot pattern: mỗi đơn gán TC theo ShiftHeadAssignment active
+                                  tại thời điểm order.created_at, frozen sau xác nhận.
 ```
 
 **Thay đổi so với bản v1:**
@@ -452,7 +596,7 @@ AuditLog: id, entity_type, entity_id, action, actor_id,
 
 ### Màn duyệt HH trên mobile cho kế toán
 - Tổng quan: số đơn, tổng HH, số NV
-- Filter "Đơn vượt trần 15%" để review riêng
+- Filter "Đơn vượt trần 10%" để review riêng (chỉ visual cue, App không enforce)
 - Nút "Xuất Excel (4 file)" gửi email
 - Nút duyệt: "Duyệt toàn bộ kì" hoặc duyệt theo NV hoặc reject từng dòng
 - Sau duyệt: notify NV
@@ -465,7 +609,7 @@ AuditLog: id, entity_type, entity_id, action, actor_id,
 - Top dịch vụ bán chạy
 - Doanh số tuỳ chỉnh theo thời gian
 - Conversion funnel: Mới tạo -> Xác nhận -> Checkin -> Hoàn thành
-- Alert đơn vượt trần 15% net_profit
+- Alert đơn vượt trần 10% net_profit (CEO tự review ngoài Excel, App không auto cap)
 
 ---
 
@@ -497,12 +641,12 @@ Trưởng ca có nút "Force handover" khi NV đột ngột nghỉ/sa thải.
 
 ### Xác nhận đơn
 - NV bấm "Đã xác nhận" 1 chạm, có warning "Không thể quay lại"
-- Tại thời điểm xác nhận: system populate OrderRoleAssignment với 4 row (sale, trưởng ca, kế toán, CEO). Bác sĩ chưa có row (đợi Isoft sync).
+- Tại thời điểm xác nhận: system populate OrderRoleAssignment với 4 row (sale, trưởng ca, kế toán, CEO). Bác sĩ chưa có row (đợi iHOS sync).
 - Số lần gọi và kết quả cuộc gọi NV tự note, trưởng ca kiểm tra khi cần
 - KH không bắt máy: đơn ở state "Mới tạo" cho đến khi NV xác nhận hoặc huỷ thủ công
 
-### Hoàn thành khám (Isoft)
-- Isoft bấm hoàn thành theo từng dịch vụ
+### Hoàn thành khám (iHOS)
+- iHOS bấm hoàn thành theo từng dịch vụ
 - Mỗi dịch vụ có doctor thực hiện -> sync kèm doctor_id -> add row OrderRoleAssignment role=bác_sĩ
 - 1 đơn "hoàn thành toàn bộ" khi tất cả dịch vụ đã hoàn thành
 - KH bỏ về giữa chừng: dịch vụ đã hoàn thành tính doanh thu, dịch vụ chưa làm không tính. Row bác sĩ chỉ thêm cho bác sĩ đã thực hiện thực sự.
@@ -547,8 +691,12 @@ Bỏ: 18 (thanh toán), 26 (sheet chi nhánh). Gộp: 12 vào 08.
 Screens mới đề xuất thêm cho B2:
 - "Duyệt HH cuối tháng" (view khác của 04 cho kế toán)
 - "Bàn giao công việc" (cho NV pending_offboarding)
-- "Request adjustment" (cho kế toán)
-- "Approve adjustment" (cho CEO)
+- "Request adjustment" (cho kế toán/TC)
+- "Approve adjustment" (cho CEO/KT trưởng)
+- "Cấu hình ca làm việc" (Settings cho CEO, gán TC theo phương án J)
+- "Tạo Auto Reward/Penalty rule" (Settings cho CEO, MVP với 3 loại rule cơ bản)
+- **"Customer Follow-up Dashboard"** (cho NV, list khách đến ngày tái khám hôm nay/tuần này)
+- **"Notification Log"** (cho TC + CEO, audit reminder và call follow-up)
 
 ---
 
@@ -558,23 +706,27 @@ Screens mới đề xuất thêm cho B2:
 |---|---|---|
 | G1 | Ngưỡng và công thức lên hạng ranking | Trước B5 spec screen 06 |
 | G2 | Onboarding có quick tour không | Trước B5 spec screen 21 |
-| G4 | API doc đầy đủ từ vendor Isoft | Blocker trước B6 triển khai. **Risk số 1.** |
+| G4 | API doc đầy đủ từ vendor iHOS | Blocker trước B6 triển khai. **Risk số 1.** |
 | G5 | Số lượng trưởng ca tương lai | Theo dõi scale |
 | G6 | Combo/liệu trình dịch vụ | Phase 2 |
-| G7 | Nếu BH thành nguồn doanh thu lớn, kích hoạt HH phần BH | Theo dõi |
+| G7 | ~~Nếu BH thành nguồn doanh thu lớn, kích hoạt HH phần BH~~ **CHỐT VĐ-9**: Option B Out-of-Pocket Only. HH chỉ tính trên `total_paid` (out-of-pocket). | Đã chốt 25/04/2026 |
 | G8 | Concurrent user scale | Theo dõi sau 1 năm |
-| G9 | Isoft có gửi refund chi tiết theo item không | Verify khi có API doc |
+| G9 | iHOS có gửi refund chi tiết theo item không | Verify khi có API doc |
 
 ---
 
 ## 24. Red flag chiến lược đã quyết
 
 1. **Trưởng ca HH toàn doanh số theo thời điểm tạo đơn (TC-1):** ca sau hỗ trợ thì tự chủ động, không ăn HH đơn cũ
-2. **Isoft dependency:** chưa liên hệ vendor được, **Gate 0 phải giải quyết trước khi start code** (note vào B6)
+2. **iHOS dependency:** chưa liên hệ vendor được, **Gate 0 phải giải quyết trước khi start code** (note vào B6, xem PENDING-ITEMS.md A)
 3. **Ranking reset quý:** giữ reset cứng
 4. **Kế toán single approval:** Option A (không backup)
 5. **Công thức HH generalized qua OrderRoleAssignment:** thay cho hardcode field trên Order/OrderItem. Extensible cho tương lai
-6. **Trần 15% là soft warning:** không hard cap, CEO duyệt case-by-case
+6. **Trần 10% (giảm từ 15%) là cue cảnh báo:** App KHÔNG enforce, CEO tự tính ngoài Excel khi review trước chốt lương
+7. **Shift architecture phương án J (F + extension hooks):** Day-1 NP có 1 shift "Cả ngày" 08:00-19:00, TC = Hà. Future-ready cho multi-shift, day-of-week, multi-location qua schema additive (xem ADR-001)
+8. **BH commission Option B Out-of-Pocket Only:** HH chỉ tính trên phần khách trả ra túi, không tính phần BH chi trả (xem section 4)
+9. ~~**Voucher Option A NP chịu cost**~~ **Voucher trừ khỏi base HH (vòng 13 revert vòng 10):** formula B1 vòng 9 chuẩn, voucher trừ như mọi chi phí. HH NV giảm khi đơn có voucher (xem section 4)
+10. **KT và CEO không có HH theo đơn (vòng 13):** OrderRoleAssignment chỉ populate Sale + TC. BS thêm khi exam_started. Diễm và Nguyên ăn lương cứng / lợi nhuận, không HH per đơn.
 
 ---
 
@@ -588,12 +740,19 @@ Screens mới đề xuất thêm cho B2:
 | 7 | Chốt công thức v1 per-item với effective_price |
 | 8 | CEO đổi hướng sang v2 per-order (HH trên toàn đơn) |
 | 9 | Chốt công thức v3 FINAL: generalized qua OrderRoleAssignment, mọi role cùng formula, bác sĩ multi user cùng role, trưởng ca TC-1, role không có user = không chi HH, trần 15% soft warning |
+| 10 (25/04/2026) | Update từ B2.1 audit Group A: Cap 15% → 10% (App không enforce, VĐ-5), Shift architecture phương án J (VĐ-3, ADR-001), BH Option B Out-of-Pocket (VĐ-9), Voucher Option A NP chịu cost (VĐ-8). Thêm entity Shift, ShiftHeadAssignment. VĐ-10 phát sinh dịch vụ thuộc scope iHOS, App HH chỉ consume webhook payload (xem PENDING-ITEMS.md I-1) |
+| 11 (25/04/2026) | Đóng VĐ-4: Adjustment workflow KT trưởng tạo + CEO duyệt (single source single approver), edit window 30 ngày + clawback kì sau, transparent hiển thị cho NV. Auto Reward rule "thưởng target tháng" trong MVP. Phần phạt defer phase riêng. Thêm entity AutoRule, mở rộng AdjustmentRequest. |
+| 12 (25/04/2026) | System-design audit Order lifecycle + customer engagement: simplify state machine 9→8 states (gộp CHECKED_IN+IN_EXAM thành IN_PROGRESS), thêm OrderItem.status (planned/completed/skipped) cho khách bỏ về giữa khám, Reminder Workflow (T-24h Zalo, T-2h Zalo, T+15p NV gọi, T+30p auto NO_SHOW), Post-Exam Customer Follow-up module (Zalo OA cảm ơn + recall theo Service.recommended_recall_days). Thêm entity NotificationLog, mở rộng Customer + Service. Thêm 2 screens: Customer Follow-up Dashboard + Notification Log. |
+| 13 (28/04/2026) | B2.3 audit findings resolve: (1) REVERT chốt vòng 10 VĐ-8 Option A, voucher trừ khỏi base HH như formula B1 vòng 9 chuẩn. (2) Bỏ KT và CEO khỏi HH role - OrderRoleAssignment chỉ populate Sale + TC + BS. Diễm ăn lương cứng, Nguyên ăn lợi nhuận. (3) Clarify BS row: thêm khi exam_started, KHÔNG xoá nếu item skipped sau đó (per-doctor model, không phải per-item). Recalc ví dụ section 3.7. |
+| 14 (01/05/2026) | Pre-B5: (1) ĐD-Sale = 1 role duy nhất, không tách (thêm note section 3.3). (2) Permission matrix update: thêm cột "Xem ranking", NV/BS chỉ thấy ranking của mình (không leaderboard người khác). BS xem KH qua iHOS, không qua app HH. TC giữ "toàn PK" cho mọi mục. (3) Reframe cap warning intent: awareness signal cho process improvement, không cut HH retroactive. |
+| 15 (01/05/2026) | PDF anh Nguyên review: defer toàn bộ PDF features (penalty, awards, floor, probation, review parser) sang Phase 2 hoặc later. Lý do: NP scale 5 NV, manual workaround qua MS-9 Adjustment đã đủ. Foundation B1-B5 hiện tại 50-60% match PDF intent là OK. |
+| 16 (01/05/2026) | Aggregated questions resolved: (1) A-1: Bonus formula = HH gốc × bonus_pct × overshoot. (2) A-2: Giữ M0-M3 + L1-L3 (không rename). (3) A-3: Recall chỉ từ iHOS webhook (BS y lệnh), bỏ Service.recommended_recall_days fallback. (4) B-3: Permission role-based config phase 2 (Sapo-style). (5) B-4: Bulk-all approve có safety mechanism. (6) C-1.1, C-1.4: NV không thấy AUTO_PENDING, không thấy %cap. (7) C-2: Diễm thấy realtime total HH cycle. (8) C-3.1, C-3.2: Advanced shift hidden default, archive only. |
 
 ---
 
 ## Kết thúc B1
 
-B1 đã FINAL. Các điểm mở (G1-G9) đều không cản việc bắt đầu B2. Risk số 1 (G4 Isoft API) là blocker trước B6, không cản B2-B5.
+B1 đã FINAL. Các điểm mở (G1-G9) đều không cản việc bắt đầu B2. Risk số 1 (G4 iHOS API) là blocker trước B6, không cản B2-B5.
 
 **B2 sẽ là: Dựng kịch bản vận hành thực tế**
 

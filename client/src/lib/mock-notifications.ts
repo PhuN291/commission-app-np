@@ -56,7 +56,7 @@ export const mockNotifications: Notification[] = [
     content: "Chúc mừng! Bạn đã đạt badge 'Doanh thu 30tr'",
     time: "1 giờ trước",
     read: false,
-    href: "/performance",
+    href: "/ranking",
     icon: Award,
   },
   {
@@ -106,7 +106,7 @@ export const mockNotifications: Notification[] = [
     content: "Bạn đã lên hạng Bạc! Hoa hồng tăng lên 5%",
     time: "2 ngày trước",
     read: true,
-    href: "/performance",
+    href: "/ranking",
     icon: Award,
   },
   {

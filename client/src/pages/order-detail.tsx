@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, authFetch, getCurrentUserId } from "@/lib/queryClient";
 import { useLocation, useRoute } from "wouter";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -13,12 +14,20 @@ import {
   Clock,
   EyeOff,
   FileText,
+  History,
   LogIn,
   Mail,
   MapPin,
   MoreHorizontal,
   Phone,
   Play,
+  Plus,
+  Receipt,
+  RefreshCw,
+  Stethoscope,
+  StickyNote,
+  User,
+  UserCog,
   UserX,
   X,
 } from "lucide-react";
@@ -71,6 +80,51 @@ import {
   type VisitStatusCode,
 } from "@shared/status";
 import type { Customer, Order, StatusLog } from "@shared/schema";
+import {
+  CR_STATUS_LABEL,
+  ROLE_LABEL,
+  SKIPPED_REASON_LABEL,
+  canKhieuNai,
+  hoursRemainingKhieuNai,
+  type CRStatus,
+  type OrderItemStatus,
+  type SkippedReason,
+  type UserRole,
+} from "@shared/types";
+import { Textarea } from "@/components/ui/textarea";
+
+// ─────────────────────────────────────────────────────────────────
+// Extended types from /api/orders/:id
+// ─────────────────────────────────────────────────────────────────
+
+type APIOrderItem = {
+  id: string;
+  orderId: number;
+  serviceName: string;
+  price: number;
+  cost: number;
+  status: OrderItemStatus;
+  skippedReason: SkippedReason | null;
+  refundedAmount: number;
+};
+
+type APICommissionRecord = {
+  id: string;
+  orderId: number;
+  role: "sale" | "tc" | "doctor";
+  userId: number;
+  amount: number;
+  status: CRStatus;
+  createdAt: number;
+  rejectedAt: number | null;
+  rejectedReason: string | null;
+};
+
+type OrderWithDetails = Order & {
+  items: APIOrderItem[];
+  crs: APICommissionRecord[];
+};
+
 
 function fmtVND(n: number) {
   return new Intl.NumberFormat("vi-VN").format(n) + "₫";
@@ -112,36 +166,60 @@ export default function OrderDetail() {
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
   const [actionsSheetOpen, setActionsSheetOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
 
-  const { data: order, isLoading } = useQuery<Order>({
-    queryKey: [`/api/orders/${orderId}`],
+  // Permission + identity (B5-3 Section 2 + R-9-1)
+  const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
+  const currentUserId = parseInt(
+    (typeof window !== "undefined" ? localStorage.getItem("np_user_id") : null) ?? "0",
+    10,
+  );
+  const canRejectCR = role === "kt";
+
+  // Per-section edit state — null = không edit, key xác định section nào đang edit.
+
+  // Reject CR dialog state (KT only)
+  const [rejectDialog, setRejectDialog] = useState<{ open: boolean; cr: APICommissionRecord | null; reason: string }>({
+    open: false,
+    cr: null,
+    reason: "",
+  });
+
+  // Khiếu nại dialog state (NV/BS only)
+  const [complaintDialog, setComplaintDialog] = useState<{ open: boolean; cr: APICommissionRecord | null; content: string }>({
+    open: false,
+    cr: null,
+    content: "",
+  });
+
+  // Namespace queryKey theo userId để tránh React Query cache leak khi switch user
+  // (staleTime: Infinity + key shared across users → user B đọc cache user A).
+  const uid = getCurrentUserId();
+  const { data: order, isLoading } = useQuery<OrderWithDetails>({
+    queryKey: [`/api/orders/${orderId}`, uid],
     enabled: orderId > 0,
   });
-  const { data: allOrders = [] } = useQuery<Order[]>({ queryKey: ["/api/orders"] });
-  const { data: allCustomers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
+  const { data: allOrders = [] } = useQuery<Order[]>({ queryKey: ["/api/orders", uid] });
+  const { data: allCustomers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers", uid] });
   const { data: statusLogs = [] } = useQuery<StatusLog[]>({
-    queryKey: [`/api/orders/${orderId}/status-logs`],
+    queryKey: [`/api/orders/${orderId}/status-logs`, uid],
     enabled: orderId > 0,
   });
   const { data: assignee } = useQuery<{ id: number; name: string; avatar: string | null; role: string }>({
-    queryKey: [`/api/users/${order?.userId}`],
+    queryKey: [`/api/users/${order?.userId}`, uid],
     enabled: !!order?.userId,
   });
 
   const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
-    queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/status-logs`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`, uid] });
+    queryClient.invalidateQueries({ queryKey: ["/api/orders", uid] });
+    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/status-logs`, uid] });
   };
 
   const updateAppointmentStatus = useMutation({
     mutationFn: async ({ status, note }: { status: string; note?: string }) => {
-      const res = await fetch(`/api/orders/${orderId}/appointment-status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, note }),
-      });
-      if (!res.ok) throw new Error("Failed");
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/appointment-status`, { status, note });
       return res.json();
     },
     onSuccess: () => {
@@ -155,12 +233,7 @@ export default function OrderDetail() {
 
   const updateVisitStatus = useMutation({
     mutationFn: async ({ status, note }: { status: string; note?: string }) => {
-      const res = await fetch(`/api/orders/${orderId}/visit-status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, note }),
-      });
-      if (!res.ok) throw new Error("Failed");
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/visit-status`, { status, note });
       return res.json();
     },
     onSuccess: () => {
@@ -172,14 +245,24 @@ export default function OrderDetail() {
     },
   });
 
+  const updateNotes = useMutation({
+    mutationFn: async (notes: string) => {
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/notes`, { notes });
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateAll();
+      setEditingNote(false);
+      toast({ title: "Đã lưu ghi chú" });
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không lưu được ghi chú", variant: "destructive" });
+    },
+  });
+
   const rescheduleOrder = useMutation({
     mutationFn: async ({ appointmentDate, appointmentTime }: { appointmentDate: string; appointmentTime: string }) => {
-      const res = await fetch(`/api/orders/${orderId}/reschedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointmentDate, appointmentTime }),
-      });
-      if (!res.ok) throw new Error("Failed");
+      const res = await apiRequest("POST", `/api/orders/${orderId}/reschedule`, { appointmentDate, appointmentTime });
       return res.json();
     },
     onSuccess: (data) => {
@@ -190,6 +273,54 @@ export default function OrderDetail() {
     },
     onError: () => {
       toast({ title: "Lỗi", description: "Không thể dời lịch", variant: "destructive" });
+    },
+  });
+
+  // Reject CR — KT only
+  const rejectCRMutation = useMutation({
+    mutationFn: async (input: { crId: string; reason: string }) => {
+      const res = await authFetch(`/api/orders/${orderId}/cr/${input.crId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason: input.reason }),
+      });
+      if (!res.ok) throw await res.json().catch(() => ({}));
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Đã từ chối hoa hồng" });
+      invalidateAll();
+      setRejectDialog({ open: false, cr: null, reason: "" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Lỗi", description: err?.error || "Không thể từ chối", variant: "destructive" });
+    },
+  });
+
+  // Khiếu nại CR — Sale/Doctor + ownership + 3-day window
+  const complaintMutation = useMutation({
+    mutationFn: async (input: { crId: string; content: string }) => {
+      const res = await authFetch(`/api/orders/${orderId}/cr/${input.crId}/complaint`, {
+        method: "POST",
+        body: JSON.stringify({ content: input.content }),
+      });
+      if (!res.ok) throw await res.json().catch(() => ({}));
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Đã gửi khiếu nại", description: "Kế toán sẽ xem lại trong 1-2 ngày." });
+      invalidateAll();
+      setComplaintDialog({ open: false, cr: null, content: "" });
+    },
+    onError: (err: any) => {
+      const msg =
+        err?.error === "ownership"
+          ? "Chỉ có thể khiếu nại hoa hồng của mình"
+          : err?.error === "window_expired"
+            ? "Đã quá hạn khiếu nại (3 ngày)"
+            : err?.error === "invalid_state"
+              ? "Khoản hoa hồng không ở trạng thái cho phép"
+              : "Không thể gửi khiếu nại";
+      toast({ title: "Lỗi", description: msg, variant: "destructive" });
     },
   });
 
@@ -252,6 +383,7 @@ export default function OrderDetail() {
   const visitStatus = order.visitStatus as VisitStatusCode | null;
   const appointmentButtons = APPOINTMENT_BUTTONS[appointmentStatus] || [];
   const visitButtons = visitStatus ? VISIT_BUTTONS[visitStatus] || [] : [];
+
   const currentIndex = allOrders.findIndex((o) => o.id === orderId);
   const prevOrder = currentIndex > 0 ? allOrders[currentIndex - 1] : null;
   const nextOrder = currentIndex < allOrders.length - 1 ? allOrders[currentIndex + 1] : null;
@@ -303,7 +435,14 @@ export default function OrderDetail() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
                 Tổng đơn
               </div>
-              <div className="mt-0.5 text-[28px] font-extrabold leading-none tracking-[-0.8px] text-np-ink tabular-nums">
+              <div
+                className={
+                  "mt-0.5 text-[28px] font-extrabold leading-none tracking-[-0.8px] tabular-nums " +
+                  (order.refundType === "full"
+                    ? "text-np-text-muted line-through"
+                    : "text-np-ink")
+                }
+              >
                 {fmtVND(order.totalPrice)}
               </div>
             </div>
@@ -320,15 +459,31 @@ export default function OrderDetail() {
             appointmentStatus={order.appointmentStatus}
             visitStatus={order.visitStatus}
           />
-          <div className="mt-1.5 text-[11px] font-medium text-np-text-muted">
-            Tỉ lệ hoa hồng: {ratePct}%
-          </div>
+          {/* %cap intentionally hidden per task spec (B5-3 Section 2). */}
         </div>
+
+        {/* Refund banner (B5-3 Section 2.10) */}
+        {order.refundType !== "none" && (
+          <div className="mx-4 mb-3 mt-1 rounded-np-card border border-np-danger-bg bg-np-danger-bg/30 p-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-extrabold uppercase tracking-[0.4px] text-np-danger">
+                {order.refundType === "full"
+                  ? "ĐÃ HOÀN TIỀN TOÀN PHẦN"
+                  : `Đã hoàn tiền ${fmtVND(order.refundAmount)}`}
+              </span>
+            </div>
+            {order.refundReason && (
+              <div className="mt-1 text-[12px] font-medium text-np-text-sub">
+                Lý do: {order.refundReason}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Phụ trách */}
         {orderTeam.length > 0 && (
           <>
-            <SectionTitle>Phụ trách</SectionTitle>
+            <SectionTitle icon={UserCog}>Phụ trách</SectionTitle>
             <Card className="overflow-hidden p-0">
               {orderTeam.map((m, i) => (
                 <div
@@ -350,12 +505,12 @@ export default function OrderDetail() {
         )}
 
         {/* Khách hàng */}
-        <SectionTitle>Khách hàng</SectionTitle>
+        <SectionTitle icon={User}>Khách hàng</SectionTitle>
         <Card className="overflow-hidden p-0">
           <Row
             leading={<Avatar name={order.patientName} size={44} />}
             title={order.patientName}
-            subtitle={`Mã KH: KH-${String(order.id).padStart(4, "0")}`}
+            subtitle={`Mã khách hàng: ${String(order.id).padStart(4, "0")}`}
             trailing={matchedCustomer ? <Chev /> : undefined}
             onClick={matchedCustomer ? () => navigate(`/customers/${matchedCustomer.id}`) : undefined}
           />
@@ -364,46 +519,69 @@ export default function OrderDetail() {
           {order.examType && <InfoRow icon={MapPin} label="Hình thức" value={order.examType} last />}
         </Card>
 
-        {/* Dịch vụ */}
-        <SectionTitle>Dịch vụ</SectionTitle>
+        {/* Dịch vụ — multi-item với mark UI cho BS/KT/CEO */}
+        <SectionTitle icon={Stethoscope}>Dịch vụ ({order.items?.length ?? 1})</SectionTitle>
         <Card className="overflow-hidden p-0">
-          <div className="border-b border-np-surface-pressed px-4 py-3.5">
-            <div className="flex items-start justify-between gap-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-bold text-np-ink">{order.serviceName}</div>
-                <div className="mt-1 text-[12px] font-medium text-np-text-muted">
-                  {order.serviceCode}
-                  {order.serviceCategory ? ` · ${order.serviceCategory}` : ""}
-                </div>
-                <div className="mt-1.5 text-[12px] font-medium text-np-text-sub">
-                  {fmtVND(order.unitPrice)} × {order.quantity}
-                </div>
-              </div>
-              <div className="flex-shrink-0 text-[14px] font-bold text-np-ink tabular-nums">
-                {fmtVND(order.totalPrice)}
-              </div>
-            </div>
-          </div>
+          {(order.items ?? []).map((item, i) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              isFullRefund={order.refundType === "full"}
+              last={i === (order.items?.length ?? 1) - 1}
+            />
+          ))}
+
+          {/* Tổng cộng */}
           <div className="flex flex-col gap-1.5 px-4 py-3">
             <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
               <span>Tạm tính</span>
-              <span className="tabular-nums">{fmtVND(order.totalPrice)}</span>
+              <span className={"tabular-nums " + (order.refundType === "full" ? "line-through opacity-60" : "")}>
+                {fmtVND(order.totalPrice)}
+              </span>
             </div>
-            <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
-              <span>Giảm giá</span>
-              <span className="tabular-nums">0₫</span>
-            </div>
+            {order.refundType === "partial" && (
+              <div className="flex justify-between text-[13px] font-medium text-np-danger">
+                <span>Hoàn tiền</span>
+                <span className="tabular-nums">-{fmtVND(order.refundAmount)}</span>
+              </div>
+            )}
             <div className="mt-1 flex justify-between border-t border-np-border pt-2 text-[15px] font-extrabold text-np-ink">
               <span>Tổng cộng</span>
-              <span className="tabular-nums">{fmtVND(order.totalPrice)}</span>
+              <span
+                className={
+                  "tabular-nums " + (order.refundType === "full" ? "line-through opacity-60" : "")
+                }
+              >
+                {fmtVND(order.totalPrice - (order.refundType === "partial" ? order.refundAmount : 0))}
+              </span>
             </div>
           </div>
         </Card>
 
+        {/* Bảng kê hoa hồng — CR per role với reject (KT) + khiếu nại (NV) */}
+        {order.crs && order.crs.length > 0 && (
+          <>
+            <SectionTitle icon={Receipt}>Bảng kê hoa hồng</SectionTitle>
+            <Card className="overflow-hidden p-0">
+              {order.crs.map((cr, i) => (
+                <CRRow
+                  key={cr.id}
+                  cr={cr}
+                  currentUserId={currentUserId}
+                  canReject={canRejectCR}
+                  onReject={() => setRejectDialog({ open: true, cr, reason: "" })}
+                  onComplaint={() => setComplaintDialog({ open: true, cr, content: "" })}
+                  last={i === order.crs.length - 1}
+                />
+              ))}
+            </Card>
+          </>
+        )}
+
         {/* Lịch hẹn — chỉ hiện khi có ngày hoặc giờ hẹn */}
         {(order.appointmentDate || order.appointmentTime) && (
           <>
-            <SectionTitle>Lịch hẹn</SectionTitle>
+            <SectionTitle icon={Calendar}>Lịch hẹn</SectionTitle>
             <Card className="overflow-hidden p-0">
               {order.appointmentDate && (
                 <InfoRow
@@ -423,72 +601,46 @@ export default function OrderDetail() {
         {/* Lịch sử trạng thái */}
         {statusLogs.length > 0 && (
           <>
-            <SectionTitle>Lịch sử trạng thái</SectionTitle>
+            <SectionTitle icon={History}>Lịch sử trạng thái</SectionTitle>
             <Card className="p-4">
-              <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-px before:bg-np-border">
-                {statusLogs.map((log, idx) => {
+              <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[17px] before:top-2 before:w-px before:bg-np-border">
+                {statusLogs.map((log) => {
                   const isAppt = log.tier === "appointment";
-                  const isLatest = idx === statusLogs.length - 1;
                   const fromInfo = isAppt
                     ? APPOINTMENT_STATUSES[log.fromStatus as AppointmentStatusCode]
                     : VISIT_STATUSES[log.fromStatus as VisitStatusCode];
                   const toInfo = isAppt
                     ? APPOINTMENT_STATUSES[log.toStatus as AppointmentStatusCode]
                     : VISIT_STATUSES[log.toStatus as VisitStatusCode];
-                  const dotColor = isAppt ? "border-np-brand-ink" : "border-[#1e40af]";
-                  const fillColor = isAppt ? "bg-np-brand-ink" : "bg-[#1e40af]";
                   return (
-                    <div key={log.id} className="relative pl-6">
-                      {/* Marker */}
-                      {isLatest ? (
-                        <span className="absolute left-0 top-1 z-10 flex h-4 w-4 items-center justify-center">
-                          <span
-                            className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${fillColor}`}
-                          />
-                          <span
-                            className={`relative inline-flex h-3 w-3 rounded-full ${fillColor}`}
-                          />
-                        </span>
-                      ) : (
-                        <div
-                          className={`absolute left-0 top-1 z-10 h-4 w-4 rounded-full border-2 bg-white ${dotColor}`}
-                        />
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`text-[11px] ${
-                            isLatest ? "font-bold text-np-ink" : "text-np-text-muted"
-                          }`}
-                        >
-                          {log.timestamp}
-                        </span>
-                        <span className="rounded-np-badge border border-np-border px-1.5 py-0 text-[9px] font-normal text-np-text-sub">
-                          {isAppt ? "Lịch hẹn" : "Khám"}
-                        </span>
+                    <div key={log.id} className="relative min-h-[36px] pl-10">
+                      <div className="absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-np-border bg-white text-np-text-sub">
+                        <RefreshCw size={14} strokeWidth={2.25} />
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        {fromInfo && (
-                          <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.fromStatus)}>
-                            {fromInfo.label}
-                          </NPBadge>
-                        )}
-                        <span className="text-[10px] text-np-text-muted">→</span>
-                        {toInfo && (
-                          <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.toStatus)}>
-                            {toInfo.label}
-                          </NPBadge>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[12px] font-bold text-np-ink">
+                            {isAppt ? "Cập nhật lịch hẹn" : "Cập nhật khám"}
+                          </span>
+                          <span className="text-[11px] text-np-text-muted">{log.timestamp}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {fromInfo && (
+                            <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.fromStatus)}>
+                              {fromInfo.label}
+                            </NPBadge>
+                          )}
+                          <span className="text-[10px] text-np-text-muted">→</span>
+                          {toInfo && (
+                            <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.toStatus)}>
+                              {toInfo.label}
+                            </NPBadge>
+                          )}
+                        </div>
+                        {log.note && (
+                          <p className="text-[13px] leading-relaxed text-np-text-sub">{log.note}</p>
                         )}
                       </div>
-                      {log.note && (
-                        <p
-                          className={`mt-1 text-[12px] ${
-                            isLatest ? "font-medium text-np-ink" : "text-np-text-sub"
-                          }`}
-                        >
-                          {log.note}
-                        </p>
-                      )}
                     </div>
                   );
                 })}
@@ -500,7 +652,7 @@ export default function OrderDetail() {
         {/* Hóa đơn VAT */}
         {(order.vatCompanyName || order.vatTaxCode) && (
           <>
-            <SectionTitle>Hóa đơn VAT</SectionTitle>
+            <SectionTitle icon={FileText}>Hóa đơn VAT</SectionTitle>
             <Card className="space-y-2.5 p-4">
               {order.vatCompanyName && <KeyVal label="Tên công ty" value={order.vatCompanyName} />}
               {order.vatTaxCode && <KeyVal label="Mã số thuế" value={order.vatTaxCode} />}
@@ -510,18 +662,69 @@ export default function OrderDetail() {
           </>
         )}
 
-        {/* Ghi chú */}
-        {order.notes && (
-          <>
-            <SectionTitle>Ghi chú</SectionTitle>
-            <Card className="p-4">
-              <p className="flex items-start gap-2 text-[13px] text-np-text-sub">
-                <FileText size={14} strokeWidth={2.25} className="mt-0.5 flex-shrink-0 text-np-text-muted" />
-                {order.notes}
-              </p>
-            </Card>
-          </>
-        )}
+        {/* Ghi chú — đọc + sửa + lưu */}
+        <SectionTitle
+          icon={StickyNote}
+          action={
+            !editingNote && order.notes ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setNoteDraft(order.notes ?? "");
+                  setEditingNote(true);
+                }}
+                className="text-[12px] font-semibold text-np-link hover:underline"
+              >
+                Sửa
+              </button>
+            ) : undefined
+          }
+        >
+          Ghi chú
+        </SectionTitle>
+        <Card className="p-4">
+          {editingNote ? (
+            <div className="space-y-3">
+              <Textarea
+                autoFocus
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Nhập ghi chú cho đơn..."
+                className="h-24 resize-none"
+              />
+              <div className="flex items-center gap-2">
+                <NPButton
+                  size="sm"
+                  tone="primary"
+                  disabled={updateNotes.isPending || noteDraft.trim() === (order.notes ?? "").trim()}
+                  onClick={() => updateNotes.mutate(noteDraft.trim())}
+                >
+                  {updateNotes.isPending ? "Đang lưu..." : "Lưu"}
+                </NPButton>
+                <NPButton size="sm" tone="ghost" onClick={() => setEditingNote(false)}>
+                  Hủy
+                </NPButton>
+              </div>
+            </div>
+          ) : order.notes ? (
+            <p className="flex items-start gap-2 text-[13px] text-np-text-sub">
+              <FileText size={14} strokeWidth={2.25} className="mt-0.5 flex-shrink-0 text-np-text-muted" />
+              {order.notes}
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setNoteDraft("");
+                setEditingNote(true);
+              }}
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-np-link hover:underline"
+            >
+              <Plus size={15} strokeWidth={2.25} />
+              Thêm ghi chú
+            </button>
+          )}
+        </Card>
 
         {/* Spacer để content cuối không bị che bởi action bar absolute */}
         {(appointmentButtons.length > 0 || visitButtons.length > 0) && <div className="h-[88px]" />}
@@ -734,7 +937,225 @@ export default function OrderDetail() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Reject CR dialog (KT only) */}
+      <Dialog
+        open={rejectDialog.open}
+        onOpenChange={(open) => setRejectDialog((p) => ({ ...p, open }))}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Từ chối hoa hồng</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-[13px] text-np-text-sub">
+              Hoa hồng {rejectDialog.cr ? ROLE_LABEL[rejectDialog.cr.role as UserRole] : ""}{" "}
+              ·{" "}
+              <span className="font-bold text-np-ink">
+                {rejectDialog.cr ? fmtVND(rejectDialog.cr.amount) : ""}
+              </span>
+            </p>
+            <div>
+              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">
+                Lý do từ chối
+              </label>
+              <Textarea
+                placeholder="VD: Số đơn không khớp với số liệu hệ thống..."
+                value={rejectDialog.reason}
+                onChange={(e) => setRejectDialog((p) => ({ ...p, reason: e.target.value }))}
+              />
+            </div>
+            <p className="text-[11px] leading-relaxed text-np-text-muted">
+              Nhân viên sẽ được phép khiếu nại trong vòng 3 ngày sau khi bị từ chối.
+            </p>
+          </div>
+          <DialogFooter>
+            <NPButton tone="ghost" onClick={() => setRejectDialog({ open: false, cr: null, reason: "" })}>
+              Hủy
+            </NPButton>
+            <NPButton
+              tone="dark"
+              disabled={!rejectDialog.reason || rejectDialog.reason.length < 2 || rejectCRMutation.isPending}
+              onClick={() =>
+                rejectDialog.cr &&
+                rejectCRMutation.mutate({ crId: rejectDialog.cr.id, reason: rejectDialog.reason })
+              }
+            >
+              {rejectCRMutation.isPending ? "Đang xử lý..." : "Xác nhận từ chối"}
+            </NPButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Khiếu nại dialog (NV/BS owner only, 3-day window) */}
+      <Dialog
+        open={complaintDialog.open}
+        onOpenChange={(open) => setComplaintDialog((p) => ({ ...p, open }))}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Khiếu nại hoa hồng</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {complaintDialog.cr && complaintDialog.cr.rejectedReason && (
+              <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3 text-[12px] text-np-text-sub">
+                <div className="font-bold text-np-text-sub">Lý do từ chối:</div>
+                <div className="mt-0.5 text-np-ink">{complaintDialog.cr.rejectedReason}</div>
+              </div>
+            )}
+            <div>
+              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">
+                Nội dung khiếu nại
+              </label>
+              <Textarea
+                placeholder="Trình bày lý do khiếu nại để kế toán xem lại..."
+                value={complaintDialog.content}
+                onChange={(e) => setComplaintDialog((p) => ({ ...p, content: e.target.value }))}
+              />
+            </div>
+            <p className="text-[11px] leading-relaxed text-np-text-muted">
+              Khiếu nại trong vòng 3 ngày sau khi hoa hồng bị từ chối. Kế toán sẽ xem lại trong 1-2 ngày.
+            </p>
+          </div>
+          <DialogFooter>
+            <NPButton tone="ghost" onClick={() => setComplaintDialog({ open: false, cr: null, content: "" })}>
+              Hủy
+            </NPButton>
+            <NPButton
+              tone="primary"
+              disabled={!complaintDialog.content || complaintDialog.content.length < 2 || complaintMutation.isPending}
+              onClick={() =>
+                complaintDialog.cr &&
+                complaintMutation.mutate({
+                  crId: complaintDialog.cr.id,
+                  content: complaintDialog.content,
+                })
+              }
+            >
+              {complaintMutation.isPending ? "Đang gửi..." : "Gửi khiếu nại"}
+            </NPButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Screen>
+  );
+}
+
+function ItemRow({
+  item,
+  isFullRefund,
+  last,
+}: {
+  item: APIOrderItem;
+  isFullRefund: boolean;
+  last?: boolean;
+}) {
+  // Status display-only — populate qua iHOS webhook (Phase 2). KHÔNG có manual mark
+  // ở app HH vì status là trạng thái khám thực tế, không phải data entry user-side.
+  const isStruck = item.status === "skipped" || isFullRefund;
+  return (
+    <div
+      className={
+        "px-4 py-3.5" + (last ? "" : " border-b border-np-surface-pressed")
+      }
+    >
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="min-w-0 flex-1">
+          <div className={"text-[14px] font-bold " + (isStruck ? "text-np-text-muted line-through" : "text-np-ink")}>
+            {item.serviceName}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {item.status === "completed" && <NPBadge tone="success">Hoàn thành</NPBadge>}
+            {item.status === "skipped" && (
+              <NPBadge tone="critical">
+                Bỏ qua{item.skippedReason ? ` · ${SKIPPED_REASON_LABEL[item.skippedReason]}` : ""}
+              </NPBadge>
+            )}
+            {item.status === "planned" && <NPBadge tone="attention">Chưa thực hiện</NPBadge>}
+          </div>
+        </div>
+        <div className={"flex-shrink-0 text-[14px] font-bold tabular-nums " + (isStruck ? "text-np-text-muted line-through" : "text-np-ink")}>
+          {fmtVND(item.price)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CRRow({
+  cr,
+  currentUserId,
+  canReject,
+  onReject,
+  onComplaint,
+  last,
+}: {
+  cr: APICommissionRecord;
+  currentUserId: number;
+  canReject: boolean;
+  onReject: () => void;
+  onComplaint: () => void;
+  last?: boolean;
+}) {
+  const isOwner = cr.userId === currentUserId;
+  const showKhieuNai = isOwner && cr.status === "TU_CHOI";
+  const eligible = canKhieuNai({ status: cr.status, rejectedAt: cr.rejectedAt });
+  const hoursLeft = hoursRemainingKhieuNai(cr.rejectedAt);
+  const showReject = canReject && cr.status === "CHO_DUYET";
+
+  const statusTone =
+    cr.status === "DUOC_DUYET"
+      ? "success"
+      : cr.status === "TU_CHOI"
+        ? "critical"
+        : cr.status === "KHIEU_NAI"
+          ? "attention"
+          : "neutral";
+
+  return (
+    <div
+      className={
+        "px-4 py-3.5" + (last ? "" : " border-b border-np-surface-pressed")
+      }
+    >
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[14px] font-bold text-np-ink">
+              {ROLE_LABEL[cr.role as UserRole]}
+            </span>
+            <NPBadge tone={statusTone as any}>{CR_STATUS_LABEL[cr.status]}</NPBadge>
+          </div>
+          {cr.status === "TU_CHOI" && cr.rejectedReason && (
+            <div className="mt-1 text-[11px] text-np-text-sub">
+              Lý do: {cr.rejectedReason}
+            </div>
+          )}
+        </div>
+        <div className="flex-shrink-0 text-[14px] font-extrabold text-np-brand-ink tabular-nums">
+          {fmtVND(cr.amount)}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {showReject && (
+          <NPButton tone="dark" size="sm" onClick={onReject}>
+            Từ chối hoa hồng
+          </NPButton>
+        )}
+        {showKhieuNai &&
+          (eligible ? (
+            <NPButton tone="primary" size="sm" onClick={onComplaint}>
+              Khiếu nại hoa hồng (Còn {hoursLeft}h)
+            </NPButton>
+          ) : (
+            <NPButton tone="ghost" size="sm" disabled>
+              Quá hạn khiếu nại (3 ngày)
+            </NPButton>
+          ))}
+      </div>
+    </div>
   );
 }
 
@@ -762,7 +1183,7 @@ function InfoRow({
         <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
           {label}
         </div>
-        <div className="mt-0.5 truncate text-[14px] font-semibold text-np-ink">{value || "—"}</div>
+        <div className="mt-0.5 truncate text-[14px] font-semibold text-np-ink">{value || "-"}</div>
       </div>
     </div>
   );
