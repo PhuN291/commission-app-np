@@ -7,3 +7,5 @@ vite.config.ts.*
 design-ref/
 .env
 .vercel
+api/_bundle.js
+.env*.local
