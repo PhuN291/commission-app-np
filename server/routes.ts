@@ -1061,13 +1061,7 @@ export async function registerRoutes(
 
   app.get("/api/customers", async (req, res) => {
     try {
-      // Lọc theo người chăm (token): NV (sale/doctor) chỉ thấy khách có
-      // primaryAssignedUserId = id mình; quản lý (tc/kt/ceo) thấy tất cả. Khách chưa
-      // có người chăm thì chỉ quản lý thấy.
-      const user = req.currentUser!;
-      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
-      const scope = <T extends { primaryAssignedUserId: number | null }>(list: T[]) =>
-        seesAll ? list : list.filter((c) => c.primaryAssignedUserId === user.id);
+      // Mọi role đều xem được toàn bộ danh sách khách (không lọc theo người chăm).
       // Badge tái khám suy từ database (hệ mới): khách còn lượt pending → "pending"
       // (client hiện badge quá-hạn/đến-hạn theo nextRecallDueAt), xử lý hết → "done"
       // (hiện "Đã nhắc"), không có lượt → bỏ trống.
@@ -1077,10 +1071,10 @@ export async function registerRoutes(
       const q = req.query.q as string | undefined;
       if (q && q.length > 0) {
         const results = await storage.searchCustomers(q);
-        return res.json(withStatus(scope(results)));
+        return res.json(withStatus(results));
       }
       const all = await storage.getAllCustomers();
-      res.json(withStatus(scope(all)));
+      res.json(withStatus(all));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch customers" });
     }
@@ -1093,13 +1087,8 @@ export async function registerRoutes(
       if (!customer) {
         return res.status(404).json({ message: "Customer not found" });
       }
-      // Người chăm: NV (sale/doctor) chỉ xem khách mình chăm; quản lý xem hết.
-      const user = req.currentUser!;
-      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
-      if (!seesAll && customer.primaryAssignedUserId !== user.id) {
-        return res.status(403).json({ error: "forbidden", message: "Không có quyền xem khách này" });
-      }
-      // Chủ ý: sau khi qua cổng quyền xem khách, hiện TOÀN BỘ lịch sử đơn của khách
+      // Mọi role đều xem được chi tiết khách (không lọc theo người chăm).
+      // Chủ ý: hiện TOÀN BỘ lịch sử đơn của khách
       // (theo SĐT) cho người chăm — KHÔNG lọc tiếp theo chủ đơn, để người chăm có đủ
       // bối cảnh. Mở từng đơn vẫn khoá theo chủ đơn ở GET /api/orders/:id. Trường hợp
       // hai khách trùng SĐT (đơn lẫn nhau) là case biên đã chốt để xử lý sau.
