@@ -599,13 +599,13 @@ export default function ServiceDetail() {
         {/* Packages */}
         {packages.length > 0 && (
           <>
-            <SectionTitle>Các gói dịch vụ ({packages.length} gói)</SectionTitle>
+            <SectionTitle>Gói dịch vụ ({packages.length})</SectionTitle>
             <div className="space-y-3 px-0">
               {packages.map((pkg, pkgIdx) => (
                 <Card key={pkgIdx} className="overflow-hidden p-0">
                   <div className="bg-np-surface-sub px-4 py-3.5">
                     <h4 className="text-[14px] font-bold text-np-ink">
-                      {pkg.name} ({pkg.markers.length} chỉ số)
+                      {pkg.name} ({pkg.markers.length} mục)
                     </h4>
                     <p className="mt-1 text-[12px] leading-relaxed text-np-text-sub">
                       {pkg.description}
@@ -688,7 +688,7 @@ export default function ServiceDetail() {
         <DialogContent className="overflow-hidden rounded-np-card p-0 sm:max-w-md">
           <DialogHeader className="px-5 pb-0 pt-5">
             <DialogTitle className="text-[16px] font-bold text-np-ink">Chọn gói dịch vụ</DialogTitle>
-            <p className="mt-1 text-[12px] text-np-text-muted">Vui lòng chọn gói để tạo đơn hàng</p>
+            <p className="mt-1 text-[12px] text-np-text-muted">Chọn gói để tạo đơn</p>
           </DialogHeader>
           <div className="mt-4 max-h-[50vh] overflow-y-auto border-t border-np-border">
             {packages.map((pkg, idx) => (
@@ -742,7 +742,7 @@ export default function ServiceDetail() {
               Tạo đơn hàng
             </NPButton>
             <NPButton tone="ghost" onClick={() => setPackageDialogOpen(false)}>
-              Huỷ
+              Hủy
             </NPButton>
           </div>
         </DialogContent>

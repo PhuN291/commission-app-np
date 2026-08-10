@@ -43,8 +43,10 @@ import {
   updatePayCycleSchema,
   AUTO_RULE_KEYS,
   COMMISSION_RANKINGS,
+  CUSTOMER_STATS_MONTHS,
   ROLE_LABEL,
   isGrossCommission,
+  isWithinLastMonths,
   type AutoRuleKey,
   type CommissionableRole,
   type UserRole,
@@ -1099,10 +1101,13 @@ export async function registerRoutes(
       const derivedRecallDue = await storage.getNextRecallDueForCustomer(id);
       const customerWithRecall = { ...customer, nextRecallDueAt: derivedRecallDue };
 
-      const totalSpent = customerOrders
-        .filter(o => o.appointmentStatus !== "cancelled")
-        .reduce((sum, o) => sum + o.totalPrice, 0);
-      const orderCount = customerOrders.filter(o => o.appointmentStatus !== "cancelled").length;
+      // Chi tiêu và số đơn tính trong 12 tháng gần nhất (không cộng dồn toàn bộ lịch sử).
+      // Dùng helper shared để màn danh sách khách ra đúng cùng con số.
+      const recentOrders = customerOrders.filter(
+        (o) => o.appointmentStatus !== "cancelled" && isWithinLastMonths(o.createdAt),
+      );
+      const totalSpent = recentOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+      const orderCount = recentOrders.length;
       const lastOrder = customerOrders.length > 0 ? customerOrders[0] : null;
 
       // Tái khám lấy từ database (hệ mới): các lượt order_item của khách (mọi trạng thái)
@@ -1119,12 +1124,19 @@ export async function registerRoutes(
         }),
       );
 
+      // Tên người ghi chú gần nhất, để màn chi tiết hiện "Cập nhật bởi ...".
+      const noteAuthor = customer.medicalNoteBy
+        ? await storage.getUser(customer.medicalNoteBy)
+        : null;
+
       res.json({
         customer: customerWithRecall,
+        medicalNoteByName: noteAuthor?.name ?? null,
         orders: customerOrders,
         stats: {
           totalSpent,
           orderCount,
+          statsMonths: CUSTOMER_STATS_MONTHS,
           customerSince: customer.createdAt,
         },
         lastOrder,
@@ -1136,6 +1148,47 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to fetch customer" });
     }
   });
+
+  // PATCH /api/customers/:id/vip — bật tắt nhãn khách VIP (gán tay, không tự suy theo chi tiêu).
+  // Quyền: mọi vai xem được khách thì bật tắt được, khớp luật xem khách hiện tại.
+  app.patch(
+    "/api/customers/:id/vip",
+    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    async (req, res) => {
+      const id = parseInt(String(req.params.id), 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+      const isVip = req.body?.isVip;
+      if (typeof isVip !== "boolean") {
+        return res.status(400).json({ error: "invalid_value", message: "Thiếu trạng thái VIP" });
+      }
+      const updated = await storage.updateCustomer(id, { isVip });
+      if (!updated) return res.status(404).json({ error: "not_found" });
+      res.json(updated);
+    },
+  );
+
+  // PATCH /api/customers/:id/medical-note — ghi chú bệnh nhân (dị ứng, tiền sử, lưu ý).
+  // Dữ liệu y tế nhân viên tự nhập, lưu kèm người nhập và thời điểm để truy vết.
+  app.patch(
+    "/api/customers/:id/medical-note",
+    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    async (req, res) => {
+      const id = parseInt(String(req.params.id), 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+      const raw = req.body?.note;
+      if (typeof raw !== "string") {
+        return res.status(400).json({ error: "invalid_value", message: "Thiếu nội dung ghi chú" });
+      }
+      const note = raw.trim();
+      const updated = await storage.updateCustomer(id, {
+        medicalNote: note.length > 0 ? note : null,
+        medicalNoteBy: req.currentUser!.id,
+        medicalNoteAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ error: "not_found" });
+      res.json({ ...updated, medicalNoteByName: req.currentUser!.name });
+    },
+  );
 
   // (Đã bỏ POST /api/customers/:id/recall-log + /recall-skip — hệ tái khám cũ in-memory.
   //  Ghi kết quả gọi nay qua POST /api/recalls/item/:orderItemId/log theo từng lượt order_item.)

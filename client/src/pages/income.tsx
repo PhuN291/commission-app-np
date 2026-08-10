@@ -195,7 +195,7 @@ export default function Income() {
           : err?.error === "window_expired"
             ? "Đã quá hạn khiếu nại (3 ngày)"
             : err?.error === "invalid_state"
-              ? "Khoản hoa hồng không ở trạng thái cho phép"
+              ? "Hoa hồng không thể khiếu nại"
               : "Không thể gửi khiếu nại";
       toast({ title: "Lỗi", description: msg, variant: "destructive" });
     },
@@ -250,6 +250,9 @@ export default function Income() {
         >
           <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
           <div className="relative">
+            <div className="mb-1.5 text-[11px] font-medium text-white/80">
+              Thực nhận
+            </div>
             <div className="flex items-baseline gap-1">
               <span className="text-[34px] font-extrabold leading-none tracking-[-0.8px] tabular-nums">
                 {new Intl.NumberFormat("vi-VN").format(data.netHh)}
@@ -416,7 +419,7 @@ export default function Income() {
                 Nội dung khiếu nại
               </label>
               <Textarea
-                placeholder="Trình bày lý do khiếu nại để kế toán xem lại..."
+                placeholder="Lý do khiếu nại..."
                 value={complaintDialog.content}
                 onChange={(e) => setComplaintDialog((p) => ({ ...p, content: e.target.value }))}
               />
@@ -486,7 +489,7 @@ function CRRow({ cr, onComplaint }: { cr: APICR; onComplaint: () => void }) {
           <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
             {eligible ? (
               <NPButton tone="primary" size="sm" onClick={onComplaint}>
-                Khiếu nại hoa hồng (Còn {hoursLeft}h)
+                Khiếu nại (còn {hoursLeft}h)
               </NPButton>
             ) : (
               <NPButton tone="ghost" size="sm" disabled>

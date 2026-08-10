@@ -118,12 +118,12 @@ function PersonalRankView() {
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Xếp hạng" subtitle="Vị trí của bạn trong tháng" />
+      <PageHeader title="Xếp hạng" subtitle="Vị trí tháng này" />
 
       {/* Hero card — current rank + tier position */}
       <Card className="px-4 py-5">
         <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-          Bạn đang ở
+          Bậc hiện tại
         </div>
         <div className="mt-2 flex items-center gap-3">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-np-brand-soft to-np-brand-soft/60 text-[24px]">
@@ -135,7 +135,7 @@ function PersonalRankView() {
             </div>
             {isSoloInTier ? (
               <div className="mt-0.5 text-[12px] font-medium text-np-text-sub">
-                Bạn là người duy nhất hiện tại trong bậc {user.ranking && RANKING_LABEL[user.ranking]}
+                Duy nhất ở bậc {user.ranking && RANKING_LABEL[user.ranking]}
               </div>
             ) : tierPositionPct !== null && user.ranking ? (
               <div className="mt-0.5 text-[12px] font-medium text-np-text-sub">
@@ -159,9 +159,9 @@ function PersonalRankView() {
         <Card className="mt-4 flex items-center gap-3 px-4 py-4">
           <Trophy size={28} className="flex-shrink-0 text-np-rank-vang" style={{ color: "var(--color-np-rank-vang, #D97706)" }} />
           <div>
-            <div className="text-[14px] font-bold text-np-ink">Đỉnh cao!</div>
+            <div className="text-[14px] font-bold text-np-ink">Bậc cao nhất</div>
             <div className="mt-0.5 text-[12px] text-np-text-sub">
-              Bạn đã đạt bậc cao nhất. Hãy giữ phong độ.
+              Đã đạt bậc cao nhất.
             </div>
           </div>
         </Card>
@@ -201,7 +201,7 @@ function PersonalRankView() {
             )}
             {remaining === 0 && currentMonthProgress >= 100 && (
               <div className="border-t border-np-surface-pressed pt-3 text-center text-[13px] font-bold text-np-success-ink">
-                ✓ Đã đạt mục tiêu tháng này!
+                ✓ Đã đạt mục tiêu tháng này
               </div>
             )}
           </Card>
@@ -345,7 +345,7 @@ function FullLeaderboardView() {
 
       {sorted.length === 0 ? (
         <Card className="p-8 text-center text-[13px] text-np-text-muted">
-          Chưa có dữ liệu xếp hạng cho kỳ này
+          Chưa có xếp hạng kỳ này
         </Card>
       ) : (
         <>
@@ -434,7 +434,7 @@ function FullLeaderboardView() {
                 >
                   {p.name}
                   {isCurrentUser && (
-                    <span className="ml-1 text-[10px] text-np-brand-ink">(Bạn)</span>
+                    <span className="ml-1 text-[10px] text-np-brand-ink">(Tôi)</span>
                   )}
                 </p>
                 <p className="text-[11px] text-np-text-muted">{p.role}</p>

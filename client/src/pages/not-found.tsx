@@ -10,7 +10,7 @@ export default function NotFound() {
         <AlertCircle size={48} className="text-np-danger" />
         <h1 className="mt-4 text-[20px] font-bold text-np-ink">404</h1>
         <p className="mt-1 text-center text-[14px] text-np-text-sub">
-          Trang bạn tìm không tồn tại.
+          Không tìm thấy trang.
         </p>
         <NPButton tone="primary" className="mt-6" onClick={() => navigate("/")}>
           Về trang chủ

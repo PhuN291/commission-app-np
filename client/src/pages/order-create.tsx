@@ -153,10 +153,10 @@ function OrderCreatedView({
           </div>
 
           <h1 className="text-center text-[24px] font-extrabold tracking-[-0.5px] text-np-ink">
-            Đã tạo đơn thành công!
+            Đã tạo đơn
           </h1>
           <p className="mx-auto mt-2 max-w-[310px] text-center text-[14px] leading-relaxed text-np-text-muted">
-            Đơn {order.code} đã được gửi tới lễ tân. Bạn sẽ nhận được thông báo khi khách check-in.
+            Đơn {order.code} đã gửi tới lễ tân. Sẽ báo khi khách đến.
           </p>
 
           {/* Thẻ tóm tắt */}
@@ -240,6 +240,7 @@ export default function OrderCreate() {
   const [serviceSearch, setServiceSearch] = useState("");
   const [expandedServiceId, setExpandedServiceId] = useState<number | null>(null);
   const [prefilledFromUrl, setPrefilledFromUrl] = useState(false);
+  const [prefilledCustomerFromUrl, setPrefilledCustomerFromUrl] = useState(false);
 
   const [notes, setNotes] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
@@ -276,6 +277,31 @@ export default function OrderCreate() {
 
   const { data: allServices = [] } = useQuery<Service[]>({ queryKey: ["/api/services"] });
   const { data: vouchers = [] } = useQuery<VoucherRow[]>({ queryKey: ["/api/vouchers"] });
+
+  // ?customerId= (mở từ màn chi tiết khách) → tự chọn sẵn khách vào đơn.
+  // Tách hẳn khỏi phần prefill dịch vụ bên dưới: phần đó chờ tải xong danh sách dịch vụ
+  // rồi mới chạy, dùng chung cờ sẽ khoá lẫn nhau.
+  const prefillCustomerId = (() => {
+    const raw = new URLSearchParams(searchString).get("customerId");
+    if (!raw) return 0;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+
+  // Endpoint trả object bọc { customer, orders, stats, ... } nên đọc data.customer.
+  const { data: prefillCustomer } = useQuery<{ customer: Customer }>({
+    queryKey: [`/api/customers/${prefillCustomerId}`, getCurrentUserId()],
+    enabled: prefillCustomerId > 0 && !prefilledCustomerFromUrl,
+  });
+
+  useEffect(() => {
+    if (prefilledCustomerFromUrl) return;
+    const c = prefillCustomer?.customer;
+    // Gọi lỗi hoặc không có khách thì bỏ qua, người dùng tự chọn khách như cũ.
+    if (!c) return;
+    setSelectedCustomer({ id: c.id, name: c.name, phone: c.phone });
+    setPrefilledCustomerFromUrl(true);
+  }, [prefillCustomer, prefilledCustomerFromUrl]);
 
   useEffect(() => {
     if (prefilledFromUrl || allServices.length === 0) return;
@@ -678,7 +704,7 @@ export default function OrderCreate() {
                       ))
                     ) : (
                       <div className="p-4 text-center text-[13px] text-np-text-muted">
-                        {customerSearch ? "Không tìm thấy khách hàng" : "Chưa có khách hàng nào"}
+                        {customerSearch ? "Không tìm thấy khách hàng" : "Chưa có khách hàng"}
                       </div>
                     )}
                   </div>
@@ -991,11 +1017,11 @@ export default function OrderCreate() {
         </Card>
 
         {/* Xuất hoá đơn công ty */}
-        <SectionTitle icon={Building2}>Xuất hoá đơn công ty</SectionTitle>
+        <SectionTitle icon={Building2}>Xuất hóa đơn công ty</SectionTitle>
         <Card className="p-4">
           <label className="flex cursor-pointer items-center justify-between gap-3">
             <span className="text-[14px] font-bold text-np-ink">
-              Khách hàng cần hoá đơn công ty
+              Khách cần hóa đơn công ty
             </span>
             <Switch checked={wantVat} onCheckedChange={setWantVat} />
           </label>

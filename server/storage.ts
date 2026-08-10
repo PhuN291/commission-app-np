@@ -130,6 +130,11 @@ export interface IStorage {
   getCustomerOrders(phone: string): Promise<Order[]>;
   searchCustomers(query: string): Promise<Customer[]>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
+  /** Cập nhật một phần hồ sơ khách (VIP, ghi chú bệnh nhân). Trả undefined nếu không có khách. */
+  updateCustomer(
+    id: number,
+    patch: Partial<Pick<Customer, "isVip" | "medicalNote" | "medicalNoteBy" | "medicalNoteAt">>,
+  ): Promise<Customer | undefined>;
 
   getAllOrders(): Promise<Order[]>;
   getOrder(id: number): Promise<Order | undefined>;
@@ -454,8 +459,22 @@ export class MemoryStorage implements IStorage {
       createdAt: insertCustomer.createdAt ?? "",
       nextRecallDueAt: insertCustomer.nextRecallDueAt ?? null,
       primaryAssignedUserId: insertCustomer.primaryAssignedUserId ?? null,
+      isVip: insertCustomer.isVip ?? false,
+      medicalNote: insertCustomer.medicalNote ?? null,
+      medicalNoteBy: insertCustomer.medicalNoteBy ?? null,
+      medicalNoteAt: insertCustomer.medicalNoteAt ?? null,
     };
     this.customers.push(customer);
+    return customer;
+  }
+
+  async updateCustomer(
+    id: number,
+    patch: Partial<Pick<Customer, "isVip" | "medicalNote" | "medicalNoteBy" | "medicalNoteAt">>,
+  ): Promise<Customer | undefined> {
+    const customer = this.customers.find((c) => c.id === id);
+    if (!customer) return undefined;
+    Object.assign(customer, patch);
     return customer;
   }
 

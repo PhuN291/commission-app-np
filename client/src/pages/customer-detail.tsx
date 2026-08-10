@@ -7,6 +7,8 @@ import {
   Calendar,
   CalendarCheck,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Mail,
   MapPin,
@@ -17,6 +19,9 @@ import {
   Plus,
   RefreshCw,
   ShoppingBag,
+  Star,
+  Stethoscope,
+  StickyNote,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -110,13 +115,13 @@ const STATUS_VN: Record<string, string> = {
 type CallOutcome = "scheduled" | "no_answer" | "refused";
 
 const OUTCOME_OPTIONS: { value: CallOutcome; label: string; icon: LucideIcon }[] = [
-  { value: "scheduled", label: "Đã đặt lịch lại", icon: CalendarCheck },
+  { value: "scheduled", label: "Đã đặt lịch", icon: CalendarCheck },
   { value: "no_answer", label: "Chưa bắt máy", icon: PhoneMissed },
   { value: "refused", label: "Khách từ chối", icon: Ban },
 ];
 
 const OUTCOME_LABEL: Record<string, string> = {
-  scheduled: "Đã đặt lịch lại",
+  scheduled: "Đã đặt lịch",
   no_answer: "Chưa bắt máy",
   refused: "Khách từ chối",
   other: "Khác",
@@ -136,13 +141,13 @@ function fmtRecallDate(s: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
 }
 
-/** ISO -> "HH:mm DD/MM". Rỗng nếu không parse được. */
+/** ISO -> "DD/MM lúc HH:mm" (ngày trước giờ, dễ đọc). Rỗng nếu không parse được. */
 function fmtCallTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())} ${p(d.getDate())}/${p(d.getMonth() + 1)}`;
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} lúc ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** Số ngày từ hôm nay tới recallDueDate (dương = quá hạn). null nếu thiếu/lạ. */
@@ -172,7 +177,7 @@ function eventView(
   const code = orderCode ?? m.code;
   switch (e.type) {
     case "call":
-      return { icon: <Phone size={14} strokeWidth={2.25} />, title: "Gọi điện cho khách", detail: null };
+      return { icon: <Phone size={14} strokeWidth={2.25} />, title: "Gọi điện", detail: null };
     case "sms":
       return { icon: <MessageSquare size={14} strokeWidth={2.25} />, title: "Nhắn tin", detail: null };
     case "email":
@@ -198,8 +203,29 @@ function eventView(
         title: "Gọi nhắc lịch",
         detail: m.outcome ? (RECALL_OUTCOME_LABEL[m.outcome as RecallOutcome] ?? null) : null,
       };
+    case "order_refund":
+      return {
+        icon: <RefreshCw size={14} strokeWidth={2.25} />,
+        title: code ? `Hoàn tiền đơn ${code}` : "Hoàn tiền đơn",
+        detail: m.serviceName ?? null,
+      };
+    case "order_completed":
+      return {
+        icon: <ShoppingBag size={14} strokeWidth={2.25} />,
+        title: code ? `Hoàn tất đơn ${code}` : "Hoàn tất đơn",
+        detail: m.serviceName ?? null,
+      };
+    case "order_cancelled":
+      return {
+        icon: <ShoppingBag size={14} strokeWidth={2.25} />,
+        title: code ? `Hủy đơn ${code}` : "Hủy đơn",
+        detail: m.serviceName ?? null,
+      };
+    case "appointment_reminded":
+      return { icon: <Clock size={14} strokeWidth={2.25} />, title: "Nhắc lịch hẹn", detail: null };
     default:
-      return { icon: <Clock size={14} strokeWidth={2.25} />, title: e.type, detail: null };
+      // Loại sự kiện chưa có nhãn: hiện nhãn chung, không để lộ mã tiếng Anh.
+      return { icon: <Clock size={14} strokeWidth={2.25} />, title: "Hoạt động", detail: null };
   }
 }
 
@@ -223,8 +249,9 @@ export default function CustomerDetail() {
 
   const { data: customerData, isLoading } = useQuery<{
     customer: Customer;
+    medicalNoteByName: string | null;
     orders: Order[];
-    stats: { orderCount: number; totalSpent: number; customerSince: string };
+    stats: { orderCount: number; totalSpent: number; statsMonths: number; customerSince: string };
     recallItems: RecallItem[];
     recallLogs: RecallLogEntry[];
     events: CustomerEvent[];
@@ -267,6 +294,48 @@ export default function CustomerDetail() {
   const openCallSheet = (item: RecallItem) =>
     setCallSheet({ item, outcome: "scheduled", note: "" });
 
+  // Khối liên hệ mặc định thu gọn, chỉ hiện số điện thoại.
+  const [contactOpen, setContactOpen] = useState(false);
+
+  // Ghi chú bệnh nhân: null = chưa sửa, đang hiện nguyên văn từ máy chủ.
+  const [noteDraft, setNoteDraft] = useState<string | null>(null);
+
+  const vipMut = useMutation({
+    mutationFn: async (isVip: boolean) => {
+      const res = await authFetch(`/api/customers/${customerId}/vip`, {
+        method: "PATCH",
+        body: JSON.stringify({ isVip }),
+      });
+      if (!res.ok) throw await res.json().catch(() => ({}));
+      return res.json();
+    },
+    onSuccess: (_data, isVip) => {
+      toast({ title: isVip ? "Đã đánh dấu khách VIP" : "Đã bỏ đánh dấu VIP" });
+      queryClient.invalidateQueries({ queryKey: [`/api/customers/${customerId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+    },
+    onError: () =>
+      toast({ title: "Lỗi", description: "Không cập nhật được VIP", variant: "destructive" }),
+  });
+
+  const noteMut = useMutation({
+    mutationFn: async (note: string) => {
+      const res = await authFetch(`/api/customers/${customerId}/medical-note`, {
+        method: "PATCH",
+        body: JSON.stringify({ note }),
+      });
+      if (!res.ok) throw await res.json().catch(() => ({}));
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Đã lưu ghi chú" });
+      setNoteDraft(null); // đọc lại giá trị từ máy chủ
+      queryClient.invalidateQueries({ queryKey: [`/api/customers/${customerId}`] });
+    },
+    onError: () =>
+      toast({ title: "Lỗi", description: "Không lưu được ghi chú", variant: "destructive" }),
+  });
+
   // Ghi nhật ký thao tác gọi/nhắn/email rồi cập nhật timeline.
   const logAction = (type: "call" | "sms" | "email") => {
     authFetch(`/api/customers/${customerId}/events`, {
@@ -293,6 +362,9 @@ export default function CustomerDetail() {
   }
 
   const { customer, orders, stats } = customerData;
+  // Ghi chú đang soạn (noteDraft) ưu tiên hơn giá trị từ máy chủ.
+  const noteValue = noteDraft ?? customer.medicalNote ?? "";
+  const hasNote = (customer.medicalNote ?? "").trim().length > 0;
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
@@ -303,18 +375,46 @@ export default function CustomerDetail() {
         <div className="flex items-center gap-3 bg-white px-4 py-4">
           <Avatar name={customer.name} size={56} />
           <div className="min-w-0 flex-1">
-            <div className="text-[18px] font-bold text-np-ink">{customer.name}</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[18px] font-bold text-np-ink">{customer.name}</span>
+              {customer.isVip && <Badge tone="attention">VIP</Badge>}
+              {hasNote && (
+                <Badge tone="critical">
+                  <StickyNote size={12} strokeWidth={2.5} />
+                  Có ghi chú
+                </Badge>
+              )}
+            </div>
             <div className="mt-0.5 text-[12px] text-np-text-muted">
               Khách hàng từ {stats.customerSince}
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => vipMut.mutate(!customer.isVip)}
+            disabled={vipMut.isPending}
+            aria-pressed={customer.isVip}
+            className={cn(
+              "flex flex-shrink-0 items-center gap-1 rounded-np-badge px-2.5 py-1.5 text-[12px] font-semibold transition-colors disabled:opacity-50",
+              customer.isVip
+                ? "bg-[#F4ECD9] text-[#8A6300]"
+                : "bg-np-surface-sub text-np-text-muted",
+            )}
+          >
+            <Star
+              size={14}
+              strokeWidth={2.5}
+              fill={customer.isVip ? "currentColor" : "none"}
+            />
+            VIP
+          </button>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
           <div className="rounded-np-card bg-white px-3.5 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-              Tổng chi tiêu
+              Chi tiêu 12 tháng
             </div>
             <div className="mt-1 text-[18px] font-extrabold text-np-ink tabular-nums">
               {fmtShort(stats.totalSpent)}₫
@@ -322,7 +422,7 @@ export default function CustomerDetail() {
           </div>
           <div className="rounded-np-card bg-white px-3.5 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-              Số đơn hàng
+              Đơn 12 tháng
             </div>
             <div className="mt-1 text-[18px] font-extrabold text-np-ink tabular-nums">
               {stats.orderCount} đơn
@@ -362,36 +462,83 @@ export default function CustomerDetail() {
           <ActionBtn
             icon={<Plus size={20} strokeWidth={2.25} />}
             label="Tạo đơn"
-            onClick={() => navigate("/orders/new")}
+            onClick={() => navigate(`/orders/new?customerId=${customer.id}`)}
           />
         </div>
 
-        {/* Thông tin liên hệ */}
-        <SectionTitle>Thông tin liên hệ</SectionTitle>
-        <Card className="overflow-hidden p-0">
-          <InfoLine icon={<Phone size={16} strokeWidth={2.25} />} label="Số điện thoại" value={customer.phone} />
-          {customer.email && (
-            <InfoLine icon={<Mail size={16} strokeWidth={2.25} />} label="Email" value={customer.email} valueClass="text-np-link" />
-          )}
-          <InfoLine
-            icon={<MapPin size={16} strokeWidth={2.25} />}
-            label="Địa chỉ"
-            value={
-              customer.address
-                ? `${customer.address}${customer.location ? ` · ${customer.location}` : ""}`
-                : "Chưa cập nhật địa chỉ"
-            }
-            last
+        {/* Ghi chú bệnh nhân — dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc.
+            Bấm vào ô là sửa được ngay, rời ô thì lưu. */}
+        <SectionTitle>Ghi chú</SectionTitle>
+        <Card className="space-y-2 p-4">
+          <Textarea
+            value={noteValue}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            onBlur={() => {
+              if (noteDraft === null) return; // chưa sửa gì
+              if (noteDraft.trim() === (customer.medicalNote ?? "").trim()) {
+                setNoteDraft(null); // không đổi nội dung, bỏ qua
+                return;
+              }
+              noteMut.mutate(noteDraft);
+            }}
+            disabled={noteMut.isPending}
+            placeholder="Ghi chú về dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc"
+            className="min-h-[84px] resize-none"
           />
+          {customer.medicalNoteAt && (
+            <div className="text-[11px] text-np-text-muted">
+              Cập nhật bởi {customerData.medicalNoteByName ?? "nhân viên"} ·{" "}
+              {fmtEventTime(String(customer.medicalNoteAt))}
+            </div>
+          )}
         </Card>
 
-        {/* Lịch tái khám — danh sách từng lượt order_item (database), gọi như màn /recalls */}
+        {/* Lịch tái khám — danh sách từng lượt order_item (database), gọi như màn /recalls.
+            Đặt TRÊN thông tin liên hệ: cảnh báo trễ tái khám là việc cần xử lý ngay. */}
         <SectionTitle>Lịch tái khám</SectionTitle>
         <RecallSection
           items={customerData.recallItems}
           logs={customerData.recallLogs}
           onCall={openCallSheet}
         />
+
+        {/* Thông tin liên hệ — mặc định chỉ hiện số điện thoại, mở rộng để xem đầy đủ */}
+        <SectionTitle>Thông tin liên hệ</SectionTitle>
+        <Card className="overflow-hidden p-0">
+          <InfoLine
+            icon={<Phone size={16} strokeWidth={2.25} />}
+            label="Số điện thoại"
+            value={customer.phone}
+          />
+          {contactOpen && (
+            <>
+              {customer.email && (
+                <InfoLine icon={<Mail size={16} strokeWidth={2.25} />} label="Email" value={customer.email} valueClass="text-np-link" />
+              )}
+              <InfoLine
+                icon={<MapPin size={16} strokeWidth={2.25} />}
+                label="Địa chỉ"
+                value={
+                  customer.address
+                    ? `${customer.address}${customer.location ? ` · ${customer.location}` : ""}`
+                    : "Chưa cập nhật địa chỉ"
+                }
+              />
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setContactOpen((v) => !v)}
+            className="flex w-full items-center justify-center gap-1 border-t border-np-surface-pressed py-2.5 text-[12px] font-semibold text-np-link transition-colors active:bg-np-surface-pressed"
+          >
+            {contactOpen ? "Thu gọn" : "Xem thêm"}
+            {contactOpen ? (
+              <ChevronUp size={14} strokeWidth={2.5} />
+            ) : (
+              <ChevronDown size={14} strokeWidth={2.5} />
+            )}
+          </button>
+        </Card>
 
         {/* Lịch sử tương tác — nhật ký hành động tự ghi nhận (ADR-003) */}
         <SectionTitle>Lịch sử tương tác</SectionTitle>
@@ -437,7 +584,7 @@ export default function CustomerDetail() {
             </NPButton>
           }
         >
-          Đơn hàng liên quan
+          Đơn hàng
         </SectionTitle>
         <Card className="overflow-hidden p-0">
           {orders.length === 0 ? (
@@ -474,6 +621,10 @@ export default function CustomerDetail() {
             ))
           )}
         </Card>
+
+        {/* Lịch sử khám bệnh — chờ API HIS */}
+        <SectionTitle>Lịch sử khám bệnh</SectionTitle>
+        <MedicalHistorySection customerId={customerId} />
       </div>
 
       {/* Kết quả gọi 1 lượt tái khám (giống màn /recalls) */}
@@ -659,7 +810,7 @@ function RecallSection({
           it.recallStatus === "scheduled"
             ? { text: "Đã đặt lịch", tone: "success" as BadgeTone }
             : it.recallStatus === "refused"
-              ? { text: "Đã từ chối", tone: "neutral" as BadgeTone }
+              ? { text: "Khách từ chối", tone: "neutral" as BadgeTone }
               : null;
         return (
           <Card key={it.orderItemId} className="p-4">
@@ -682,7 +833,7 @@ function RecallSection({
                 </div>
                 {it.lastCall && (
                   <div className="mt-0.5 text-[12px] text-np-text-muted">
-                    Gọi gần nhất: {OUTCOME_LABEL[it.lastCall.outcome] ?? it.lastCall.outcome}
+                    {OUTCOME_LABEL[it.lastCall.outcome] ?? it.lastCall.outcome}
                     {fmtCallTime(it.lastCall.at) ? ` · ${fmtCallTime(it.lastCall.at)}` : ""}
                   </div>
                 )}
@@ -742,6 +893,59 @@ function RecallSection({
   );
 }
 
+/**
+ * Lịch sử khám bệnh lấy từ HIS. HIS chưa sẵn sàng nên chỉ dựng khung: bấm nút mới
+ * tải, tránh gọi sang HIS mỗi lần mở trang và không lưu bệnh án trong app.
+ *
+ * Khi HIS xong: thay khối rỗng bằng useQuery gọi endpoint HIS rồi map vào chỗ
+ * đánh dấu bên dưới, giao diện giữ nguyên.
+ */
+function MedicalHistorySection({ customerId }: { customerId: number }) {
+  const [opened, setOpened] = useState(false);
+  // Khi nối HIS: const { data, isLoading } = useQuery({ queryKey: [`/api/his/medical-history/${customerId}`], enabled: opened });
+  const records: { id: string; date: string; title: string; detail: string }[] = [];
+
+  if (!opened) {
+    return (
+      <Card className="p-4">
+        <NPButton
+          tone="ghost"
+          size="sm"
+          icon={Stethoscope}
+          onClick={() => setOpened(true)}
+          className="w-full"
+        >
+          Xem lịch sử khám bệnh
+        </NPButton>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-4">
+      {records.length === 0 ? (
+        <div className="py-3 text-center">
+          <Stethoscope size={28} className="mx-auto text-np-border-strong" strokeWidth={2} />
+          <div className="mt-2 text-[13px] font-medium text-np-text-muted">
+            Chưa nối hệ thống bệnh án
+          </div>
+        </div>
+      ) : (
+        // Chỗ đổ dữ liệu HIS khi nối xong.
+        <div className="space-y-3">
+          {records.map((r) => (
+            <div key={r.id} className="border-b border-np-surface-pressed pb-3 last:border-0 last:pb-0">
+              <div className="text-[13px] font-bold text-np-ink">{r.title}</div>
+              <div className="mt-0.5 text-[12px] text-np-text-muted">{r.date}</div>
+              <div className="mt-1 text-[12px] text-np-text-sub">{r.detail}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function InfoLine({
   icon,
   label,
@@ -788,7 +992,7 @@ function ActionBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex flex-col items-center gap-1.5 rounded-np-card border border-np-border-strong bg-white px-1 py-2.5 transition-colors active:bg-np-surface-pressed disabled:opacity-40"
+      className="flex flex-col items-center gap-1.5 rounded-np-card bg-white px-1 py-2.5 transition-colors active:bg-np-surface-pressed disabled:opacity-40"
     >
       <span className="text-np-brand-ink">{icon}</span>
       <span className="text-[11px] font-semibold text-np-ink">{label}</span>

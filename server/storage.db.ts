@@ -251,6 +251,14 @@ export class DbStorage implements IStorage {
     return rows[0];
   }
 
+  async updateCustomer(
+    id: number,
+    patch: Partial<Pick<Customer, "isVip" | "medicalNote" | "medicalNoteBy" | "medicalNoteAt">>,
+  ): Promise<Customer | undefined> {
+    const rows = await db.update(customers).set(patch).where(eq(customers.id, id)).returning();
+    return rows[0];
+  }
+
   // ───────────────────────── Orders ─────────────────────────
 
   async getAllOrders(): Promise<Order[]> {

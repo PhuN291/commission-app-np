@@ -169,6 +169,14 @@ export const customers = pgTable("customers", {
   nextRecallDueAt: timestamp("next_recall_due_at"),
   // Nhân viên chăm gốc (R-8-6). null = chưa gán. Set lần đầu khi tạo đơn (ingest).
   primaryAssignedUserId: integer("primary_assigned_user_id"),
+  // Khách VIP: gán tay, KHÔNG tự suy theo mức chi tiêu (đã chốt với anh Phú).
+  isVip: boolean("is_vip").notNull().default(false),
+  // Ghi chú bệnh nhân: dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc.
+  // Dữ liệu y tế do nhân viên tự nhập, KHÔNG đồng bộ HIS, nên lưu kèm người nhập
+  // và thời điểm để truy vết. timestamptz tránh lệch +7h.
+  medicalNote: text("medical_note"),
+  medicalNoteBy: integer("medical_note_by"),
+  medicalNoteAt: timestamp("medical_note_at", { withTimezone: true }),
 });
 
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true });

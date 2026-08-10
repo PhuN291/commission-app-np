@@ -112,18 +112,18 @@ export default function AdminSettings() {
           <div className="mx-4 mt-3 flex items-start gap-2 rounded-np-card border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] font-medium text-np-text-sub">
             <Info size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
             <span>
-              Bạn đang ở chế độ xem. Chỉ CEO mới chỉnh sửa được.
+              Chế độ xem. Chỉ CEO chỉnh sửa được.
             </span>
           </div>
         )}
 
-        <SectionTitle>Cấu hình</SectionTitle>
+        <SectionTitle>Thiết lập</SectionTitle>
         <Card className="overflow-hidden p-0">
           <Accordion type="multiple" className="w-full">
             {/* 1 — Phần trăm hoa hồng (link) */}
             <LinkRow
               n={1}
-              title="Phần trăm hoa hồng"
+              title="Tỷ lệ hoa hồng"
               subtitle="Mức hoa hồng theo vai và hạng"
               onClick={() => navigate("/admin/commission-config")}
             />
@@ -142,7 +142,7 @@ export default function AdminSettings() {
             </SectionItem>
 
             {/* 4 — Kì lương (mục cuối) */}
-            <SectionItem value="s7" n={4} title="Kì lương" last>
+            <SectionItem value="s7" n={4} title="Kỳ lương" last>
               <PayCycleSection data={payCycle} canEdit={canEdit} />
             </SectionItem>
           </Accordion>
@@ -281,7 +281,7 @@ function AutoRuleCard({ rule, canEdit }: { rule: AutoRuleData; canEdit: boolean 
     },
     onError: (err: any) => {
       toast({
-        title: "Không lưu được, thử lại",
+        title: "Không lưu được",
         description: err?.message || err?.error || "Vui lòng thử lại",
         variant: "destructive",
       });
@@ -405,7 +405,7 @@ function PayCycleSection({
     },
     onError: (err: any) => {
       toast({
-        title: "Không lưu được, thử lại",
+        title: "Không lưu được",
         description: err?.message || err?.error || "Vui lòng thử lại",
         variant: "destructive",
       });

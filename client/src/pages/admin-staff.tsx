@@ -246,7 +246,7 @@ export default function AdminStaff() {
       return data;
     },
     onSuccess: (created) => {
-      toast({ title: "Thêm nhân sự thành công", description: created.name });
+      toast({ title: "Đã thêm nhân sự", description: created.name });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/staff"] });
       setSheetOpen(false);
       setForm(emptyForm);
@@ -269,7 +269,7 @@ export default function AdminStaff() {
       return data;
     },
     onSuccess: () => {
-      toast({ title: "Cập nhật thành công" });
+      toast({ title: "Đã cập nhật" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/staff"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/staff/audit-log", editingId] });
       setSheetOpen(false);
@@ -390,7 +390,7 @@ export default function AdminStaff() {
   function validateForm(): boolean {
     const errs: Partial<Record<keyof FormState, string>> = {};
     if (form.name.trim().length < 2) errs.name = "Tên phải có ít nhất 2 ký tự";
-    if (form.phone.replace(/\D/g, "").length < 9) errs.phone = "SĐT không hợp lệ";
+    if (form.phone.replace(/\D/g, "").length < 9) errs.phone = "Số điện thoại không hợp lệ";
     if (form.role === "doctor" && !form.ihosUserId.trim()) {
       errs.ihosUserId = "Bác sĩ bắt buộc có Mã iHOS";
     }
@@ -431,7 +431,7 @@ export default function AdminStaff() {
       <div className="bg-np-surface-sub pb-5">
         <PageHeader
           title={isCeo ? "Quản lý nhân sự" : "Nhân sự (chỉ xem)"}
-          subtitle={`${inTabList.length} người${isTc ? " · Bạn chỉ có quyền đánh dấu sắp nghỉ" : ""}`}
+          subtitle={`${inTabList.length} người${isTc ? " · Chỉ được đánh dấu sắp nghỉ" : ""}`}
           action={
             canEdit ? (
               <NPButton tone="primary" size="sm" icon={UserPlus} onClick={openAdd}>
@@ -476,7 +476,7 @@ export default function AdminStaff() {
         <SearchField
           value={searchTerm}
           onChange={setSearchTerm}
-          placeholder="Tìm tên, SĐT..."
+          placeholder="Tìm tên, số điện thoại..."
           className="mt-3"
         />
         <Chips items={roleChips} active={roleFilter} onChange={setRoleFilter} />
@@ -490,7 +490,7 @@ export default function AdminStaff() {
             <div className="px-5 py-12 text-center">
               <Users size={36} className="mx-auto text-np-border-strong" />
               <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-                Không tìm thấy nhân sự nào
+                Không tìm thấy nhân sự
               </div>
             </div>
           ) : (
@@ -545,7 +545,7 @@ export default function AdminStaff() {
         >
           <SheetHeader className="flex-shrink-0 border-b border-np-surface-pressed px-6 pb-4 pr-12 pt-6">
             <SheetTitle className="text-[16px] font-bold text-np-ink">
-              {editingId ? `Chi tiết: ${editingStaff?.name ?? ""}` : "Thêm nhân sự mới"}
+              {editingId ? `Chi tiết: ${editingStaff?.name ?? ""}` : "Thêm nhân sự"}
             </SheetTitle>
           </SheetHeader>
 
@@ -760,7 +760,7 @@ export default function AdminStaff() {
                     className="mt-2 w-full justify-center text-np-danger"
                     onClick={() => setSoftDeleteDialog({ open: true, staff: editingStaff })}
                   >
-                    Xóa nhân sự
+                    Chuyển sang Đã nghỉ
                   </NPButton>
                 </div>
               </>
@@ -948,8 +948,8 @@ function handleApiError(
     return;
   }
   if (err?.error === "phone_exists") {
-    setFormErrors({ phone: "SĐT đã có user khác" });
-    toast({ title: "SĐT trùng", variant: "destructive" });
+    setFormErrors({ phone: "Số điện thoại đã dùng cho người khác" });
+    toast({ title: "Trùng số điện thoại", variant: "destructive" });
     return;
   }
   if (err?.error === "forbidden") {

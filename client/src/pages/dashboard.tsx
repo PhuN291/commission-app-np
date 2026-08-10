@@ -40,6 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ROLE_LABEL, type UserRole } from "@shared/types";
 import metricRevenueIcon from "@/assets/icons/metric-revenue.svg";
 import metricCustomersClosedIcon from "@/assets/icons/metric-customers-closed.svg";
 
@@ -167,7 +168,7 @@ export default function Dashboard() {
         <div className="flex h-full items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
-            <p className="text-np-sub text-np-text-muted">Đang tải dữ liệu...</p>
+            <p className="text-np-sub text-np-text-muted">Đang tải...</p>
           </div>
         </div>
       </Screen>
@@ -232,8 +233,8 @@ function PersonalView({
           icon={metricRevenueIcon}
         />
         <MetricCard
-          label="Đơn chốt"
-          value={`${kpis.closedDeals} đơn`}
+          label="Đã chốt"
+          value={`${kpis.closedDeals}`}
           delta={null}
           icon={metricCustomersClosedIcon}
         />
@@ -315,18 +316,16 @@ function AdminView({
   const { user, hero, kpis, pendingTasks, leaderboard } = data;
   const firstName = user.name.split(" ").slice(-1)[0];
   const top3 = [...leaderboard].sort((a, b) => a.rank - b.rank).slice(0, 3);
-  const roleLabel = user.role === "ceo" ? "CEO" : "Kế toán";
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName} · ${roleLabel}`} />
+      <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName}`} />
 
       {/* Hero — Tổng HH chi PK tháng */}
       <div className="px-4 pb-2">
         <HeroCard
           label={hero.label}
           amount={hero.clinicCommission}
-          subtitle={`${kpis.activeStaffCount} nhân viên đang làm · Doanh thu ${fmtShort(hero.clinicRevenue)}₫`}
           variant="admin"
         />
       </div>
@@ -334,7 +333,7 @@ function AdminView({
       {/* Quick metrics — PK aggregate */}
       <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
         <MetricCard
-          label="Doanh số PK"
+          label="Doanh số"
           value={fmtShort(kpis.totalRevenue)}
           delta={`${kpis.activeStaffCount} nhân viên`}
           tone="success"
@@ -343,7 +342,7 @@ function AdminView({
         <MetricCard
           label="Đơn"
           value={`${kpis.closedDeals}/${kpis.totalDeals}`}
-          delta="Đã chốt trên tổng đơn"
+          delta="Đã chốt"
           icon={metricCustomersClosedIcon}
         />
       </div>
@@ -360,7 +359,7 @@ function AdminView({
           </button>
         }
       >
-        Cần xử lý PK ({pendingTasks.total})
+        Cần xử lý phòng khám ({pendingTasks.total})
       </SectionTitle>
       <PendingTasksCard tasks={pendingTasks} role={data.user.role} navigate={navigate} />
 
@@ -383,7 +382,7 @@ function AdminView({
           <div className="px-5 py-8 text-center">
             <Users size={28} className="mx-auto text-np-border-strong" />
             <div className="mt-2 text-[12px] font-medium text-np-text-muted">
-              Chưa có dữ liệu xếp hạng
+              Chưa có xếp hạng
             </div>
           </div>
         ) : (
@@ -410,7 +409,9 @@ function AdminView({
               />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] font-bold text-np-ink">{p.name}</div>
-                <div className="truncate text-[11px] text-np-text-muted">{p.role}</div>
+                <div className="truncate text-[11px] text-np-text-muted">
+                  {ROLE_LABEL[p.role as UserRole] ?? p.role}
+                </div>
               </div>
               <div className="flex-shrink-0 text-right">
                 <div className="text-[13px] font-bold text-np-ink tabular-nums">
@@ -484,21 +485,12 @@ function HeroCard({
                 <div className="border-b border-np-surface-pressed px-4 pb-3 pt-4">
                   <p className="text-[14px] font-bold text-np-ink">Cách tính hoa hồng</p>
                   <p className="mt-0.5 text-[12px] text-np-text-muted">
-                    Hoa hồng tạm tính theo doanh thu trong kỳ
+                    Hoa hồng dự tính của tháng này
                   </p>
                 </div>
-                <div className="space-y-3 px-4 py-3">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-                      Công thức
-                    </p>
-                    <p className="mt-1 text-[13px] font-semibold text-np-ink">
-                      Doanh thu × Tỉ lệ hoa hồng
-                    </p>
-                  </div>
-                  <div className="border-t border-np-surface-pressed pt-3 text-[11px] leading-relaxed text-np-text-muted">
-                    Hoa hồng hiển thị là <span className="font-bold text-np-ink">tạm tính</span>
-                    , sẽ chốt khi đơn chuyển trạng thái "Hoàn tất" và được duyệt chi trả cuối kỳ.
+                <div className="px-4 py-3">
+                  <div className="text-[11px] leading-relaxed text-np-text-muted">
+                    Tạm tính theo doanh số và tỷ lệ hoa hồng. Chốt sau khi hoàn tất và được duyệt.
                   </div>
                 </div>
               </PopoverContent>
@@ -574,7 +566,7 @@ function PendingTasksCard({
   }
   items.push({
     key: "recall",
-    label: "Khách đến ngày tái khám",
+    label: "Đến hạn tái khám",
     subtitle: "Trong 7 ngày tới",
     count: tasks.customersRecallDue,
     icon: Calendar,

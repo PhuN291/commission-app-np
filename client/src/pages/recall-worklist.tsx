@@ -58,13 +58,13 @@ interface WorklistRow {
 type CallOutcome = "scheduled" | "no_answer" | "refused";
 
 const OUTCOME_OPTIONS: { value: CallOutcome; label: string; icon: LucideIcon }[] = [
-  { value: "scheduled", label: "Đã đặt lịch lại", icon: CalendarCheck },
+  { value: "scheduled", label: "Đã đặt lịch", icon: CalendarCheck },
   { value: "no_answer", label: "Chưa bắt máy", icon: PhoneMissed },
   { value: "refused", label: "Khách từ chối", icon: Ban },
 ];
 
 const OUTCOME_LABEL: Record<string, string> = {
-  scheduled: "Đã đặt lịch lại",
+  scheduled: "Đã đặt lịch",
   no_answer: "Chưa bắt máy",
   refused: "Khách từ chối",
   other: "Khác",
@@ -109,7 +109,7 @@ function timeLabel(days: number | null): { text: string; tone: BadgeTone } {
   if (days == null) return { text: "Chưa rõ", tone: "neutral" };
   if (days > 0) return { text: `Trễ ${days} ngày`, tone: "critical" };
   if (days === 0) return { text: "Hôm nay", tone: "attention" };
-  return { text: `Sắp tới ${-days} ngày`, tone: "neutral" };
+  return { text: `Còn ${-days} ngày`, tone: "neutral" };
 }
 
 type FilterKey = "all" | "overdue" | "today" | "upcoming";
@@ -194,7 +194,7 @@ export default function RecallWorklist() {
             <div className="px-5 py-12 text-center">
               <PhoneCall size={36} className="mx-auto text-np-border-strong" />
               <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-                Hiện không có lượt nào cần gọi
+                Chưa có lượt cần gọi
               </div>
             </div>
           </Card>
@@ -207,9 +207,16 @@ export default function RecallWorklist() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-[15px] font-bold text-np-ink">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/customers/${it.customerId}`);
+                          }}
+                          className="max-w-full truncate text-left text-[15px] font-bold text-np-ink transition-opacity active:underline active:opacity-70"
+                        >
                           {it.customerName || "Khách"}
-                        </span>
+                        </button>
                         <Badge tone={label.tone}>{label.text}</Badge>
                       </div>
                       <div className="mt-1 text-[13px] font-medium text-np-text-sub">
@@ -221,7 +228,7 @@ export default function RecallWorklist() {
                       </div>
                       {it.assigneeName && (
                         <div className="mt-0.5 text-[12px] text-np-text-muted">
-                          Chăm: {it.assigneeName}
+                          Phụ trách: {it.assigneeName}
                         </div>
                       )}
                       {it.lastCall && (

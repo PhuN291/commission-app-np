@@ -106,7 +106,7 @@ export default function Notifications() {
               onClick={handleReadAll}
               className="text-[13px] font-semibold text-np-link"
             >
-              Đã đọc tất cả
+              Đánh dấu đã đọc
             </button>
           ) : undefined
         }

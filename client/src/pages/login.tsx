@@ -35,13 +35,13 @@ function getDeviceId(): string {
 function getDeviceName(): string {
   const ua = navigator.userAgent;
   // Browser
-  let browser = "Browser";
+  let browser = "Trình duyệt";
   if (/Edg\//.test(ua)) browser = "Edge";
   else if (/Chrome\//.test(ua)) browser = "Chrome";
   else if (/Firefox\//.test(ua)) browser = "Firefox";
   else if (/Safari\//.test(ua)) browser = "Safari";
   // OS
-  let os = "Unknown OS";
+  let os = "Không rõ hệ điều hành";
   if (/iPhone|iPad/.test(ua)) os = "iOS";
   else if (/Android/.test(ua)) os = "Android";
   else if (/Mac OS X/.test(ua)) os = "macOS";
@@ -118,7 +118,7 @@ export default function Login() {
       const data = await res.json();
 
       if (res.status === 404) {
-        setPhoneError("SĐT chưa có trong hệ thống. Liên hệ quản lý.");
+        setPhoneError("Số điện thoại chưa có trong hệ thống. Liên hệ quản lý.");
         return false;
       }
       if (res.status === 423) {
@@ -128,7 +128,7 @@ export default function Login() {
         return false;
       }
       if (!res.ok) {
-        setPhoneError(data.message || "Lỗi gửi OTP, thử lại");
+        setPhoneError(data.message || "Không gửi được mã OTP. Thử lại.");
         return false;
       }
 
@@ -170,7 +170,7 @@ export default function Login() {
         return;
       }
       if (data.status === "expired") {
-        setOtpError("OTP đã hết hạn. Vui lòng gửi lại.");
+        setOtpError("Mã OTP đã hết hạn. Gửi lại.");
         setOtpExpiresAt(Date.now()); // force expired UI
         otpAutoSubmitted.current = false;
         return;
@@ -221,7 +221,7 @@ export default function Login() {
     setPhoneError("");
     const normalized = vnNormalize(phoneInput);
     if (!normalized) {
-      setPhoneError("SĐT không hợp lệ. Vd: 0901234567");
+      setPhoneError("Số điện thoại không hợp lệ. Ví dụ: 0901234567");
       return;
     }
     setNormalizedPhone(normalized);
@@ -294,7 +294,7 @@ export default function Login() {
           </div>
 
           <p className="mt-6 text-center text-[12px] font-medium text-white/85">
-            Liên hệ phòng IT nhận hỗ trợ nhanh
+            Liên hệ phòng kỹ thuật khi cần hỗ trợ
           </p>
         </div>
       </div>
@@ -414,14 +414,14 @@ function OtpStep({
         className="mb-3 flex items-center gap-1 text-[12px] font-semibold text-np-text-sub transition-colors hover:text-np-ink"
       >
         <ArrowLeft size={14} />
-        Đổi SĐT
+        Đổi số điện thoại
       </button>
 
       <h1 className="mb-1.5 text-center text-[20px] font-bold text-np-ink">Nhập mã OTP</h1>
       <p className="mb-5 text-center text-[13px] text-np-text-muted">
         Đã gửi mã{" "}
         <span className="font-semibold text-np-ink">
-          {sentVia === "zalo_oa" ? "qua Zalo OA" : "qua SMS"}
+          {sentVia === "zalo_oa" ? "qua Zalo" : "qua SMS"}
         </span>{" "}
         tới <span className="font-semibold text-np-ink tabular-nums">{maskPhone(phone)}</span>
       </p>
@@ -436,7 +436,7 @@ function OtpStep({
             </div>
           </div>
           <NPButton tone="ghost" size="lg" className="w-full justify-center" onClick={onBack}>
-            Đổi SĐT khác
+            Đổi số điện thoại khác
           </NPButton>
         </div>
       ) : (

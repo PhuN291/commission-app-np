@@ -167,7 +167,7 @@ export default function AnalyticsAppointments() {
       <div className="bg-np-surface-sub pb-5">
         <PageHeader
           title="Lịch hẹn"
-          subtitle="Xu hướng và tỉ lệ hoàn thành"
+          subtitle="Xu hướng và tỷ lệ hoàn thành"
           action={<Badge tone="neutral">{cycleLabel(data.cycle)}</Badge>}
         />
 
@@ -255,7 +255,7 @@ export default function AnalyticsAppointments() {
         <SectionTitle>Phân bố theo khung giờ</SectionTitle>
         <Card className="p-4">
           {hourData.length === 0 ? (
-            <Empty>Chưa có lịch hẹn có giờ hẹn trong kỳ</Empty>
+            <Empty>Chưa có lịch hẹn đặt giờ trong kỳ</Empty>
           ) : (
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -344,7 +344,7 @@ export default function AnalyticsAppointments() {
         <Card className="space-y-4 p-4">
           <div className="flex flex-col items-center">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-              Tỉ lệ hiện tại
+              Tỷ lệ hiện tại
             </p>
             <div className="relative h-[100px] w-[200px]">
               <svg viewBox="0 0 200 110" className="h-full w-full">
@@ -433,7 +433,7 @@ export default function AnalyticsAppointments() {
                 </div>
               ))}
               <div className="flex items-center justify-between border-t border-np-surface-pressed pt-2">
-                <span className="text-[12px] font-bold text-np-text-sub">Tỉ lệ đặt lại</span>
+                <span className="text-[12px] font-bold text-np-text-sub">Tỷ lệ đặt lại</span>
                 <span className="text-[15px] font-bold text-np-brand-ink">{kpis.tyLeTaiKham.value}%</span>
               </div>
             </>
@@ -463,7 +463,7 @@ function ChangePill({ pct, invert }: { pct: number | null; invert?: boolean }) {
   if (pct === null) {
     return (
       <span className="rounded-full bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold text-np-text-muted">
-        —
+        -
       </span>
     );
   }

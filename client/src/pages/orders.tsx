@@ -189,7 +189,7 @@ export default function Orders() {
     <Screen activeTab={active} onTab={onTab}>
       <PageHeader
         title="Đơn hàng"
-        subtitle={`${filtered.length} đơn trong danh sách`}
+        subtitle={`${filtered.length} đơn`}
         action={
           <NPButton tone="primary" size="sm" icon={Plus} onClick={() => navigate("/orders/new")}>
             Tạo đơn
@@ -330,7 +330,7 @@ export default function Orders() {
           <div className="px-5 py-12 text-center">
             <ShoppingBag size={36} className="mx-auto text-np-border-strong" />
             <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-              {isRefundFilter ? "Chưa có đơn hoàn tiền." : "Không có đơn hàng nào"}
+              {isRefundFilter ? "Chưa có đơn hoàn tiền" : "Chưa có đơn hàng"}
             </div>
           </div>
         ) : (

@@ -164,7 +164,7 @@ export default function AnalyticsOverview() {
             icon={CheckCircle2}
           />
           <KpiCard
-            title="Giá trị TB / đơn"
+            title="Giá trị trung bình mỗi đơn"
             display={fmtVND(kpis.giaTriTbDon.value)}
             changePct={kpis.giaTriTbDon.changePct}
             icon={Activity}
@@ -359,7 +359,7 @@ export default function AnalyticsOverview() {
           </div>
           {hoanTien.dichVu.length === 0 ? (
             <p className="mt-2 text-center text-[12px] italic text-np-text-muted">
-              Không có hoàn tiền trong kỳ
+              Chưa có hoàn tiền trong kỳ
             </p>
           ) : (
             <div className="mt-3 space-y-2 border-t border-np-surface-pressed pt-3">
@@ -396,7 +396,7 @@ function ChangePill({ pct }: { pct: number | null }) {
   if (pct === null) {
     return (
       <span className="rounded-full bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold text-np-text-muted">
-        —
+        -
       </span>
     );
   }
@@ -491,7 +491,7 @@ function ListedNote() {
   return (
     <p className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-np-text-muted">
       <Layers size={13} className="mt-0.5 flex-shrink-0" />
-      Theo giá niêm yết của từng dịch vụ. Tổng có thể khác ô Doanh thu thực thu (đã trừ bảo hiểm và voucher).
+      Theo giá niêm yết từng dịch vụ. Tổng có thể khác mục Doanh thu thực thu, đã trừ bảo hiểm và phiếu giảm giá.
     </p>
   );
 }

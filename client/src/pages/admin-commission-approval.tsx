@@ -509,7 +509,7 @@ export default function AdminCommissionApproval() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="rounded-np-button border border-np-danger-bg bg-np-danger-bg/30 p-3 text-[13px] font-medium text-np-danger">
-              Bạn sắp duyệt <strong>{data.stats.pending.count}</strong> khoản hoa hồng (
+              Sắp duyệt <strong>{data.stats.pending.count}</strong> khoản hoa hồng (
               <strong>{fmtVND(data.stats.pending.totalAmount)}</strong>) cho{" "}
               <strong>{cycleLabel(cycle)}</strong>.
               <div className="mt-1 text-[11px] font-medium">
@@ -782,7 +782,7 @@ function CRTab({
         <Card className="mx-4 px-5 py-12 text-center">
           <CheckCircle2 size={36} className="mx-auto text-np-border-strong" />
           <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-            Không có khoản hoa hồng nào trong kỳ
+            Chưa có hoa hồng trong kỳ
           </div>
         </Card>
       ) : (
@@ -985,7 +985,7 @@ function ComplaintTab({
       <Card className="mx-4 px-5 py-12 text-center">
         <CheckCircle2 size={36} className="mx-auto text-np-border-strong" />
         <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-          Không có khiếu nại đang chờ xử lý
+          Chưa có khiếu nại chờ xử lý
         </div>
       </Card>
     );
@@ -1067,7 +1067,7 @@ function AdjustmentTab({
           <Card className="px-5 py-8 text-center">
             <Clock size={28} className="mx-auto text-np-border-strong" />
             <div className="mt-2 text-[12px] font-medium text-np-text-muted">
-              Không có điều chỉnh chờ duyệt
+              Chưa có điều chỉnh chờ duyệt
             </div>
           </Card>
         ) : (

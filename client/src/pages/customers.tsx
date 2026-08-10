@@ -4,7 +4,7 @@
  * Filter logic:
  * - "Tất cả": tất cả KH
  * - "Cần follow-up": Customer.nextRecallDueAt <= now (overdue + due today, strict)
- * - "VIP": từ CUSTOMER_TAGS hardcoded (giữ nguyên)
+ * - "VIP": cột thật Customer.isVip (API /api/customers trả kèm)
  *
  * TODO Phase 2 (B4 R-9-1 vòng 14): Filter customers theo primaryAssignedUserId
  * cho NV/BS. Hiện NV thấy mọi customer (tạm thời, đợi schema migration).
@@ -29,9 +29,8 @@ import {
   useTabNav,
   type ChipItem,
 } from "@/components/np";
-import { CUSTOMER_TAGS } from "@/lib/mock-crm";
 import type { Customer, Order } from "@shared/schema";
-import type { RecallStatus } from "@shared/types";
+import { isWithinLastMonths, type RecallStatus } from "@shared/types";
 
 /** Khách trong list kèm trạng thái recall (API /api/customers bổ sung). */
 type CustomerRow = Customer & { recallStatus?: RecallStatus };
@@ -95,9 +94,16 @@ export default function Customers() {
   });
   const { data: orders = [] } = useQuery<Order[]>({ queryKey: ["/api/orders", getCurrentUserId()] });
 
+  /**
+   * Chi tiêu và số đơn tính trong 12 tháng gần nhất, khớp GET /api/customers/:id.
+   * order.createdAt là text 'DD/MM/YYYY HH:mm' nên phải dùng helper isWithinLastMonths,
+   * không tự new Date(). Đơn đã huỷ không tính, giống phía máy chủ.
+   */
   const statsByPhone = useMemo(() => {
     const map = new Map<string, { orderCount: number; totalSpent: number }>();
     orders.forEach((o) => {
+      if (o.appointmentStatus === "cancelled") return;
+      if (!isWithinLastMonths(o.createdAt)) return;
       const prev = map.get(o.phone) ?? { orderCount: 0, totalSpent: 0 };
       map.set(o.phone, {
         orderCount: prev.orderCount + 1,
@@ -107,15 +113,7 @@ export default function Customers() {
     return map;
   }, [orders]);
 
-  const vipIds = useMemo(
-    () =>
-      new Set(
-        Object.entries(CUSTOMER_TAGS)
-          .filter(([, tags]) => tags.includes("VIP"))
-          .map(([id]) => parseInt(id, 10)),
-      ),
-    [],
-  );
+  const vipCount = useMemo(() => customers.filter((c) => c.isVip).length, [customers]);
 
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -128,10 +126,10 @@ export default function Customers() {
       if (!matchesSearch) return false;
       if (activeFilter === "follow_up") return isUpcomingRecall(c);
       if (activeFilter === "overdue") return isOverdueRecall(c);
-      if (activeFilter === "vip") return vipIds.has(c.id);
+      if (activeFilter === "vip") return c.isVip;
       return true;
     });
-  }, [customers, searchTerm, activeFilter, vipIds]);
+  }, [customers, searchTerm, activeFilter]);
 
   const chips: ChipItem[] = useMemo(
     () => [
@@ -146,16 +144,16 @@ export default function Customers() {
         label: "Trễ lịch tái khám",
         count: customers.filter(isOverdueRecall).length,
       },
-      { key: "vip", label: "VIP", count: vipIds.size },
+      { key: "vip", label: "VIP", count: vipCount },
     ],
-    [customers, vipIds],
+    [customers, vipCount],
   );
 
   return (
     <Screen activeTab={active} onTab={onTab}>
       <PageHeader
         title="Khách hàng"
-        subtitle={`${customers.length} khách hàng trong danh sách`}
+        subtitle={`${customers.length} khách hàng`}
         action={
           <NPButton tone="primary" size="sm" icon={Plus}>
             Thêm
@@ -166,6 +164,12 @@ export default function Customers() {
       <SearchField value={searchTerm} onChange={setSearchTerm} placeholder="Tìm khách hàng..." />
       <Chips items={chips} active={activeFilter} onChange={setActiveFilter} />
 
+      {!isLoading && filtered.length > 0 && (
+        <div className="mx-4 mb-1.5 text-right text-[11px] font-medium text-np-text-muted">
+          Chi tiêu 12 tháng
+        </div>
+      )}
+
       <Card className="overflow-hidden p-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
@@ -175,13 +179,12 @@ export default function Customers() {
           <div className="px-5 py-12 text-center">
             <UsersIcon size={36} className="mx-auto text-np-border-strong" />
             <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-              Không tìm thấy khách hàng nào
+              Không tìm thấy khách hàng
             </div>
           </div>
         ) : (
           filtered.map((c, i) => {
             const stats = statsByPhone.get(c.phone) ?? { orderCount: 0, totalSpent: 0 };
-            const tags = CUSTOMER_TAGS[c.id] || [];
             return (
               <Row
                 key={c.id}
@@ -190,11 +193,7 @@ export default function Customers() {
                 title={
                   <span className="flex flex-wrap items-center gap-1.5">
                     {c.name}
-                    {tags.includes("VIP") && (
-                      <span className="rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[10px] font-bold text-[#B45309]">
-                        VIP
-                      </span>
-                    )}
+                    {c.isVip && <Badge tone="attention">VIP</Badge>}
                     <RecallBadge customer={c} />
                   </span>
                 }
@@ -234,7 +233,7 @@ function RecallBadge({ customer }: { customer: CustomerRow }) {
   if (customer.recallStatus === "done") {
     return (
       <>
-        {overdue > 0 && <Badge tone="neutral">Quá {overdue} ngày</Badge>}
+        {overdue > 0 && <Badge tone="neutral">Trễ {overdue} ngày</Badge>}
         <Badge tone="success">
           <BadgeCheck size={13} strokeWidth={2.5} />
           Đã nhắc
@@ -244,7 +243,7 @@ function RecallBadge({ customer }: { customer: CustomerRow }) {
   }
 
   if (overdue > 0) {
-    return <Badge tone="critical">Quá {overdue} ngày</Badge>;
+    return <Badge tone="critical">Trễ {overdue} ngày</Badge>;
   }
   if (overdue === 0) {
     return <Badge tone="attention">Đến hạn hôm nay</Badge>;

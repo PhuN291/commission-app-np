@@ -141,8 +141,8 @@ export default function AdminCommissionConfig() {
     },
     onSuccess: () => {
       toast({
-        title: "Đã lưu cấu hình",
-        description: "Tỉ lệ mới chỉ áp cho đơn tạo SAU thời điểm này.",
+        title: "Đã lưu tỷ lệ",
+        description: "Tỷ lệ mới chỉ áp cho đơn tạo SAU thời điểm này.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/commission-tiers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/commission-tiers/history"] });
@@ -150,7 +150,7 @@ export default function AdminCommissionConfig() {
     },
     onError: (err: any) => {
       toast({
-        title: "Lỗi lưu cấu hình",
+        title: "Không lưu được tỷ lệ",
         description: err?.message || err?.error || "Vui lòng thử lại",
         variant: "destructive",
       });
@@ -212,15 +212,15 @@ export default function AdminCommissionConfig() {
 
   return (
     <Screen activeTab={navActive} onTab={onNavTab} noHeader>
-      <DetailHeader title="Cấu hình hoa hồng" onBack={() => navigate("/")} />
+      <DetailHeader title="Tỷ lệ hoa hồng" onBack={() => navigate("/")} />
 
       <div className="bg-np-surface-sub pb-5">
         {/* Banner info */}
         <div className="mx-4 mt-3 flex items-start gap-2 rounded-np-card border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] font-medium text-np-text-sub">
           <Info size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
           <span>
-            Tỉ lệ mới chỉ áp cho đơn tạo <strong>SAU</strong> thời điểm Lưu. Đơn cũ giữ tỉ lệ hoa hồng tại thời điểm tạo.
-            {!canEdit && <span className="ml-1 italic text-np-text-muted">(Bạn chỉ có quyền xem.)</span>}
+            Tỷ lệ mới chỉ áp cho đơn tạo <strong>SAU</strong> thời điểm Lưu. Đơn cũ giữ tỷ lệ hoa hồng tại thời điểm tạo.
+            {!canEdit && <span className="ml-1 italic text-np-text-muted">(Chế độ xem.)</span>}
           </span>
         </div>
 
@@ -320,14 +320,14 @@ export default function AdminCommissionConfig() {
         >
           <SheetHeader className="flex-shrink-0 border-b border-np-surface-pressed px-6 pb-4 pr-12 pt-6">
             <SheetTitle className="text-[16px] font-bold text-np-ink">
-              Lịch sử thay đổi tỉ lệ
+              Lịch sử thay đổi tỷ lệ
             </SheetTitle>
           </SheetHeader>
 
           <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
             {history.length === 0 ? (
               <div className="px-3 py-8 text-center text-[13px] text-np-text-muted">
-                Chưa có thay đổi nào
+                Chưa có thay đổi
               </div>
             ) : (
               history.map((entry) => (

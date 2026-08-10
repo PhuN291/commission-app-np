@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BA Plan - NP Chat Hub</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1a2230; --muted:#5b6675; --line:#e4e8ee;
+    --accent:#0f766e; --accent-soft:#e6f2f0;
+    --ok:#0f9d58; --ok-soft:#e7f6ec; --warn:#b26a00; --warn-soft:#fff4e0; --bad:#c0392b; --bad-soft:#fdecea;
+    --blue:#2557d6; --blue-soft:#eaf0ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;padding:32px 18px;}
+  .wrap{max-width:940px;margin:0 auto;}
+  header.doc{border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:22px;}
+  header.doc h1{font-size:24px;font-weight:800;letter-spacing:-.2px;}
+  header.doc .sub{color:var(--muted);font-size:14px;margin-top:4px;}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .meta span{font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:4px 11px;color:var(--muted);}
+  .meta span b{color:var(--ink);font-weight:600;}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:16px;}
+  h2{font-size:16px;font-weight:800;display:flex;align-items:center;gap:9px;margin-bottom:12px;}
+  h2 .n{width:24px;height:24px;border-radius:7px;background:var(--accent);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  h3{font-size:13.5px;font-weight:700;margin:14px 0 6px;color:var(--ink);}
+  p{font-size:14px;margin-bottom:8px;}
+  .muted{color:var(--muted);}
+  ul{margin:6px 0 6px 4px;list-style:none;}
+  li{font-size:14px;padding-left:18px;position:relative;margin-bottom:6px;}
+  li:before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  .lock{background:var(--accent-soft);border:1px solid #cfe6e2;border-radius:12px;padding:16px 18px;margin-bottom:16px;}
+  .lock h2{color:#0b5e57;}
+  .lock h2 .n{background:#0b5e57;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .kv{display:flex;gap:8px;font-size:13.5px;padding:7px 0;border-bottom:1px dashed var(--line);}
+  .kv .k{color:var(--muted);min-width:150px;flex-shrink:0;}
+  .kv .v{font-weight:600;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding:8px 10px;background:#f8fafc;border-bottom:1px solid var(--line);}
+  td{padding:9px 10px;border-bottom:1px solid #eef1f5;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .tag{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap;}
+  .t-keep{background:var(--ok-soft);color:#0b6b3c;}
+  .t-cut{background:var(--bad-soft);color:var(--bad);}
+  .t-build{background:var(--blue-soft);color:var(--blue);}
+  .t-ok{background:var(--ok-soft);color:#0b6b3c;}
+  .t-wait{background:var(--warn-soft);color:var(--warn);}
+  .t-dep{background:var(--bad-soft);color:var(--bad);}
+  .phase{display:flex;gap:12px;margin-bottom:10px;}
+  .phase .no{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .phase .body{flex:1;}
+  .phase .body .t{font-weight:700;font-size:14px;}
+  .phase .body .d{font-size:13px;color:var(--muted);}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;margin-top:6px;}
+  .flow .step{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:6px 10px;}
+  .flow .ar{color:var(--muted);}
+  .note{font-size:12.5px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
+  .foot{text-align:center;font-size:11.5px;color:var(--muted);margin-top:18px;}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr;}.kv{flex-direction:column;gap:2px;}.kv .k{min-width:0;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <h1>BA Plan: NP Chat Hub</h1>
+    <div class="sub">Hệ thống quản lý hội thoại đa kênh nội bộ cho Phòng khám Nguyên Phương, tận dụng một phần mã nguồn ZCRM</div>
+    <div class="meta">
+      <span>Phiên bản <b>1.1</b></span>
+      <span>Trạng thái <b>Draft, chốt sau elicitation</b></span>
+      <span>Người quyết nghiệp vụ <b>Nguyễn Đức Phú</b></span>
+      <span>Phạm vi <b>Nội bộ, không bán ra ngoài</b></span>
+      <span>Giai đoạn PK <b>Sắp khai trương, greenfield</b></span>
+    </div>
+  </header>
+
+  <div class="lock">
+    <h2><span class="n" style="background:#0b5e57;"></span>Quyết định đã chốt qua elicitation</h2>
+    <div class="grid2">
+      <div>
+        <div class="kv"><span class="k">Mục đích tool</span><span class="v">Nội bộ Nguyên Phương</span></div>
+        <div class="kv"><span class="k">Mục tiêu số 1</span><span class="v">Giữ tệp khách + giám sát tư vấn</span></div>
+        <div class="kv"><span class="k">Đội vận hành</span><span class="v">4 người</span></div>
+        <div class="kv"><span class="k">Chính sách cọc</span><span class="v">Không cọc</span></div>
+      </div>
+      <div>
+        <div class="kv"><span class="k">Kênh khai trương</span><span class="v">5 kênh (xem mục 4)</span></div>
+        <div class="kv"><span class="k">Lõi dữ liệu</span><span class="v">App hoa hồng (NP App)</span></div>
+        <div class="kv"><span class="k">Zalo cá nhân</span><span class="v">Fork ZCRM, cô lập</span></div>
+        <div class="kv"><span class="k">Giữ tệp khách</span><span class="v">Tài khoản do công ty cấp</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2><span class="n">1</span>Bối cảnh và vấn đề</h2>
+    <p><b>Về phòng khám:</b> Phòng khám Đa khoa Kỹ thuật cao Nguyên Phương, địa chỉ tại Trấn Biên, Đồng Nai. Thế mạnh là tầm soát và xét nghiệm (ung thư, tim mạch, tiểu đường, tuyến giáp, gan thận), khám sức khỏe tổng quát nam và nữ, khám thai và tiền hôn nhân, khám bảo hiểm y tế cả tuần từ thứ 2 tới chủ nhật, khám sức khỏe doanh nghiệp, và lấy mẫu xét nghiệm tại nhà miễn phí. Quy trình đặt lịch chính thức đi qua Website, Zalo, Facebook hoặc hotline, đúng với các kênh mà tool này sẽ gom về.</p>
+    <p>Phòng khám sắp khai trương, chưa vận hành nên chưa có dữ liệu thật. Khách sẽ nhắn tin qua nhiều nền tảng cùng lúc. Nếu để nhân viên trả lời rời rạc trên máy cá nhân như cách làm phổ biến, phòng khám sẽ gặp hai vấn đề ngay từ đầu: mất quan hệ khách khi nhân sự nghỉ, và quản lý không giám sát được chất lượng lẫn tốc độ tư vấn.</p>
+    <p class="muted">Vì greenfield, plan này thiết kế theo mô hình vận hành mục tiêu và giả định có ghi trạng thái, không dựa trên dữ liệu lịch sử. Bản thân việc chạy thật ở đợt đầu là công cụ để sinh ra dữ liệu còn thiếu.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>Mục tiêu và thước đo</h2>
+    <h3>Mục tiêu 1: Giữ tệp khách, không mất khi nhân sự nghỉ</h3>
+    <ul>
+      <li>100% hội thoại lưu trên hệ thống công ty, không nằm trên máy nhân viên.</li>
+      <li>Nhân viên nghỉ, thu hồi tài khoản và gán lại toàn bộ khách của người đó cho người mới trong dưới 5 phút, không mất lịch sử.</li>
+    </ul>
+    <h3>Mục tiêu 2: Giám sát và chuẩn hóa chất lượng tư vấn</h3>
+    <ul>
+      <li>Quản lý xem được 100% hội thoại của mọi nhân viên trên một màn hình.</li>
+      <li>Đo được thời gian phản hồi trung bình, mục tiêu dưới 10 phút giờ hành chính (baseline sau 1 tháng chạy thật).</li>
+      <li>Không có hội thoại chưa gán hoặc để khách chờ quá ngưỡng mà không ai biết.</li>
+    </ul>
+    <p class="note">Đồng bộ hoa hồng và tăng chuyển đổi không phải mục tiêu số 1 ở giai đoạn này, nên xếp ở đợt sau.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>Stakeholder và quyền quyết</h2>
+    <table>
+      <tr><th>Vai</th><th>Ai</th><th>Quyền</th></tr>
+      <tr><td>Người quyết nghiệp vụ</td><td>Nguyễn Đức Phú (đại diện CEO)</td><td>Chốt mọi quyết định kinh doanh và ưu tiên</td></tr>
+      <tr><td>Người dùng chính</td><td>4 nhân viên tư vấn</td><td>Trả lời khách, tạo đơn, gán nhãn</td></tr>
+      <tr><td>Quản lý</td><td>Quản lý phòng khám</td><td>Giám sát, gán và thu hồi khách, báo cáo</td></tr>
+      <tr><td>Dev và tích hợp</td><td>Team 1PDM</td><td>Build, fork ZCRM, nối app hoa hồng</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>Phạm vi và kênh</h2>
+    <h3>Năm kênh khai trương, gom về một inbox Chat Hub</h3>
+    <table>
+      <tr><th>Kênh</th><th>Cách làm</th><th>Ghi chú</th></tr>
+      <tr><td>Livechat website</td><td><span class="tag t-build">Build mới</span></td><td>Widget tự viết, sở hữu hoàn toàn, kênh sạch nhất</td></tr>
+      <tr><td>Zalo OA</td><td><span class="tag t-build">Build mới</span></td><td>API chính thức</td></tr>
+      <tr><td>Messenger</td><td><span class="tag t-build">Build mới</span></td><td>API Meta chính thức</td></tr>
+      <tr><td>Zalo cá nhân</td><td><span class="tag t-keep">Fork ZCRM</span></td><td>Gateway cô lập, chỉ đọc trước rồi mở trả lời, không bulk</td></tr>
+      <tr><td>TikTok</td><td><span class="tag t-build">API chính thức</span></td><td>TikTok Shop chat, DM thường xử lý tay</td></tr>
+    </table>
+    <h3>Ngoài phạm vi bản đầu</h3>
+    <ul>
+      <li>Phân quyền A/B che số điện thoại và chặn xuất data: bỏ, vì tài khoản do công ty cấp đã giữ được tệp khách. Chừa đường bật sau.</li>
+      <li>Lên đơn trong chat và đồng bộ hoa hồng: để đợt sau, không phải mục tiêu số 1.</li>
+      <li>Instagram: bỏ khỏi khai trương, thêm sau nếu cần.</li>
+      <li>Quét nhóm, automation, marketing gửi hàng loạt của ZCRM: bỏ hẳn, rủi ro khóa nick và vi phạm PDPL.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span>Mô hình vận hành mục tiêu</h2>
+    <h3>Luồng chính, khách lẻ</h3>
+    <div class="flow">
+      <span class="step">Khách nhắn 1 trong 5 kênh</span><span class="ar">→</span>
+      <span class="step">Vào inbox Chat Hub</span><span class="ar">→</span>
+      <span class="step">Tự nhận hoặc quản lý gán</span><span class="ar">→</span>
+      <span class="step">Tư vấn</span><span class="ar">→</span>
+      <span class="step">Đặt lịch, ghi vào app hoa hồng</span><span class="ar">→</span>
+      <span class="step">Đến khám</span><span class="ar">→</span>
+      <span class="step">Chờ kết quả</span><span class="ar">→</span>
+      <span class="step">Bác sĩ gọi trả kết quả và tư vấn</span><span class="ar">→</span>
+      <span class="step">Nhắc tái khám</span>
+    </div>
+    <h3>Hai luồng đặc thù của Nguyên Phương, khác hẳn luồng trên</h3>
+    <ul>
+      <li><b>Lấy mẫu xét nghiệm tại nhà:</b> không phải hẹn tại phòng khám mà là hẹn tận nhà, cần địa chỉ chính xác và khung giờ, kèm điều phối người đi lấy mẫu. Loại hẹn này phải phân biệt được với hẹn tại chỗ.</li>
+      <li><b>Khách doanh nghiệp:</b> một hội thoại có thể dẫn tới hợp đồng khám định kỳ cho vài chục tới vài trăm nhân viên. Chu kỳ tư vấn dài, cần báo giá, danh sách nhân viên, lịch khám theo đợt. Đây gần như một dòng nghiệp vụ riêng, không nên nhét chung luồng khách lẻ.</li>
+    </ul>
+    <h3>Dữ liệu hồ sơ khách cần có, phát sinh từ đặc thù trên</h3>
+    <ul>
+      <li>Thông tin bảo hiểm y tế: có hay không, mã thẻ, nơi đăng ký ban đầu. Khách hay gửi ảnh chụp thẻ qua chat nên cần chỗ lưu và tra lại.</li>
+      <li>Địa chỉ lấy mẫu tại nhà, tách khỏi địa chỉ thường trú.</li>
+      <li>Cờ khách doanh nghiệp và tên công ty, để tách báo cáo và cách chăm.</li>
+      <li>Cảnh báo an toàn y tế như dị ứng thuốc, hiển thị nổi bật khi tư vấn.</li>
+    </ul>
+    <p class="note">Khách cũ nhắn lại tự về đúng người chăm gốc, dựa trên trường primaryAssignedUserId đã có sẵn trong app hoa hồng. Danh tính khách và lịch sử hội thoại được ghi vào kho công ty sở hữu ngay từ tin đầu tiên, đó chính là cách mục tiêu giữ tệp khách được hiện thực về mặt kỹ thuật. Lưu ý thuật ngữ: trong ngành y dùng ca khám và tỉ lệ đến khám thay cho chốt đơn và tỉ lệ chốt.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">6</span>Kiến trúc và cách tận dụng ZCRM</h2>
+    <p>Backend Chat Hub là lớp gom mọi kênh về một inbox, đóng vai như Pancake, và cắm vào app hoa hồng làm lõi dữ liệu khách, đơn, lịch hẹn, nhân viên. ZCRM chỉ đóng góp đúng một mảnh: engine Zalo cá nhân.</p>
+    <table>
+      <tr><th>Từ ZCRM</th><th>Xử lý</th></tr>
+      <tr><td>Engine Zalo cá nhân: đa nick, giữ và nối phiên, chống block, mirror media</td><td><span class="tag t-keep">Giữ, niêm phong trong service riêng</span></td></tr>
+      <tr><td>Giao diện Vue, CRM riêng, lịch hẹn riêng, DB khách riêng</td><td><span class="tag t-cut">Bỏ</span></td></tr>
+      <tr><td>Inbox gom, 4 kênh còn lại, backend Chat Hub</td><td><span class="tag t-build">Xây mới, stack Node/Express/Drizzle/React</span></td></tr>
+    </table>
+    <p class="note">Vì tool chỉ dùng nội bộ nên giấy phép AGPL của ZCRM không phát sinh vấn đề. Không tạo database khách thứ ba: mọi thông tin khách quy về app hoa hồng.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">7</span>Sổ giả định</h2>
+    <table>
+      <tr><th>Giả định</th><th>Trạng thái</th><th>Cách kiểm</th></tr>
+      <tr><td>Zalo là kênh ra khách nhiều nhất</td><td><span class="tag t-wait">Chưa có data</span></td><td>Đo sau 1 tháng chạy thật</td></tr>
+      <tr><td>4 nhân viên đủ tải lúc khai trương</td><td><span class="tag t-wait">Giả định</span></td><td>Theo dõi thời gian phản hồi, điều chỉnh</td></tr>
+      <tr><td>zca-js còn chạy ổn với Zalo hiện tại</td><td><span class="tag t-wait">Giả định</span></td><td>Audit code, chạy thử 2 nick, có kill-switch</td></tr>
+      <tr><td>App hoa hồng đủ ổn để làm lõi</td><td><span class="tag t-dep">Phụ thuộc</span></td><td>Dev xong di trú dữ liệu và vá bảo mật trước</td></tr>
+      <tr><td>Quy tắc hoa hồng khi khách cũ quay lại và nhiều người cùng chăm</td><td><span class="tag t-wait">Chờ Phú chốt</span></td><td>Quyết ở đợt tích hợp hoa hồng</td></tr>
+      <tr><td>Khách doanh nghiệp có cần luồng và màn riêng ngay từ đợt 1 không</td><td><span class="tag t-wait">Chờ Phú chốt</span></td><td>Phụ thuộc tỉ trọng doanh thu mảng doanh nghiệp</td></tr>
+      <tr><td>App hoa hồng đã có model cho hẹn lấy mẫu tại nhà và hợp đồng doanh nghiệp chưa</td><td><span class="tag t-dep">Cần dev kiểm</span></td><td>Đọc schema, nếu thiếu thì bổ sung trước đợt tích hợp</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">8</span>Rủi ro và giảm thiểu</h2>
+    <table>
+      <tr><th>Rủi ro</th><th>Mức</th><th>Giảm thiểu</th></tr>
+      <tr><td>Zalo khóa nick cá nhân</td><td><span class="tag t-dep">Cao</span></td><td>Cô lập gateway, chỉ đọc trước, không bulk, SIM chính chủ, dữ liệu đã đồng bộ nên không mất lịch sử</td></tr>
+      <tr><td>App hoa hồng chưa production-ready (audit đã chỉ ra di trú dở và lỗ bảo mật)</td><td><span class="tag t-dep">Cao</span></td><td>Điều kiện chặn cứng: xong di trú và bảo mật trước khi cắm Chat Hub</td></tr>
+      <tr><td>PDPL với dữ liệu sức khỏe (luật 91/2025 hiệu lực 01/01/2026)</td><td><span class="tag t-wait">Nặng nếu vướng</span></td><td>Consent khi khách nhắn lần đầu, server đặt tại VN, rà pháp lý trước go-live</td></tr>
+      <tr><td>Ôm 5 kênh cùng lúc quá tải team 1 dev</td><td><span class="tag t-wait">Vừa</span></td><td>Phân đợt, 3 kênh sạch trước, ZCRM và TikTok sau</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">9</span>Roadmap theo hướng lấy bằng chứng trước</h2>
+    <div class="phase"><div class="no">0</div><div class="body"><div class="t">Chuẩn bị</div><div class="d">Audit bảo mật ZCRM, xác minh zca-js gốc. Dev ổn định core app hoa hồng (di trú + bảo mật). Chốt các giả định treo. Đăng ký OA, Meta, TikTok, dựng hạ tầng VN.</div></div></div>
+    <div class="phase"><div class="no">1</div><div class="body"><div class="t">MVP inbox 3 kênh sạch</div><div class="d">Livechat website, Zalo OA, Messenger gom về một inbox. Gán và giám sát. Ghi hội thoại vào kho công ty và liên kết khách vào app hoa hồng. Đây là lõi phục vụ trực tiếp hai mục tiêu.</div></div></div>
+    <div class="phase"><div class="no">2</div><div class="body"><div class="t">Zalo cá nhân + TikTok</div><div class="d">Gateway fork ZCRM chạy cô lập, pilot 2 nick, chỉ đọc trước rồi mở trả lời. TikTok Shop qua API. Đánh giá go/no-go kênh cá nhân.</div></div></div>
+    <div class="phase"><div class="no">3</div><div class="body"><div class="t">Lên đơn trong chat + hoa hồng</div><div class="d">Tạo đơn ngay trong khung chat, đẩy sang app hoa hồng với attribution. Chốt quy tắc hoa hồng khách cũ và đồng chăm.</div></div></div>
+    <div class="phase"><div class="no">4</div><div class="body"><div class="t">Vận hành và mở rộng</div><div class="d">Đo số liệu thật, dashboard, cân nhắc thêm kênh hoặc mức B chống tuồn data nếu đội đông lên.</div></div></div>
+  </section>
+
+  <section>
+    <h2><span class="n">10</span>Quy trình vận hành cần có (không phải phần mềm)</h2>
+    <ul>
+      <li>SIM và nick Zalo đứng tên công ty. Nhân viên chỉ được cấp quyền dùng.</li>
+      <li>Checklist offboarding khi nhân viên nghỉ: thu nick, đổi mật khẩu, gỡ thiết bị, gán lại khách.</li>
+      <li>Tin chào có thông báo lưu thông tin phục vụ CSKH và link chính sách bảo mật, phục vụ tuân thủ PDPL. Nguyên Phương đã có sẵn trang chính sách bảo vệ dữ liệu cá nhân trên website, dùng lại link đó.</li>
+      <li>Bộ câu trả lời mẫu cho các câu hỏi lặp lại nhiều nhất: bảo hiểm y tế nhận ngày nào, có cần nhịn ăn không, bao giờ có kết quả, lấy mẫu tại nhà có tính phí không.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="n">11</span>Quyết định còn treo cần Phú chốt</h2>
+    <ul>
+      <li>TikTok khai trương là TikTok Shop hay chỉ DM tài khoản thường. DM thường không tích hợp kỹ thuật được. Ghi chú: NP đang có kênh TikTok tại phongkham.nguyenphuong, nhiều khả năng là DM thường chứ không phải Shop.</li>
+      <li>Quy tắc hoa hồng khi khách cũ quay lại và khi nhiều người cùng chăm một khách (chốt trước đợt 3).</li>
+      <li>Mảng khách doanh nghiệp chiếm bao nhiêu phần doanh thu dự kiến, để quyết có làm luồng riêng ngay đợt 1 hay để sau.</li>
+      <li>Lấy mẫu tại nhà có cần điều phối lịch cho kỹ thuật viên trong tool không, hay chỉ cần ghi hẹn rồi đội vận hành tự sắp.</li>
+      <li>Ngân sách và mốc thời gian khai trương, để dev ước lượng lại effort theo nguồn lực thật.</li>
+    </ul>
+  </section>
+
+  <div class="foot">Tài liệu nội bộ 1PDM, phục vụ dự án NP Chat Hub. Bản nháp để dev và Phú review trước khi vào đợt 0.</div>
+
+</div>
+</body>
+</html>

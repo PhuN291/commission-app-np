@@ -24,6 +24,11 @@ type VoucherStatus = "active" | "expired" | "used_up";
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
+const fmtDate = (s: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+};
+
 function getVoucherStatus(v: VoucherRow): VoucherStatus {
   if (v.usageLimit > 0 && v.usedCount >= v.usageLimit) return "used_up";
   if (v.endDate && new Date(v.endDate) < new Date()) return "expired";
@@ -112,7 +117,7 @@ export default function AdminVouchers() {
             <div className="px-5 py-12 text-center">
               <Ticket size={36} className="mx-auto text-np-border-strong" />
               <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-                Không tìm thấy voucher nào
+                Không tìm thấy voucher
               </div>
             </div>
           ) : (
@@ -151,7 +156,7 @@ export default function AdminVouchers() {
                         {v.startDate && v.endDate && (
                           <span className="flex items-center gap-1">
                             <CalendarDays size={11} strokeWidth={2.25} />
-                            {v.startDate} → {v.endDate}
+                            {fmtDate(v.startDate)} → {fmtDate(v.endDate)}
                           </span>
                         )}
                         <span className="tabular-nums">

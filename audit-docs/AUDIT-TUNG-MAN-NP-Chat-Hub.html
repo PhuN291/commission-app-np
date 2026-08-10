@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit nghiệp vụ từng màn - NP Chat Hub</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#16211c; --muted:#5c6b64; --line:#e2e8e5;
+    --teal:#0e7a64; --teal-soft:#e6f2ef;
+    --ok:#0f9d58; --ok-soft:#e7f6ec; --warn:#b26a00; --warn-soft:#fff4e0;
+    --bad:#c0392b; --bad-soft:#fdecea; --blue:#2557d6; --blue-soft:#eaf0ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.62;padding:30px 16px;}
+  .wrap{max-width:980px;margin:0 auto;}
+  header.doc{border-bottom:2px solid var(--teal);padding-bottom:15px;margin-bottom:20px;}
+  header.doc h1{font-size:23px;font-weight:800;letter-spacing:-.2px;}
+  header.doc .sub{color:var(--muted);font-size:14px;margin-top:4px;}
+  .meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;}
+  .meta span{font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:3px 11px;color:var(--muted);}
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:16px;}
+  .screen > h2{font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px;margin-bottom:6px;padding-bottom:12px;border-bottom:1px solid var(--line);}
+  .screen > h2 .n{width:28px;height:28px;border-radius:8px;background:var(--teal);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;}
+  .screen > h2 .st{margin-left:auto;font-size:11px;font-weight:700;border-radius:6px;padding:3px 9px;}
+  h3{font-size:14px;font-weight:800;margin:18px 0 7px;display:flex;align-items:center;gap:7px;}
+  h3 .ic{width:18px;height:18px;border-radius:5px;font-size:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;}
+  .ic-fix{background:var(--warn);}
+  .ic-cut{background:var(--bad);}
+  .ic-add{background:var(--blue);}
+  .ic-ask{background:#6b21a8;}
+  .ic-ok{background:var(--ok);}
+  p{font-size:14px;margin-bottom:8px;}
+  .muted{color:var(--muted);}
+  ul{margin:5px 0 5px 2px;list-style:none;}
+  li{font-size:14px;padding-left:17px;position:relative;margin-bottom:6px;}
+  li:before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--teal);}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:7px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding:8px 10px;background:#f8faf9;border-bottom:1px solid var(--line);}
+  td{padding:9px 10px;border-bottom:1px solid #eef2f0;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .tag{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap;display:inline-block;}
+  .t-hi{background:var(--bad-soft);color:var(--bad);}
+  .t-mid{background:var(--warn-soft);color:var(--warn);}
+  .t-low{background:var(--blue-soft);color:var(--blue);}
+  .t-done{background:var(--ok-soft);color:#0b6b3c;}
+  .t-wait{background:#f3e8ff;color:#6b21a8;}
+  .lead{background:var(--teal-soft);border:1px solid #cbe5de;border-radius:12px;padding:15px 18px;margin-bottom:16px;}
+  .lead h2{color:#0b5e4d;font-size:16px;font-weight:800;margin-bottom:8px;}
+  .box{background:#f8faf9;border-radius:10px;padding:12px 14px;margin-top:9px;font-size:13.5px;}
+  .box b{font-weight:700;}
+  .todo{background:var(--panel);border:1px dashed var(--line);border-radius:14px;padding:16px 20px;margin-bottom:16px;}
+  .todo h2{font-size:15px;font-weight:700;color:var(--muted);margin-bottom:8px;}
+  .foot{text-align:center;font-size:11.5px;color:var(--muted);margin-top:16px;}
+  @media(max-width:640px){table{font-size:12px;}th,td{padding:7px 6px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <h1>Audit nghiệp vụ từng màn: NP Chat Hub</h1>
+    <div class="sub">Soi từng màn theo vận hành thật, đề xuất sửa, cắt, bổ sung. Làm lần lượt từng màn, cập nhật dần vào file này.</div>
+    <div class="meta">
+      <span>Phiên bản 1.0</span>
+      <span>Nền: file NP Slack Style, 7 màn desktop</span>
+      <span>Đã audit đủ 7 màn</span>
+      <span>Bỏ 2 màn: Khách hàng, Lịch hẹn</span>
+      <span>Còn 1 câu chờ Phú quyết</span>
+    </div>
+  </header>
+
+  <div class="lead">
+    <h2>Cách đọc</h2>
+    <p>Mỗi màn chia bốn phần: cần sửa, cần cắt, cần bổ sung, và câu hỏi cần Phú quyết. Mức độ ghi theo tác động lên vận hành: nặng là không có thì nhân viên vướng hằng ngày, vừa là gây bất tiện, nhẹ là nên có cho gọn.</p>
+    <p class="muted">Căn cứ audit: phạm vi đã chốt trong tài liệu phân tích nghiệp vụ bản 2.0, và hai mục tiêu của dự án là giữ tệp khách và giám sát chất lượng tư vấn.</p>
+    <p style="margin-top:10px;"><b>Kết quả lớn nhất của đợt audit: bỏ hai màn, Khách hàng và Lịch hẹn.</b> Cả hai rơi vào cùng một bẫy là hiển thị lại dữ liệu của app hoa hồng mà không thêm được hành động nào. Sau khi cắt, app trở về đúng bản chất một hộp thư đa kênh, nav còn Tin nhắn, Kênh, Báo cáo, Thêm, và nhân viên gần như chỉ sống ở một màn.</p>
+    <p class="muted"><b>Cách kiểm dùng chung cho mọi màn:</b> liệt kê mọi việc màn đó làm, hỏi từng việc có chỗ khác làm được không. Nếu không việc nào là độc quyền của nó thì màn đó thừa.</p>
+  </div>
+
+  <div class="screen">
+    <h2><span class="n">1</span>Màn Tin nhắn<span class="st t-done">Đã dựng</span></h2>
+    <p class="muted">Màn quan trọng nhất, nhân viên dùng suốt ngày. Hiện có: rail điều hướng, sidebar hàng đợi và lọc kênh và lọc tag, cột danh sách hội thoại, khung chat với tab Tin nhắn và Lịch hẹn, panel hồ sơ khách trượt ra.</p>
+
+    <div class="box" style="background:var(--teal-soft);border:1px solid #cbe5de;">
+      <p><b>Quyết định lớn nhất của màn này: bỏ hẳn khái niệm đóng hội thoại, thay bằng tạm ẩn.</b></p>
+      <p class="muted" style="margin-bottom:0;">Lý do: quan hệ với bệnh nhân không bao giờ kết thúc, khách im ba tháng rồi nhắn lại là chuyện thường, nên không có mốc nào gọi là xong. Nhưng nếu bỏ hẳn cách dọn inbox thì sáng ra nhân viên nhìn 247 hội thoại không biết làm gì trước. Cách giải: không có nút Đã xong, chỉ có Tạm ẩn tới ngày, và mọi hàng đợi tính động nên không ai phải bấm gì để duy trì.</p>
+    </div>
+
+    <h3><span class="ic ic-fix">S</span>Cần sửa</h3>
+    <table>
+      <tr><th>Vấn đề</th><th>Mức</th><th>Sửa thành</th></tr>
+      <tr>
+        <td><b>Không có cách dọn inbox.</b> Chỉ có hàng đợi Chưa trả lời. Nhân viên trả lời một câu là hội thoại rời hàng đợi đó, nhưng không ai biết nó đang ở đâu và hôm nào cần quay lại</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Thêm một hành động duy nhất là <b>Tạm ẩn tới</b>, chọn 3 ngày, 1 tuần hoặc ngày cụ thể. Hội thoại biến khỏi inbox rồi tự quay lại đúng ngày. Khách nhắn lại sớm hơn thì tự bật ngay bất kể đang ẩn. Không có nút Đã xong, không có trạng thái phải bấm tay</td>
+      </tr>
+      <tr>
+        <td><b>Hàng đợi hiện chưa phản ánh cách làm việc thật</b></td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Chuyển toàn bộ hàng đợi sang <b>tính động</b>, không lưu trạng thái nên không bao giờ sai: Chưa trả lời là tin cuối của khách; Đang chờ khách là tin cuối của mình; Cần nhắc hôm nay là đã tạm ẩn tới hôm nay; Chưa có người phụ trách; Của tôi; Tất cả</td>
+      </tr>
+      <tr>
+        <td><b>Trạng thái khám lấy từ app hoa hồng đang hiển thị trong hồ sơ khách</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Bỏ. Lịch sử dịch vụ và lịch hẹn đã nói đủ, thêm một chip trạng thái chỉ là lặp lại và tạo thêm một chỗ có thể lệch dữ liệu khi đồng bộ trễ. Hiện sai còn tệ hơn không hiện</td>
+      </tr>
+      <tr>
+        <td><b>Tag đang trộn hai loại</b>: Khách mới, Đã đặt lịch, Tái khám nằm cạnh Cần theo dõi, Nhịn ăn sáng</td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Sau khi bỏ trạng thái khám thì chỉ còn <b>một loại tag duy nhất do nhân viên tự gắn</b>. Bỏ các tag mang nghĩa trạng thái khám ra khỏi hệ tag</td>
+      </tr>
+      <tr>
+        <td><b>Người phụ trách chỉ là dòng chữ tĩnh trên header</b>, không đổi được tại chỗ</td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Cho bấm vào tên người phụ trách để đổi, hiển thị dạng avatar kèm tên giống mẫu Phú gửi, kèm lịch sử ai chuyển cho ai lúc nào</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-cut">C</span>Cần cắt</h3>
+    <table>
+      <tr><th>Cắt gì</th><th>Mức</th><th>Vì sao</th></tr>
+      <tr>
+        <td><b>Thanh định dạng chữ trong ô soạn tin</b> gồm chữ đậm, nghiêng, gạch ngang, chèn link, danh sách</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Zalo và Messenger không hỗ trợ chữ đậm nghiêng trong tin nhắn thường. Nhân viên bôi đậm rồi gửi thì khách nhận được ký tự thô kiểu hai dấu sao, trông kém chuyên nghiệp với một phòng khám. Đây là lỗi chức năng thật, không phải chuyện thẩm mỹ. Nếu muốn giữ thì chỉ bật ở kênh nào thật sự hỗ trợ</td>
+      </tr>
+      <tr>
+        <td><b>Tab dấu cộng bên cạnh Tin nhắn và Lịch hẹn</b> trong khung chat</td>
+        <td><span class="tag t-low">Nhẹ</span></td>
+        <td>Chưa rõ mở ra gì. Nếu là thêm tab tùy ý thì thừa với một tool nội bộ bốn người, gây tò mò vô ích. Bỏ hoặc định nghĩa rõ nó làm gì</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-add">B</span>Cần bổ sung</h3>
+    <table>
+      <tr><th>Bổ sung</th><th>Mức</th><th>Vì sao cần</th></tr>
+      <tr>
+        <td><b>Nút nhận khách</b> cho hàng đợi Chưa có người phụ trách</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Hàng đợi đang đếm 4 khách chưa ai nhận nhưng không có cách nhận nhanh, phải vào từng hội thoại. Bản ZCRM cũ có nút này, bản mới rơi mất. Đây là việc đầu tiên nhân viên làm mỗi sáng</td>
+      </tr>
+      <tr>
+        <td><b>Hẹn nhắc lại</b></td>
+        <td><span class="tag t-done">Đã gộp</span></td>
+        <td>Không cần chức năng riêng. Chính là hành động Tạm ẩn tới ngày ở phần trên, cộng với hàng đợi Cần nhắc hôm nay. Một chức năng giải quyết hai việc</td>
+      </tr>
+      <tr>
+        <td><b>Nút mở kho phương tiện từ ô soạn tin</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Kho phương tiện có nút gửi vào hội thoại, nhưng chiều ngược lại không có. Khách hỏi bảng giá là câu hỏi lặp nhiều nhất, phải lấy được ngay trong chat chứ không phải rời màn đi tìm</td>
+      </tr>
+      <tr>
+        <td><b>Chèn câu trả lời mẫu</b></td>
+        <td><span class="tag t-wait">Chờ quyết</span></td>
+        <td>Thuộc ba điểm treo ở tài liệu phân tích nghiệp vụ. Nếu Phú duyệt thì thêm nút chèn mẫu vào ô soạn tin, với bốn câu hỏi lặp nhiều nhất</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-ok">Q</span>Đã chốt: một hội thoại là một kênh</h3>
+    <div class="box">
+      <p><b>Danh sách tách theo kênh, không có chức năng gộp.</b> Khách nhắn kênh nào thì trả lời tự động về đúng kênh đó, không có bước chọn kênh.</p>
+      <p class="muted">Lý do bác bỏ phương án gộp: gộp rồi thì lúc gõ trả lời hệ thống phải hỏi gửi qua kênh nào, đó là bước thừa và làm phức tạp thứ vốn đơn giản. Còn nỗi lo khách phải kể lại từ đầu khi nhắn qua kênh khác thì thực tế không thành vấn đề, vì khách đã mặc định nhắn nền tảng khác là gặp người trực khác, chuyện này rất bình thường.</p>
+      <p class="muted" style="margin-bottom:0;">Hồ sơ khách bên phải vẫn gộp theo người, hiện được khách đã nhắn những kênh nào và toàn bộ lịch sử dịch vụ. Đó là góc nhìn khác, không ảnh hưởng cách trả lời.</p>
+    </div>
+
+    <h3><span class="ic ic-ok">G</span>Đang làm tốt, giữ nguyên</h3>
+    <ul>
+      <li>Hàng đợi kèm số đếm thay cho danh sách khách trong sidebar, đúng cách các công cụ chăm khách làm, sidebar luôn ngắn dù bao nhiêu khách.</li>
+      <li>Dòng nhắc còn nhắn được tới bao giờ viết bằng tiếng người, không dùng thuật ngữ kỹ thuật.</li>
+      <li>Cảnh báo dị ứng thuốc nổi bật trong hồ sơ khách, kèm tên bác sĩ ghi nhận và ngày.</li>
+      <li>Mọi mục dữ liệu trong hồ sơ khách đều ghi rõ lấy từ app hoa hồng, và có nút mở hồ sơ bên đó.</li>
+      <li>Ghi chú nội bộ có tên người ghi và thời điểm.</li>
+      <li>Tin nhắn dòng phẳng, đọc đỡ mệt hơn dạng bong bóng khi phải xử lý nhiều hội thoại.</li>
+    </ul>
+  </div>
+
+  <div class="screen">
+    <h2><span class="n">2</span>Màn Khách hàng<span class="st t-hi">Đã chốt BỎ</span></h2>
+
+    <div class="box" style="background:var(--bad-soft);border:1px solid #f3c1bd;">
+      <p><b>Quyết định: bỏ hẳn màn này khỏi sản phẩm.</b></p>
+      <p class="muted">Cách kiểm chứng: liệt kê mọi việc màn này làm, rồi hỏi từng việc có chỗ khác làm được không. Tìm khách cũ để nhắn lại thì ô tìm toàn cục làm được. Xem ai chưa có người phụ trách thì hàng đợi ở màn Tin nhắn đã có. Xem một nhân viên ôm bao nhiêu khách thì màn Báo cáo có. Xem lịch sử khám của một khách thì hồ sơ bên phải khung chat có. Nhắc tái khám thì màn Lịch hẹn có.</p>
+      <p class="muted" style="margin-bottom:0;"><b>Kết quả: không có việc nào là độc quyền của màn này.</b> Nó chỉ là một góc nhìn khác của cùng tập dữ liệu, mà mọi góc nhìn đó đều đã tồn tại ở chỗ khác. Thêm nữa, mình đã chốt đơn vị làm việc của Chat Hub là hội thoại chứ không phải khách, nên đẻ ra một màn lấy khách làm đơn vị là đi ngược mô hình.</p>
+    </div>
+
+    <h3><span class="ic ic-add">B</span>Ba việc phải chuyển sang màn Tin nhắn trước khi bỏ</h3>
+    <table>
+      <tr><th>Chuyển gì</th><th>Mức</th><th>Vì sao bắt buộc</th></tr>
+      <tr>
+        <td><b>Lọc theo người phụ trách</b> trong sidebar màn Tin nhắn</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Quản lý cần xem một nhân viên đang ôm những hội thoại nào. Không có thì mất năng lực giám sát</td>
+      </tr>
+      <tr>
+        <td><b>Chọn nhiều hội thoại rồi chuyển người phụ trách hàng loạt</b></td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Đây là chỗ lo nhất. Một nhân viên nghỉ phép đang ôm 86 hội thoại, chuyển từng cái thì không ai làm nổi. Cần lọc theo người đó, chọn tất cả, chuyển trong một thao tác</td>
+      </tr>
+      <tr>
+        <td><b>Ô tìm toàn cục phải tìm được theo số điện thoại</b>, không chỉ tên</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Tình huống thật hay gặp: khách gọi điện tới phòng khám, lễ tân nhìn số rồi tra xem đây là ai, đã tư vấn gì. Chỉ tìm theo tên thì hỏng việc này</td>
+      </tr>
+    </table>
+
+    <p class="muted" style="margin-top:10px;"><b>Rủi ro đã biết và chấp nhận:</b> sau này nếu muốn làm chiến dịch chủ động kiểu gửi tin nhắc lịch hàng loạt cho một nhóm khách thì sẽ cần lại danh sách khách. Việc đó nằm ngoài phạm vi đã chốt, và lúc đó dựng lại cũng không muộn.</p>
+  </div>
+
+  <div class="screen" style="display:none;">
+    <h2>Nội dung audit cũ của màn Khách hàng, giữ để tham khảo</h2>
+
+    <h3><span class="ic ic-fix">S</span>Cần sửa</h3>
+    <table>
+      <tr><th>Vấn đề</th><th>Mức</th><th>Sửa thành</th></tr>
+      <tr>
+        <td><b>Bảng chỉ để xem, không làm được gì.</b> Mỗi dòng chỉ có mũi tên mở hồ sơ. Nhân viên tìm ra khách rồi thì việc tiếp theo là nhắn cho họ, nhưng không có đường nào để nhắn</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Mỗi dòng thêm nút mở hội thoại. Nếu khách đã nhắn nhiều kênh thì cho chọn kênh. Đây là lý do tồn tại của màn này, không có thì màn vô dụng</td>
+      </tr>
+      <tr>
+        <td><b>Cột Lần khám gần nhất chưa phải thứ cần nhất.</b> Với mục tiêu chăm khách thì cái quan trọng hơn là lần cuối có người nhắn với khách</td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Thêm cột Lần nhắn gần nhất lấy từ Chat Hub, đặt cạnh Lần khám gần nhất lấy từ app hoa hồng. Hai thứ khác nhau và cả hai đều có ích: một cái nói khách lâu chưa quay lại, một cái nói khách lâu chưa được chăm</td>
+      </tr>
+      <tr>
+        <td><b>Hiển thị Chưa gán nhưng không gán được từ đây</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Cho bấm vào ô người phụ trách để gán hoặc đổi ngay trong bảng, không phải mở hội thoại</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-add">B</span>Cần bổ sung</h3>
+    <table>
+      <tr><th>Bổ sung</th><th>Mức</th><th>Vì sao cần</th></tr>
+      <tr>
+        <td><b>Bộ lọc</b>: chưa có người phụ trách, lâu chưa tương tác, theo người phụ trách, theo tag, theo kênh</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>247 khách mà chỉ có một ô tìm thì chỉ dùng được khi đã biết tên. Ba việc chính của màn này đều cần lọc chứ không phải tìm</td>
+      </tr>
+      <tr>
+        <td><b>Chọn nhiều khách rồi gán hàng loạt cho một người</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Phân khách cho bốn nhân viên là việc quản lý làm thường xuyên, nhất là khi có người nghỉ hoặc đổi ca. Gán từng người một sẽ rất mệt</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-ask">Q</span>Câu hỏi cần Phú quyết</h3>
+    <div class="box">
+      <p><b>Khách chưa từng nhắn qua kênh nào thì có cho nhắn chủ động không?</b></p>
+      <p class="muted" style="margin-bottom:0;">Ví dụ khách đến khám trực tiếp, có trong app hoa hồng nhưng chưa từng chat. Nhân viên muốn nhắn hỏi thăm hoặc nhắc tái khám thì làm sao. Ràng buộc thật: Zalo OA và Messenger đều yêu cầu khách nhắn trước mới trả lời được, nên không thể nhắn chủ động qua hai kênh đó. Chỉ còn cách gọi điện, hoặc nhắn qua Zalo cá nhân nếu có số. Cần quyết: màn này có hiện nút gọi điện cho nhóm khách chưa từng chat không, hay bỏ qua nhóm đó.</p>
+    </div>
+
+    <h3><span class="ic ic-ok">G</span>Đang làm tốt, giữ nguyên</h3>
+    <ul>
+      <li>Banner ghi rõ danh sách lấy từ app hoa hồng và muốn sửa hồ sơ thì sửa bên đó, kèm nút mở app hoa hồng. Ranh giới hệ thống rất rõ, dev đọc là hiểu.</li>
+      <li>Cột kênh đã nhắn dạng chip, nhìn phát biết khách này đến từ đâu.</li>
+      <li>Phân biệt được khách chưa khám lần nào kèm chú thích mới tư vấn chưa đến khám. Đây đúng là nhóm cần chăm nhất.</li>
+      <li>Chưa gán hiển thị màu cam nổi bật.</li>
+    </ul>
+  </div>
+
+  <div class="screen">
+    <h2><span class="n">3</span>Màn Lịch hẹn<span class="st t-hi">Đã chốt BỎ</span></h2>
+
+    <div class="box" style="background:var(--bad-soft);border:1px solid #f3c1bd;">
+      <p><b>Quyết định: bỏ hẳn màn này, chuyển giá trị thật vào màn Tin nhắn.</b></p>
+      <p class="muted">Chuỗi lập luận: khi đã chốt bỏ trạng thái hẹn khỏi Chat Hub, màn này chỉ còn là danh sách hẹn theo giờ đọc từ app hoa hồng, không sửa được gì. Đó đúng là bản sao chỉ đọc của hệ thống khác, chính xác lý do đã bỏ màn Khách hàng. Giữ nó thì đang áp hai chuẩn khác nhau cho hai màn cùng bản chất.</p>
+      <p class="muted" style="margin-bottom:0;">Kiểm lại bằng câu hỏi lễ tân vào màn này để làm gì: xem lịch hôm nay thì app hoa hồng sẽ có; gọi xác nhận thì cần trạng thái mà trạng thái đã bỏ; tạo hẹn thì làm ngay trong khung chat lúc đang tư vấn chứ không ai rời chat sang màn lịch; nhắc khách nhịn ăn trước xét nghiệm thì đây là việc thật nhưng nó là một danh sách việc chứ không phải một cái lịch.</p>
+    </div>
+
+    <h3><span class="ic ic-add">B</span>Chuyển sang màn Tin nhắn</h3>
+    <ul>
+      <li>Hàng đợi <b>Có hẹn ngày mai</b>: liệt kê khách có hẹn hôm sau để nhân viên nhắn nhắc chuẩn bị, ví dụ nhịn ăn trước xét nghiệm. Đây là việc sinh giá trị thật và thuộc về hộp thư chứ không thuộc về cái lịch.</li>
+      <li>Hàng đợi <b>Cần nhắc hôm nay</b> đã có sẵn, gộp luôn cả nhắc tái khám theo y lệnh bác sĩ vào đây thay vì để riêng ở màn Lịch hẹn.</li>
+      <li>Bảng chọn khung giờ khi tạo hẹn giữ nguyên trong khung chat, đã có ở tab Lịch hẹn của khung chat.</li>
+    </ul>
+
+    <div class="box" style="margin-top:10px;">
+      <p><b>Hệ quả: cấu trúc hàng đợi mới của màn Tin nhắn, chia hai nhóm cho khỏi rối.</b></p>
+      <p style="margin-bottom:4px;"><b>Việc cần làm</b> gồm Chưa trả lời, Cần nhắc hôm nay, Có hẹn ngày mai, Chưa có người phụ trách. Đây là bốn thứ nhân viên mở app buổi sáng phải xử lý.</p>
+      <p class="muted" style="margin-bottom:0;"><b>Xem thêm</b> gồm Đang chờ khách, Của tôi, Tất cả. Đây là tra cứu, không phải việc.</p>
+    </div>
+
+    <p class="muted" style="margin-top:10px;"><b>Ghi chú về mâu thuẫn đã xử lý:</b> ban đầu duyệt thêm đường đi tiếp cho khách vắng, nhưng sau đó chốt bỏ trạng thái hẹn nên khái niệm vắng không còn tồn tại trong Chat Hub. Việc theo dõi khách không đến sẽ do app hoa hồng hoặc HIS lo.</p>
+  </div>
+
+  <div class="screen" style="display:none;">
+    <h2>Nội dung audit cũ màn Lịch hẹn, giữ để tham khảo</h2>
+
+    <h3><span class="ic ic-fix">S</span>Cần sửa</h3>
+    <table>
+      <tr><th>Vấn đề</th><th>Mức</th><th>Sửa thành</th></tr>
+      <tr>
+        <td><b>Đang là màn xem lịch, chưa phải màn việc cần làm.</b> Liệt kê tất cả hẹn theo giờ, lễ tân phải tự dò xem cái nào Chờ xác nhận, cái nào Vắng cần gọi lại</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Đưa nhóm việc cần làm lên đầu màn: cần gọi xác nhận, vắng cần gọi lại, mới đặt chưa nhắc chuẩn bị. Lịch đầy đủ theo giờ để bên dưới. Cùng dữ liệu nhưng đổi thứ tự ưu tiên theo việc</td>
+      </tr>
+      <tr>
+        <td><b>Khách vắng không có đường đi tiếp.</b> Hoàng Anh vắng, ghi chú gọi hai lần không nghe, rồi hết. Đây là khách đã mất một lần khám</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Thêm hành động ngay trên dòng vắng: nhắn lại, hoặc đặt lịch mới. Đây là chỗ trực tiếp cứu doanh thu, không nên để trôi</td>
+      </tr>
+      <tr>
+        <td><b>Thiếu lọc theo người phụ trách</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Ngọc Lan cần xem hẹn của khách mình để tự gọi xác nhận, không phải lọc bằng mắt trong danh sách chung</td>
+      </tr>
+      <tr>
+        <td><b>Tab Tuần chưa rõ dùng để làm gì</b></td>
+        <td><span class="tag t-low">Nhẹ</span></td>
+        <td>Lễ tân làm việc theo ngày. Nếu Tuần chỉ để nhìn cho biết thì cân nhắc bỏ cho gọn, hoặc giữ nếu quản lý dùng để xem tải và phân người</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-ask">Q</span>Ba câu cần Phú quyết</h3>
+    <div class="box">
+      <p><b>Một, app hoa hồng đã có màn lịch hẹn dạng lịch chưa?</b></p>
+      <p class="muted">Nếu có rồi thì màn này phải cắt mạnh, chỉ giữ phần việc cần liên hệ. Nếu chưa có thì đây là màn lịch duy nhất và cần đầy đủ hơn. Cái này dev kiểm là biết.</p>
+      <p style="margin-top:10px;"><b>Hai, ai cập nhật trạng thái Đã đến?</b></p>
+      <p class="muted">Bốn trạng thái đang có là Đã xác nhận, Đã đến, Vắng, Chờ xác nhận. Đã xác nhận và Chờ xác nhận thì rõ là việc của người trực chat. Nhưng Đã đến và Vắng là do lễ tân ở quầy hoặc HIS ghi nhận. Nếu vậy Chat Hub chỉ đọc hai trạng thái đó, không sửa. Cần chốt để dev biết chiều dữ liệu.</p>
+      <p style="margin-top:10px;"><b>Ba, nhắc tái khám nên nằm ở đây hay gộp vào màn Tin nhắn?</b></p>
+      <p class="muted" style="margin-bottom:0;">Hiện nhắc tái khám là panel phải của màn Lịch hẹn. Nhưng bản chất nó là danh sách khách cần gọi, giống hệt hàng đợi Cần nhắc hôm nay ở màn Tin nhắn, chỉ khác nguồn: một cái từ y lệnh bác sĩ, một cái từ nhân viên tự hẹn. Đề xuất của tôi là gộp cả hai vào một chỗ duy nhất trong màn Tin nhắn, vì nhân viên chỉ cần một danh sách trả lời câu hôm nay phải liên hệ ai, không cần nhớ phải mở hai màn.</p>
+    </div>
+
+    <h3><span class="ic ic-ok">G</span>Đang làm tốt, giữ nguyên</h3>
+    <ul>
+      <li>Banner ghi rõ lịch lấy từ app hoa hồng và sửa ở đây sẽ ghi ngược lại. Ranh giới dữ liệu rõ ràng.</li>
+      <li>Ghi chú vận hành thật như đã nhắc nhịn ăn từ 22 giờ, gọi hai lần không nghe, chưa gọi xác nhận. Đây là thứ đúng đời sống phòng khám, giữ nguyên.</li>
+      <li>Mỗi dòng hẹn có sẵn nút mở hội thoại và nút sửa, đúng tinh thần nhắn được ngay từ danh sách.</li>
+      <li>Hẹn của khách doanh nghiệp ghi rõ đợt và số người, phân biệt được với khách lẻ.</li>
+    </ul>
+  </div>
+
+  <div class="screen">
+    <h2><span class="n">4</span>Màn Kênh<span class="st t-done">Giữ</span></h2>
+    <p class="muted">Hiện có: danh sách năm kênh, kênh hỏng nằm trên đầu, mỗi kênh một chấm trạng thái, kênh hỏng có câu tiếng người kèm một nút hành động, chân màn ghi bấm vào kênh để xem cài đặt chi tiết.</p>
+
+    <div class="box" style="background:var(--ok-soft);border:1px solid #b8e3c8;">
+      <p><b>Qua bài kiểm: trạng thái kết nối là dữ liệu chỉ Chat Hub có.</b></p>
+      <p class="muted" style="margin-bottom:0;">Không hệ nào khác biết phiên Zalo cá nhân còn sống hay đã chết, cũng không hệ nào biết Meta đã duyệt quyền chưa. Đây là màn duy nhất tới giờ có dữ liệu độc quyền, nên giữ là đúng.</p>
+    </div>
+
+    <div class="box" style="margin-top:10px;">
+      <p><b>Dựng lại theo mẫu Pancake, đây là chuẩn thị trường đã được kiểm chứng.</b></p>
+      <p class="muted" style="margin-bottom:0;">Nguyên tắc quan trọng nhất rút ra từ mẫu đó: <b>tên hiển thị lấy từ chính tài khoản trên nền tảng, không phải do người dựng tự đặt.</b> Pancake hiện avatar thật, tên thật, kèm logo nền tảng và số điện thoại. Bản hiện tại ghi kiểu Zalo cá nhân của Ngọc Lan là mô tả tự bịa, vừa trông nghiệp dư vừa sai ngay khi thực tế đổi người.</p>
+    </div>
+
+    <h3><span class="ic ic-fix">S</span>Cần sửa</h3>
+    <table>
+      <tr><th>Vấn đề</th><th>Mức</th><th>Sửa thành</th></tr>
+      <tr>
+        <td><b>Tên kênh đang do người dựng tự đặt</b>, kiểu Zalo cá nhân của Ngọc Lan hay Zalo OA Phòng khám Nguyên Phương</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Lấy đúng dữ liệu từ nền tảng: avatar thật của tài khoản, tên tài khoản thật, logo nền tảng kèm định danh là số điện thoại hoặc tên trang. Không thêm chữ mô tả nào</td>
+      </tr>
+      <tr>
+        <td><b>Đang là danh sách dòng, thiếu các thao tác quản lý</b></td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Đổi sang dạng thẻ theo mẫu Pancake, kèm ô tìm kiếm, nút làm mới, nút Kết nối để thêm tài khoản, và hàng tab lọc theo nền tảng có số đếm</td>
+      </tr>
+      <tr>
+        <td><b>Nhiều chữ giải thích thừa</b>, ví dụ dòng nói Messenger chỉ trả lời được trong một ngày. Đây là thông tin tĩnh luôn đúng, không phải trạng thái</td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Bỏ hết. Kết nối xong thì chỉ cần hiện trạng thái kết nối, không cần giảng giải gì thêm</td>
+      </tr>
+      <tr>
+        <td><b>Chưa phân quyền admin và nhân viên</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Admin kết nối và ngắt tài khoản. Nhân viên chỉ xem trạng thái, không thao tác. Đây cũng là cách Pancake làm</td>
+      </tr>
+      <tr>
+        <td><b>Kênh hỏng chỉ biết khi chủ động vào màn này.</b> Nick Zalo rớt lúc chín giờ sáng mà nhân viên đang mải chat thì tới chiều mới biết, mất khách cả buổi</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Cảnh báo phải xuất hiện ngay nơi nhân viên đang làm việc, tức một dải nhỏ trên đầu màn Tin nhắn khi có kênh hỏng, bấm vào nhảy sang màn Kênh</td>
+      </tr>
+    </table>
+    <p class="muted" style="margin-top:8px;">Ghi chú: việc hiện avatar và tên thật của tài khoản cũng giải quyết luôn vấn đề phân biệt nick nào của ai, không cần thêm cơ chế nào khác.</p>
+  </div>
+
+  <div class="screen">
+    <h2><span class="n">5</span>Màn Báo cáo<span class="st t-done">Giữ</span></h2>
+    <p class="muted">Hiện có: chọn 7 ngày hoặc 30 ngày, biểu đồ hội thoại mới theo ngày, thời gian phản hồi trung bình của bốn nhân viên kèm thanh đo màu và số hội thoại đã xử lý, hội thoại theo năm kênh, và khối lịch hẹn tạo từ chat tách ra đã đến, còn chờ, không đến.</p>
+
+    <div class="box" style="background:var(--ok-soft);border:1px solid #b8e3c8;">
+      <p><b>Qua bài kiểm, nhưng chỉ một nửa.</b></p>
+      <p class="muted" style="margin-bottom:0;">Số hội thoại, thời gian phản hồi, phân bổ theo kênh đều là dữ liệu độc quyền của Chat Hub, app hoa hồng không có. Nhưng màn này mới đo được mục tiêu giám sát chất lượng, chưa đo được mục tiêu giữ tệp khách.</p>
+    </div>
+
+    <h3><span class="ic ic-add">B</span>Cần bổ sung</h3>
+    <table>
+      <tr><th>Bổ sung</th><th>Mức</th><th>Vì sao cần</th></tr>
+      <tr>
+        <td><b>Chỉ số cho mục tiêu giữ tệp khách</b>: số khách chưa có người phụ trách, số khách lâu không ai nhắn, số hội thoại bị bỏ quá lâu không trả lời</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Dự án có hai mục tiêu, báo cáo hiện chỉ phục vụ một. Không đo thì không biết tệp khách có đang bị rơi rụng hay không, mà đó lại là mục tiêu số một</td>
+      </tr>
+      <tr>
+        <td><b>Xuất báo cáo</b> ra file để gửi cho chủ phòng khám</td>
+        <td><span class="tag t-low">Nhẹ</span></td>
+        <td>Quản lý sẽ cần gửi số liệu định kỳ cho chủ. Không có thì họ chụp màn hình, vừa xấu vừa thiếu</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-ask">Q</span>Một câu cần Phú quyết</h3>
+    <div class="box">
+      <p><b>Khối lịch hẹn tạo từ chat có giữ phần tách đã đến và không đến không?</b></p>
+      <p class="muted" style="margin-bottom:0;">Mâu thuẫn nhỏ: mình vừa bỏ trạng thái hẹn khỏi Chat Hub, nhưng báo cáo lại đang dùng đúng dữ liệu đó. Lập luận giữ: tạo mười hẹn mà sáu người không đến là dấu hiệu tư vấn có vấn đề, đây chính là đo chất lượng tư vấn, đúng mục tiêu số hai. Lập luận bỏ: nó tạo phụ thuộc vào dữ liệu của hệ khác cho một chỉ số phụ. Đề xuất của tôi là giữ, vì chỉ số này nói lên chất lượng tư vấn rõ hơn mọi chỉ số tốc độ.</p>
+    </div>
+  </div>
+
+  <div class="screen">
+    <h2><span class="n">6</span>Kho phương tiện và Cài đặt<span class="st t-done">Giữ, có gộp</span></h2>
+
+    <h3><span class="ic ic-fix">S</span>Cần sửa</h3>
+    <table>
+      <tr><th>Vấn đề</th><th>Mức</th><th>Sửa thành</th></tr>
+      <tr>
+        <td><b>Cài đặt có phần tài khoản các kênh, trùng với màn Kênh.</b> Đây là trùng lặp ngay trong chính app, nhân viên sẽ không biết vào đâu để làm gì</td>
+        <td><span class="tag t-hi">Nặng</span></td>
+        <td>Gộp về một chỗ duy nhất là màn Kênh, ở đó vừa xem trạng thái vừa cấu hình. Bỏ phần kênh khỏi Cài đặt. Cài đặt chỉ còn thành viên và phân quyền, quản lý tag</td>
+      </tr>
+      <tr>
+        <td><b>Kho phương tiện đang là màn để duyệt xem, trong khi việc dùng thật là chèn vào chat</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Giữ màn riêng nhưng định vị lại là nơi quản lý thêm sửa xóa và phân nhóm. Còn dùng hằng ngày thì qua nút mở kho ngay trong ô soạn tin, đã chốt bổ sung ở màn Tin nhắn</td>
+      </tr>
+      <tr>
+        <td><b>Quản lý tag trong Cài đặt cần cập nhật theo quyết định mới</b></td>
+        <td><span class="tag t-mid">Vừa</span></td>
+        <td>Sau khi bỏ các tag mang nghĩa trạng thái khám, danh sách tag chỉ còn loại do nhân viên tự gắn như Cần theo dõi, Nhịn ăn sáng, Khách doanh nghiệp, Có bảo hiểm</td>
+      </tr>
+    </table>
+
+    <h3><span class="ic ic-ok">G</span>Ghi chú</h3>
+    <ul>
+      <li>Màn Đăng nhập không có gì để audit về nghiệp vụ, chỉ cần đăng nhập bằng số điện thoại và mã xác thực để dùng chung một danh tính với app hoa hồng, đúng như đã dựng.</li>
+      <li>Phân quyền trong Cài đặt cần tối thiểu hai vai: nhân viên tư vấn và quản lý. Quản lý xem được mọi hội thoại và màn Báo cáo, nhân viên thì không.</li>
+    </ul>
+  </div>
+
+  <div class="todo" style="display:none;">
+    <h2>Các màn chờ audit</h2>
+    <ul>
+      <li>Màn Kênh</li>
+      <li>Màn Báo cáo</li>
+      <li>Màn Kho phương tiện</li>
+      <li>Màn Cài đặt và màn Đăng nhập</li>
+      <li>Toàn bộ bản mobile, hiện chưa dựng</li>
+    </ul>
+  </div>
+
+  <div class="foot">Tài liệu nội bộ 1PDM. Audit ngày 30/07/2026, dựa trên bản thiết kế NP Slack Style.</div>
+
+</div>
+</body>
+</html>

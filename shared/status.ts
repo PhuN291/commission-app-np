@@ -35,7 +35,7 @@ export const VISIT_STATUSES: Record<VisitStatusCode, StatusInfo> = {
   arrived:     { label: "Chờ khám",      badgeColor: "bg-[#fff4bd]", badgeText: "text-[#8a6116]" },
   in_progress: { label: "Đang khám",     badgeColor: "bg-[#dbeafe]", badgeText: "text-[#1e40af]" },
   completed:   { label: "Hoàn thành",    badgeColor: "bg-[#bbe5b3]", badgeText: "text-[#008060]" },
-  cancelled:   { label: "BN bỏ về",      badgeColor: "bg-[#fead9a]", badgeText: "text-[#8a1c1c]" },
+  cancelled:   { label: "Khách bỏ về",      badgeColor: "bg-[#fead9a]", badgeText: "text-[#8a1c1c]" },
 };
 
 // ===== Transition Maps (forward-only) =====
@@ -75,7 +75,7 @@ export const APPOINTMENT_BUTTONS: Record<AppointmentStatusCode, StatusButton[]> 
     { targetStatus: "cancelled", label: "Hủy lịch", icon: "x", variant: "destructive", needsConfirmation: true },
   ],
   reminded: [
-    { targetStatus: "arrived", label: "Check-in", icon: "log-in", variant: "default", needsConfirmation: false },
+    { targetStatus: "arrived", label: "Đón khách", icon: "log-in", variant: "default", needsConfirmation: false },
     { targetStatus: "no_show", label: "Không đến", icon: "eye-off", variant: "destructive", needsConfirmation: true },
     { targetStatus: "rescheduled", label: "Dời lịch", icon: "calendar", variant: "outline", needsConfirmation: true },
     { targetStatus: "cancelled", label: "Hủy lịch", icon: "x", variant: "destructive", needsConfirmation: true },
@@ -89,11 +89,11 @@ export const APPOINTMENT_BUTTONS: Record<AppointmentStatusCode, StatusButton[]> 
 export const VISIT_BUTTONS: Record<VisitStatusCode, StatusButton[]> = {
   arrived: [
     { targetStatus: "in_progress", label: "Bắt đầu khám", icon: "play", variant: "default", needsConfirmation: false },
-    { targetStatus: "cancelled", label: "BN bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "cancelled", label: "Khách bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
   ],
   in_progress: [
     { targetStatus: "completed", label: "Hoàn thành khám", icon: "check-circle", variant: "default", needsConfirmation: false },
-    { targetStatus: "cancelled", label: "BN bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "cancelled", label: "Khách bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
   ],
   completed: [],
   cancelled: [],

@@ -318,7 +318,7 @@ export default function OrderDetail() {
           : err?.error === "window_expired"
             ? "Đã quá hạn khiếu nại (3 ngày)"
             : err?.error === "invalid_state"
-              ? "Khoản hoa hồng không ở trạng thái cho phép"
+              ? "Hoa hồng không thể khiếu nại"
               : "Không thể gửi khiếu nại";
       toast({ title: "Lỗi", description: msg, variant: "destructive" });
     },
@@ -336,7 +336,7 @@ export default function OrderDetail() {
       setConfirmDialog({
         open: true,
         title: `Xác nhận: ${info?.label || btn.label}`,
-        description: `Bạn có chắc muốn chuyển trạng thái lịch hẹn sang "${info?.label}"? Thao tác này không thể hoàn tác.`,
+        description: `Chuyển trạng thái lịch hẹn sang "${info?.label}"? Không thể hoàn tác.`,
         action: () => {
           updateAppointmentStatus.mutate({ status: btn.targetStatus });
           setConfirmDialog((p) => ({ ...p, open: false }));
@@ -353,7 +353,7 @@ export default function OrderDetail() {
       setConfirmDialog({
         open: true,
         title: `Xác nhận: ${info?.label || btn.label}`,
-        description: `Bạn có chắc muốn chuyển trạng thái khám sang "${info?.label}"? Thao tác này không thể hoàn tác.`,
+        description: `Chuyển trạng thái khám sang "${info?.label}"? Không thể hoàn tác.`,
         action: () => {
           updateVisitStatus.mutate({ status: btn.targetStatus });
           setConfirmDialog((p) => ({ ...p, open: false }));
@@ -392,7 +392,7 @@ export default function OrderDetail() {
 
   // Mock team — TODO: replace với API thực khi backend hỗ trợ multi-assignee
   const orderTeam: { id: number; name: string; role: string }[] = [
-    ...(assignee ? [{ id: assignee.id, name: assignee.name, role: "Sale - Điều dưỡng" }] : []),
+    ...(assignee ? [{ id: assignee.id, name: assignee.name, role: "Điều dưỡng" }] : []),
     { id: -101, name: "Lê Thị Tuyết", role: "Điều dưỡng trưởng" },
     { id: -102, name: "Nguyễn Đức Trần", role: "Bác sĩ" },
   ];
@@ -801,7 +801,7 @@ export default function OrderDetail() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-[13px] text-np-text-sub">
-              Chọn ngày và giờ mới. Đơn hiện tại sẽ được đánh dấu "Dời lịch" và một đơn mới sẽ được tạo với trạng thái "Đã xác nhận".
+              Chọn ngày giờ mới. Đơn hiện tại chuyển "Dời lịch", tạo đơn mới ở trạng thái "Đã xác nhận".
             </p>
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">Ngày hẹn mới</label>
@@ -966,7 +966,7 @@ export default function OrderDetail() {
               />
             </div>
             <p className="text-[11px] leading-relaxed text-np-text-muted">
-              Nhân viên sẽ được phép khiếu nại trong vòng 3 ngày sau khi bị từ chối.
+              Nhân viên có thể khiếu nại trong 3 ngày sau khi bị từ chối.
             </p>
           </div>
           <DialogFooter>
