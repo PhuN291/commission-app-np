@@ -40,6 +40,7 @@ import {
 import { canKhieuNai, type AutoRuleKey, type UpdateAutoRuleInput, type UpdatePayCycleInput } from "@shared/types";
 import { and, asc, desc, eq, getTableColumns, gt, ilike, inArray, isNotNull, isNull, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "./db";
+import { computeCommissionForOrder } from "./commission-engine";
 import type { IStorage, CommissionRecordWithRole, RecallWorklistRow, RecallCallOutcome, RecallItemForCustomer, RecallLogForCustomer, RecallItemStat, FileComplaintResult, AutoRule, PayCycleSettings } from "./storage";
 import {
   mapCrRowToView,
@@ -209,6 +210,16 @@ export class DbStorage implements IStorage {
     return db.select().from(customers).orderBy(asc(customers.id));
   }
 
+  /** Tìm khách theo số điện thoại. Dùng để chặn tạo trùng hồ sơ. */
+  async findCustomerByPhone(phone: string): Promise<Customer | undefined> {
+    const rows = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.phone, phone.trim()))
+      .limit(1);
+    return rows[0];
+  }
+
   async getCustomer(id: number): Promise<Customer | undefined> {
     const rows = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
     return rows[0];
@@ -246,6 +257,12 @@ export class DbStorage implements IStorage {
         createdAt: insertCustomer.createdAt ?? "",
         nextRecallDueAt: insertCustomer.nextRecallDueAt ?? null,
         primaryAssignedUserId: insertCustomer.primaryAssignedUserId ?? null,
+        // Bốn cột dưới trước đây bị bỏ quên, nên khai khách kèm ghi chú hay đánh
+        // dấu VIP ngay lúc tạo đều rơi mất mà không báo lỗi gì.
+        isVip: insertCustomer.isVip ?? false,
+        medicalNote: insertCustomer.medicalNote ?? null,
+        medicalNoteBy: insertCustomer.medicalNoteBy ?? null,
+        medicalNoteAt: insertCustomer.medicalNoteAt ?? null,
       })
       .returning();
     return rows[0];
@@ -314,6 +331,8 @@ export class DbStorage implements IStorage {
         source: insertOrder.source ?? "manual",
         idempotencyKey: insertOrder.idempotencyKey ?? null,
         saleUserId: insertOrder.saleUserId ?? null,
+        indicatedByUserId: insertOrder.indicatedByUserId ?? null,
+        performedByUserId: insertOrder.performedByUserId ?? null,
         insuranceAmount: insertOrder.insuranceAmount ?? 0,
         voucherAmount: insertOrder.voucherAmount ?? 0,
         voucherCode: insertOrder.voucherCode ?? null,
@@ -393,7 +412,105 @@ export class DbStorage implements IStorage {
     return rows[0];
   }
 
-  // ───────────────────────── Status logs ─────────────────────────
+  async updateOrderAppointment(
+    id: number,
+    appointmentDate: string,
+    appointmentTime: string,
+  ): Promise<Order | undefined> {
+    const rows = await db
+      .update(orders)
+      .set({ appointmentDate, appointmentTime })
+      .where(eq(orders.id, id))
+      .returning();
+    return rows[0];
+  }
+
+  /**
+   * Đổi người phụ trách đơn (chỉ định / thực hiện / tư vấn).
+   *
+   * Chỉ ghi những cột thật sự được gửi lên, nên sửa một chỗ không xoá hai chỗ kia.
+   * Cố ý KHÔNG gọi computeCommissionForOrder: ba chỗ này ghi nhận ai làm gì trên
+   * ca, còn người hưởng hoa hồng nằm ở bảng order_role_assignments. Nối hai thứ
+   * lại thì mỗi lần đổi tên là xoá sạch hoa hồng đã duyệt của đơn, việc đó phải
+   * là một quyết định riêng chứ không nên xảy ra âm thầm ở đây.
+   */
+  async updateOrderAssignees(
+    id: number,
+    assignees: Partial<{
+      indicatedByUserId: number | null;
+      performedByUserId: number | null;
+      saleUserId: number | null;
+    }>,
+  ): Promise<Order | undefined> {
+    if (Object.keys(assignees).length === 0) return this.getOrder(id);
+    const rows = await db.update(orders).set(assignees).where(eq(orders.id, id)).returning();
+    return rows[0];
+  }
+
+  /**
+   * Thay toàn bộ dịch vụ của đơn rồi tính lại tiền.
+   *
+   * Bảng orders vẫn giữ kiểu gộp: serviceName nối bằng ", ", quantity là tổng số
+   * lượt, unitPrice là đơn giá dịch vụ đầu. Giữ nguyên cách gộp này để mọi màn
+   * đang đọc không phải sửa; chi tiết từng dịch vụ nằm ở order_items.
+   *
+   * Sinh lại order_items và bảng hoa hồng vì đổi dịch vụ là đổi tiền. Hàm tính
+   * hoa hồng xoá sạch bản ghi cũ của đơn rồi sinh lại ở trạng thái Chờ duyệt, nên
+   * chỉ được gọi khi đơn chưa đến khám (endpoint đã chặn).
+   */
+  async replaceOrderServices(
+    id: number,
+    services: {
+      serviceCode: string;
+      serviceName: string;
+      serviceCategory: string | null;
+      quantity: number;
+      unitPrice: number;
+    }[],
+  ): Promise<Order | undefined> {
+    const truoc = await this.getOrder(id);
+    if (!truoc) return undefined;
+
+    const tongTien = services.reduce((s, x) => s + x.unitPrice * x.quantity, 0);
+    const tongLuot = services.reduce((s, x) => s + x.quantity, 0);
+    const rows = await db
+      .update(orders)
+      .set({
+        serviceName: services.map((x) => x.serviceName).join(", "),
+        serviceCode: services[0].serviceCode,
+        serviceCategory: services[0].serviceCategory,
+        quantity: tongLuot,
+        unitPrice: services[0].unitPrice,
+        totalPrice: Math.max(0, tongTien - truoc.voucherAmount - truoc.insuranceAmount),
+      })
+      .where(eq(orders.id, id))
+      .returning();
+    const sau = rows[0];
+    if (!sau) return undefined;
+
+    const dsService = await this.getAllServices();
+    await db.delete(orderItems).where(eq(orderItems.orderId, id));
+    for (const x of services) {
+      const sv = dsService.find((s) => s.code === x.serviceCode);
+      await db.insert(orderItems).values({
+        orderId: id,
+        serviceId: sv?.id ?? 0,
+        serviceName: x.serviceName,
+        quantity: x.quantity,
+        unitPrice: x.unitPrice,
+        cost: sv?.defaultCost ?? 0,
+        status: "completed",
+        skippedReason: null,
+        performedByUserId: null,
+        recallDueDate: null,
+        refundedAmount: 0,
+      });
+    }
+    await computeCommissionForOrder(sau);
+    return sau;
+  }
+
+  // ───────────────────────── Status logs ─────────────────────────  // ───────────────────────── Status logs ─────────────────────────
 
   async getStatusLogs(orderId: number): Promise<StatusLog[]> {
     return db

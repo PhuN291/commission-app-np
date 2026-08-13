@@ -127,7 +127,13 @@ export const orders = pgTable("orders", {
   customerId: integer("customer_id"),
   source: text("source").notNull().default("manual"), // 'manual' | 'ihos' | 'website'
   idempotencyKey: text("idempotency_key").unique(),    // chống nhận trùng webhook (R-12-4)
-  saleUserId: integer("sale_user_id"),                 // NV phụ trách (vai Sale)
+  // ── Phụ trách đơn: 3 chỗ, sửa được qua PATCH /api/orders/:id/assignees.
+  // Cố ý TÁCH KHỎI bảng order_role_assignments (thứ quyết định ai ăn hoa hồng):
+  // đây là ghi nhận ai làm gì trên ca, đổi ở đây KHÔNG dịch chuyển hoa hồng đã
+  // chốt. Muốn nối hai thứ lại thì phải tính lại hoa hồng, việc đó chưa làm.
+  saleUserId: integer("sale_user_id"),                       // Tư vấn (vai Sale)
+  indicatedByUserId: integer("indicated_by_user_id"),        // Chỉ định
+  performedByUserId: integer("performed_by_user_id"),        // Thực hiện
   insuranceAmount: integer("insurance_amount").notNull().default(0),
   voucherAmount: integer("voucher_amount").notNull().default(0),
   voucherCode: text("voucher_code"), // mã voucher đã áp (null = không dùng)
@@ -158,7 +164,9 @@ export type StatusLog = typeof statusLogs.$inferSelect;
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  phone: text("phone").notNull(),
+  // Số điện thoại là mã nhận diện khách: đơn nối với khách qua cột này, trùng số
+  // là hai hồ sơ cùng ăn chung một tập đơn. Tên thì cho phép trùng.
+  phone: text("phone").notNull().unique(),
   email: text("email"),
   address: text("address"),
   location: text("location"),

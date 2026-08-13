@@ -1,45 +1,40 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useRoute } from "wouter";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
-  Ban,
   Calendar,
-  CalendarCheck,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Clock,
+  Copy,
+  Crown,
   Mail,
-  MapPin,
-  MessageCircle,
+  MedicalServices,
   MessageSquare,
-  Phone,
-  PhoneMissed,
   Plus,
-  RefreshCw,
-  ShoppingBag,
-  Star,
-  Stethoscope,
   StickyNote,
   X,
-  type LucideIcon,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
-  Avatar,
+  ActivityLog,
+  type ActivityEntry,
+  CallResultSheet,
+  type CallOutcome,
   Badge,
   Card,
+  Chev,
+  ContactActions,
   DetailHeader,
+  HintLabel,
+  NoteSection,
   NPButton,
   OrderStatusBadges,
+  PageHeader,
   Row,
   Screen,
   SectionTitle,
   useTabNav,
   type BadgeTone,
 } from "@/components/np";
-import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +43,12 @@ import {
   RECALL_OUTCOME_LABEL,
   type RecallOutcome,
 } from "@shared/types";
+import {
+  APPOINTMENT_STATUSES,
+  VISIT_STATUSES,
+  type AppointmentStatusCode,
+  type VisitStatusCode,
+} from "@shared/status";
 
 // 1 lượt tái khám (order_item) của khách — shape khớp GET /api/customers/:id .recallItems.
 type RecallItem = {
@@ -74,13 +75,6 @@ function fmtVND(n: number) {
   return new Intl.NumberFormat("vi-VN").format(n) + "₫";
 }
 
-function fmtShort(n: number) {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + " tỷ";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + " tr";
-  if (n >= 1_000) return Math.round(n / 1_000) + "k";
-  return String(n);
-}
-
 // Nhật ký hành động khách hàng (ADR-003).
 type CustomerEvent = {
   id: number;
@@ -95,44 +89,35 @@ type CustomerEvent = {
     fromStatus?: string;
     toStatus?: string;
     outcome?: string;
+    appointmentDate?: string;
+    appointmentTime?: string;
+    /** Các chỗ phụ trách vừa đổi, khoá là tên cột trong bảng orders. */
+    assignees?: Record<string, number | null>;
   } | null;
   createdAt: string;
 };
 
-const STATUS_VN: Record<string, string> = {
-  pending: "Chờ xác nhận",
-  confirmed: "Đã xác nhận",
-  reminded: "Đã nhắc",
-  arrived: "Đã đến",
-  no_show: "Không đến",
-  cancelled: "Đã hủy",
-  rescheduled: "Đã dời lịch",
-  in_progress: "Đang khám",
-  completed: "Hoàn tất",
-};
+/**
+ * Chữ trạng thái đọc thẳng từ nguồn dùng chung. Trước đây file tự khai một bảng
+ * riêng nên cùng một đơn, dòng nhật ký ghi "Hoàn tất" còn nhãn ngay dưới ghi
+ * "Hoàn thành". Hai tầng dùng chung mã `arrived` và `cancelled` với nghĩa khác
+ * nhau, nên phải xem `tier` mới tra đúng bảng.
+ */
+function statusLabel(code: string | undefined, tier: string | undefined): string {
+  if (!code) return "";
+  if (tier === "visit") return VISIT_STATUSES[code as VisitStatusCode]?.label ?? code;
+  if (tier === "appointment")
+    return APPOINTMENT_STATUSES[code as AppointmentStatusCode]?.label ?? code;
+  return (
+    APPOINTMENT_STATUSES[code as AppointmentStatusCode]?.label ??
+    VISIT_STATUSES[code as VisitStatusCode]?.label ??
+    code
+  );
+}
 
 // Kết quả gọi tái khám — 3 lựa chọn (giống màn "Tái khám cần gọi" /recalls).
-type CallOutcome = "scheduled" | "no_answer" | "refused";
-
-const OUTCOME_OPTIONS: { value: CallOutcome; label: string; icon: LucideIcon }[] = [
-  { value: "scheduled", label: "Đã đặt lịch", icon: CalendarCheck },
-  { value: "no_answer", label: "Chưa bắt máy", icon: PhoneMissed },
-  { value: "refused", label: "Khách từ chối", icon: Ban },
-];
-
-const OUTCOME_LABEL: Record<string, string> = {
-  scheduled: "Đã đặt lịch",
-  no_answer: "Chưa bắt máy",
-  refused: "Khách từ chối",
-  other: "Khác",
-};
-
-const NOTE_CHIPS = ["Khách bận", "Gọi lại tuần sau", "Đổi số điện thoại"];
-
-/** Bỏ ký tự lạ, chỉ giữ chữ số cho link tel: và zalo.me. */
-function digitsOnly(phone: string | null | undefined): string {
-  return (phone ?? "").replace(/[^0-9]/g, "");
-}
+/** Chiều cao thanh trên của DetailHeader: nút tròn 36px + lề dọc 2×10px. */
+const DETAIL_HEADER_HEIGHT = 56;
 
 /** "YYYY-MM-DD" -> "DD/MM/YYYY". Trả chuỗi gốc nếu định dạng lạ. */
 function fmtRecallDate(s: string | null | undefined): string {
@@ -166,88 +151,129 @@ function timeLabel(days: number | null): { text: string; tone: BadgeTone } {
   if (days == null) return { text: "Chưa rõ", tone: "neutral" };
   if (days > 0) return { text: `Trễ ${days} ngày`, tone: "critical" };
   if (days === 0) return { text: "Hôm nay", tone: "attention" };
-  return { text: `Sắp tới ${-days} ngày`, tone: "neutral" };
+  // Chưa tới hạn là đang chạy đúng tiến độ, không phải nhãn trung tính.
+  return { text: `Sắp tới ${-days} ngày`, tone: "info" };
 }
 
+/**
+ * Tên cột phụ trách trong bảng orders → chữ người dùng đọc.
+ *
+ * Phải khớp với hằng PHU_TRACH ở màn chi tiết đơn: cùng một chỗ mà hai màn gọi
+ * hai tên thì người đọc nhật ký không biết mình vừa sửa cái gì.
+ */
+const PHU_TRACH_LABEL: Record<string, string> = {
+  indicatedByUserId: "Chỉ định",
+  performedByUserId: "Thực hiện",
+  saleUserId: "Tư vấn",
+};
+
+/**
+ * Một dòng nhật ký viết như một câu: "Phú Nguyễn gọi điện". Nên `action` luôn bắt
+ * đầu bằng động từ thường, phần tên người đứng trước do nơi hiển thị ghép vào.
+ */
 function eventView(
   e: CustomerEvent,
   orderCode?: string,
-): { icon: React.ReactNode; title: string; detail: string | null } {
+): { action: string; detail: string | null } {
   const m = e.meta ?? {};
   const code = orderCode ?? m.code;
   switch (e.type) {
     case "call":
-      return { icon: <Phone size={14} strokeWidth={2.25} />, title: "Gọi điện", detail: null };
+      return { action: "gọi điện", detail: null };
     case "sms":
-      return { icon: <MessageSquare size={14} strokeWidth={2.25} />, title: "Nhắn tin", detail: null };
+      return { action: "nhắn tin", detail: null };
     case "email":
-      return { icon: <Mail size={14} strokeWidth={2.25} />, title: "Gửi email", detail: null };
+      return { action: "gửi email", detail: null };
+    case "note_updated":
+      return { action: "cập nhật ghi chú", detail: null };
+    case "note_cleared":
+      return { action: "xóa ghi chú", detail: null };
     case "order_created":
       return {
-        icon: <ShoppingBag size={14} strokeWidth={2.25} />,
-        title: `Tạo đơn ${code ?? ""}`.trim(),
+        action: code ? `tạo đơn ${code}` : "tạo đơn",
         detail: m.serviceName ?? null,
       };
-    case "status_change": {
-      const from = STATUS_VN[m.fromStatus ?? ""] ?? m.fromStatus ?? "";
-      const to = STATUS_VN[m.toStatus ?? ""] ?? m.toStatus ?? "";
+    case "order_updated": {
+      // Cùng một loại sự kiện dùng cho ba việc: sửa lịch hẹn, đổi người phụ trách
+      // và đổi dịch vụ. Phân biệt bằng meta để câu nhật ký nói đúng việc vừa làm;
+      // thiếu nhánh nào là việc đó bị kể thành việc khác.
+      const lich = m.appointmentDate
+        ? `${m.appointmentDate}${m.appointmentTime ? ` ${m.appointmentTime}` : ""}`
+        : null;
+      if (lich) {
+        return { action: code ? `sửa lịch hẹn ${code}` : "sửa lịch hẹn", detail: lich };
+      }
+      if (m.assignees) {
+        const cho = Object.keys(m.assignees)
+          .map((k) => PHU_TRACH_LABEL[k])
+          .filter(Boolean);
+        return {
+          action: code ? `đổi người phụ trách đơn ${code}` : "đổi người phụ trách",
+          detail: cho.length > 0 ? cho.join(", ") : null,
+        };
+      }
       return {
-        icon: <RefreshCw size={14} strokeWidth={2.25} />,
-        title: code ? `Cập nhật đơn ${code}` : "Cập nhật trạng thái đơn",
+        action: code ? `đổi dịch vụ đơn ${code}` : "đổi dịch vụ",
+        detail: m.serviceName ?? null,
+      };
+    }
+    case "status_change": {
+      const from = statusLabel(m.fromStatus, m.tier);
+      const to = statusLabel(m.toStatus, m.tier);
+      const what = m.tier === "visit" ? "ca khám" : "lịch hẹn";
+      return {
+        action: code ? `cập nhật ${what} ${code}` : `cập nhật ${what}`,
         detail: from && to ? `${from} → ${to}` : null,
       };
     }
     case "recall_call":
       return {
-        icon: <Phone size={14} strokeWidth={2.25} />,
-        title: "Gọi nhắc lịch",
+        action: "gọi nhắc lịch",
         detail: m.outcome ? (RECALL_OUTCOME_LABEL[m.outcome as RecallOutcome] ?? null) : null,
       };
     case "order_refund":
       return {
-        icon: <RefreshCw size={14} strokeWidth={2.25} />,
-        title: code ? `Hoàn tiền đơn ${code}` : "Hoàn tiền đơn",
+        action: code ? `hoàn tiền đơn ${code}` : "hoàn tiền đơn",
         detail: m.serviceName ?? null,
       };
     case "order_completed":
       return {
-        icon: <ShoppingBag size={14} strokeWidth={2.25} />,
-        title: code ? `Hoàn tất đơn ${code}` : "Hoàn tất đơn",
+        action: code ? `hoàn tất đơn ${code}` : "hoàn tất đơn",
         detail: m.serviceName ?? null,
       };
     case "order_cancelled":
       return {
-        icon: <ShoppingBag size={14} strokeWidth={2.25} />,
-        title: code ? `Hủy đơn ${code}` : "Hủy đơn",
+        action: code ? `hủy đơn ${code}` : "hủy đơn",
         detail: m.serviceName ?? null,
       };
     case "appointment_reminded":
-      return { icon: <Clock size={14} strokeWidth={2.25} />, title: "Nhắc lịch hẹn", detail: null };
+      return { action: "nhắc lịch hẹn", detail: null };
     default:
-      // Loại sự kiện chưa có nhãn: hiện nhãn chung, không để lộ mã tiếng Anh.
-      return { icon: <Clock size={14} strokeWidth={2.25} />, title: "Hoạt động", detail: null };
+      // Loại sự kiện chưa có nhãn: nói chung chung, không để lộ mã tiếng Anh.
+      return { action: "có hoạt động", detail: null };
   }
 }
 
-function fmtEventTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+/** Số dòng nhật ký hiện sẵn. Phần còn lại nằm sau nút "Xem thêm". */
+const EVENT_PREVIEW = 5;
+
+/** Số lượt gọi hé sẵn trong mục Tái khám, phần còn lại nằm trong hộp. */
+const LOG_PREVIEW = 2;
 
 export default function CustomerDetail() {
   const { active, onTab } = useTabNav();
   const [, params] = useRoute("/customers/:id");
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/customers");
   const customerId = params?.id ? parseInt(params.id, 10) : 0;
 
-  const { data: customerData, isLoading } = useQuery<{
+  const {
+    data: customerData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<{
     customer: Customer;
     medicalNoteByName: string | null;
     orders: Order[];
@@ -287,18 +313,55 @@ export default function CustomerDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard", getCurrentUserId()] }); // đếm tái khám trang chủ
       closeCallSheet();
     },
-    onError: () =>
-      toast({ title: "Lỗi", description: "Không thể lưu kết quả gọi", variant: "destructive" }),
+    // Máy chủ trả lý do cụ thể (ví dụ không phụ trách khách này), trước đây bị vứt
+    // nên người dùng bấm Lưu mãi mà không biết vì sao hỏng.
+    onError: (err: unknown) =>
+      toast({
+        title: "Không lưu được kết quả gọi",
+        description:
+          (err as { message?: string })?.message ?? "Kiểm tra mạng rồi bấm Lưu kết quả lần nữa.",
+        variant: "destructive",
+      }),
   });
 
   const openCallSheet = (item: RecallItem) =>
     setCallSheet({ item, outcome: "scheduled", note: "" });
 
-  // Khối liên hệ mặc định thu gọn, chỉ hiện số điện thoại.
-  const [contactOpen, setContactOpen] = useState(false);
+  // Nhật ký tương tác mặc định thu gọn, tránh kéo trang dài mấy nghìn pixel.
 
-  // Ghi chú bệnh nhân: null = chưa sửa, đang hiện nguyên văn từ máy chủ.
-  const [noteDraft, setNoteDraft] = useState<string | null>(null);
+
+  // Tên khách đặt cỡ lớn trong thân trang nên không bao giờ bị cắt. Khi người đọc
+  // cuộn qua khỏi nó, tên mới hiện lên thanh trên để vẫn biết đang xem ai.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [titleScrolledOut, setTitleScrolledOut] = useState(false);
+  useEffect(() => {
+    const el = titleRef.current;
+    // Vùng cuộn là khung trong Screen, không phải cửa sổ trình duyệt.
+    const root = el?.closest(".scrollbar-hide");
+    if (!el || !root) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      // Coi là khuất khi đáy tiêu đề đã chui lên trên mép dưới của thanh.
+      const offset = el.getBoundingClientRect().bottom - root.getBoundingClientRect().top;
+      setTitleScrolledOut(offset < DETAIL_HEADER_HEIGHT);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    root.addEventListener("scroll", onScroll, { passive: true });
+    // Tên dài gom lại hay xuống dòng khi bề rộng khung đổi (xoay máy, kéo cửa
+    // sổ), làm đáy tiêu đề dịch chỗ mà không sinh sự kiện cuộn nào. Phải chủ
+    // động đo lại, không thì tên kẹt ở trạng thái cũ tới lần cuộn kế tiếp.
+    const ro = new ResizeObserver(onScroll);
+    ro.observe(el);
+    return () => {
+      root.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [customerData]);
 
   const vipMut = useMutation({
     mutationFn: async (isVip: boolean) => {
@@ -315,7 +378,11 @@ export default function CustomerDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
     },
     onError: () =>
-      toast({ title: "Lỗi", description: "Không cập nhật được VIP", variant: "destructive" }),
+      toast({
+        title: "Không cập nhật được nhãn khách VIP",
+        description: "Kiểm tra mạng rồi bấm lại nhãn.",
+        variant: "destructive",
+      }),
   });
 
   const noteMut = useMutation({
@@ -327,13 +394,18 @@ export default function CustomerDetail() {
       if (!res.ok) throw await res.json().catch(() => ({}));
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Đã lưu ghi chú" });
-      setNoteDraft(null); // đọc lại giá trị từ máy chủ
+    onSuccess: (_data, note) => {
+      // Gõ rỗng rồi Lưu là XOÁ ghi chú (máy chủ đặt về null), báo "đã lưu" thì
+      // người dùng tưởng hồ sơ còn nguyên.
+      toast({ title: note.trim() ? "Đã lưu ghi chú" : "Đã xóa ghi chú" });
       queryClient.invalidateQueries({ queryKey: [`/api/customers/${customerId}`] });
     },
     onError: () =>
-      toast({ title: "Lỗi", description: "Không lưu được ghi chú", variant: "destructive" }),
+      toast({
+        title: "Không lưu được ghi chú",
+        description: "Nội dung vẫn còn trong hộp soạn, kiểm tra mạng rồi bấm Lưu lần nữa.",
+        variant: "destructive",
+      }),
   });
 
   // Ghi nhật ký thao tác gọi/nhắn/email rồi cập nhật timeline.
@@ -346,15 +418,40 @@ export default function CustomerDetail() {
       .catch(() => {});
   };
 
+  // getQueryFn ném Error("404: ...") nên nhận ra bằng tiền tố mã trạng thái.
+  const khongTimThayKhach = /^404\b/.test((error as { message?: string })?.message ?? "");
+
   if (isLoading || !customerData) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Khách hàng" onBack={() => navigate("/customers")} trailing={<div />} />
-        <div className="flex flex-1 items-center justify-center py-20">
+        <DetailHeader title="Khách hàng" onBack={quayLai} trailing={<div />} />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 py-20 text-center">
           {isLoading ? (
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand border-t-transparent" />
+          ) : isError ? (
+            // Máy chủ trả 404 khi khách không còn. Trước đây gộp chung với lỗi mạng
+            // nên người mở đường dẫn của khách đã xóa cứ bị bảo kiểm tra mạng rồi
+            // bấm Thử lại mãi không xong. getQueryFn ném Error dạng "404: ...".
+            khongTimThayKhach ? (
+              <>
+                <p className="text-[15px] font-semibold text-np-ink">Không tìm thấy khách hàng</p>
+                <p className="text-[13px] text-np-text-muted">
+                  Khách này có thể đã bị xóa. Bấm nút quay lại để về danh sách khách.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[15px] font-semibold text-np-ink">Không tải được dữ liệu</p>
+                <p className="text-[13px] text-np-text-muted">
+                  Kiểm tra kết nối mạng rồi bấm Thử lại.
+                </p>
+                <NPButton tone="ghost" size="sm" onClick={() => refetch()}>
+                  Thử lại
+                </NPButton>
+              </>
+            )
           ) : (
-            <p className="text-np-text-muted">Không tìm thấy khách hàng</p>
+            <p className="text-[15px] text-np-text-muted">Không tìm thấy khách hàng</p>
           )}
         </div>
       </Screen>
@@ -362,135 +459,142 @@ export default function CustomerDetail() {
   }
 
   const { customer, orders, stats } = customerData;
-  // Ghi chú đang soạn (noteDraft) ưu tiên hơn giá trị từ máy chủ.
-  const noteValue = noteDraft ?? customer.medicalNote ?? "";
   const hasNote = (customer.medicalNote ?? "").trim().length > 0;
+  // Mục Lịch sử gọi đã in đầy đủ từng lượt gọi nhắc lịch, nên nhật ký tương tác
+  // chỉ giữ những việc khác để không kể lại lần thứ ba.
+  const otherEvents = customerData.events.filter((e) => e.type !== "recall_call");
+  // Mặc định chỉ hiện vài dòng gần nhất, phần còn lại mờ dần rồi ẩn sau nút.
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title={customer.name} onBack={() => navigate("/customers")} trailing={<div />} />
+      {/* Thanh trên chỉ còn hai nút tròn. Tên khách nằm cỡ lớn ngay dưới, chỉ trồi
+          lên thanh khi người đọc đã cuộn qua khỏi nó. */}
+      <DetailHeader
+        title={customer.name}
+        titleVisible={titleScrolledOut}
+        onBack={quayLai}
+      />
 
-      <div className="bg-np-surface-sub pb-5">
-        {/* Customer header */}
-        <div className="flex items-center gap-3 bg-white px-4 py-4">
-          <Avatar name={customer.name} size={56} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[18px] font-bold text-np-ink">{customer.name}</span>
-              {customer.isVip && <Badge tone="attention">VIP</Badge>}
-              {hasNote && (
-                <Badge tone="critical">
-                  <StickyNote size={12} strokeWidth={2.5} />
-                  Có ghi chú
-                </Badge>
-              )}
-            </div>
-            <div className="mt-0.5 text-[12px] text-np-text-muted">
-              Khách hàng từ {stats.customerSince}
-            </div>
-          </div>
+      {/* Tiêu đề trang dùng chung PageHeader nên cỡ chữ khớp mọi màn khác */}
+      <PageHeader
+        titleRef={titleRef}
+        title={customer.name}
+        // Tên khách không được xuống dòng: nút Tạo đơn nằm cạnh nên cột tiêu đề chỉ
+        // còn 240px, mà tên 4 chữ dài nhất ở cỡ 26px cần tới 300px. Hạ về 20px thì
+        // tên dài nhất chiếm 228px, còn dư chỗ. truncate là lưới an toàn cho tên lạ.
+        titleClassName="truncate text-[20px] tracking-[-0.3px]"
+        // Chỉ còn ngày thành khách. Nơi ở đã nằm trong mục Thông tin liên hệ nên bỏ
+        // ở đây cho khỏi lặp. Ngày tạo trong cơ sở dữ liệu có thể là chuỗi rỗng,
+        // khi đó bỏ luôn dòng phụ chứ không để "Khách hàng từ" cụt lủn.
+        subtitle={
+          stats.customerSince ? `Khách hàng từ ${stats.customerSince}` : undefined
+        }
+        className="bg-white"
+        action={
+          <NPButton
+            tone="primary"
+            size="sm"
+            icon={Plus}
+            onClick={() => navigate(`/orders/new?customerId=${customer.id}`)}
+            className="flex-shrink-0"
+          >
+            Tạo đơn
+          </NPButton>
+        }
+      >
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {/* Có ghi chú là thuộc tính, không phải việc ai đó phải xử lý, nên
+              neutral. Để attention thì nó trùng hệt nhãn VIP đứng ngay cạnh. */}
+          {hasNote && (
+            <Badge>
+              <StickyNote size={12} />
+              Có ghi chú
+            </Badge>
+          )}
+          {/* Chip nhìn thấy chỉ cao 20px cho bằng Badge bên cạnh, nhưng ngón tay cần
+              44px mới bấm không trượt. Nên phần đệm nằm ở thẻ button (py-3) rồi bù
+              lại bằng lề âm (-my-3): hộp bấm cao 44px mà bố cục không xê dịch.
+              Bật dùng tông attention, tắt dùng muted, khớp nhãn VIP ở danh sách
+              khách. Vương miện mới là thứ nhận diện, màu chỉ phụ hoạ. */}
           <button
             type="button"
             onClick={() => vipMut.mutate(!customer.isVip)}
             disabled={vipMut.isPending}
             aria-pressed={customer.isVip}
-            className={cn(
-              "flex flex-shrink-0 items-center gap-1 rounded-np-badge px-2.5 py-1.5 text-[12px] font-semibold transition-colors disabled:opacity-50",
-              customer.isVip
-                ? "bg-[#F4ECD9] text-[#8A6300]"
-                : "bg-np-surface-sub text-np-text-muted",
-            )}
+            aria-label={customer.isVip ? "Bỏ đánh dấu khách VIP" : "Đánh dấu khách VIP"}
+            className="group -my-3 inline-flex cursor-pointer items-center py-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Star
-              size={14}
-              strokeWidth={2.5}
-              fill={customer.isVip ? "currentColor" : "none"}
-            />
-            VIP
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 whitespace-nowrap rounded-np-badge px-2 py-[3px] text-[11px] font-semibold leading-[1.3] tracking-[0.1px] transition-colors",
+                // Về đúng hai tông trong hệ: bật là attention, tắt là muted.
+                // Trước đây nền vàng đặc với hex #92400E gõ tay, nằm ngoài bộ màu,
+                // và chuỗi class thì chép tay từ Badge nên sửa Badge không kéo theo.
+                customer.isVip
+                  ? "bg-np-badge-attention-bg text-np-badge-attention-fg group-hover:brightness-95"
+                  : "bg-np-badge-muted-bg text-np-badge-muted-fg group-hover:brightness-95",
+              )}
+            >
+              <Crown size={13} fill={customer.isVip ? "currentColor" : "none"} />
+              {customer.isVip ? "Khách VIP" : "Đánh dấu khách VIP"}
+            </span>
           </button>
         </div>
+      </PageHeader>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
-          <div className="rounded-np-card bg-white px-3.5 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-              Chi tiêu 12 tháng
-            </div>
-            <div className="mt-1 text-[18px] font-extrabold text-np-ink tabular-nums">
-              {fmtShort(stats.totalSpent)}₫
+      {/* pt-2.5 + gỡ mt của con đầu: nếu không, lề trên của tiêu đề mục đầu tiên bị
+          gộp ra ngoài khối này (margin collapsing) nên mục đầu mất dải xám ngăn cách
+          trong khi mọi mục sau đều có. */}
+      <div className="min-h-full flow-root bg-np-bg">
+
+        {/* Hai số liệu tách thành hai khối riêng, ngăn nhau bằng dải nền, thay vì
+            xếp chung một danh sách. Nhãn kèm luôn mốc thời gian vì mục không còn
+            tiêu đề để nói giúp. */}
+        <Card>
+          <Row
+            title={
+              <HintLabel hint={`Tổng chi tiêu trong ${stats.statsMonths} tháng gần nhất, không tính đơn đã hủy`}>
+                Chi tiêu
+              </HintLabel>
+            }
+            trailing={
+              <span className="text-[15px] font-semibold text-np-ink tabular-nums">
+                {fmtVND(stats.totalSpent)}
+              </span>
+            }
+            last
+          />
+        </Card>
+        <Card className="mt-2.5">
+          <Row
+            title={
+              <HintLabel hint={`Tổng số đơn trong ${stats.statsMonths} tháng gần nhất, không tính đơn đã hủy`}>
+                Số đơn
+              </HintLabel>
+            }
+            trailing={
+              <span className="text-[15px] font-semibold text-np-ink tabular-nums">
+                {stats.orderCount} đơn
+              </span>
+            }
+            last
+          />
+        </Card>
+
+        {/* Thông tin liên hệ gộp luôn các nút liên lạc: số điện thoại và email nằm
+            trong hộp chi tiết, mở ra mới thấy giá trị kèm việc làm được với nó.
+            Nhờ vậy hàng nút và mục liên hệ không còn là hai chỗ rời nói cùng một
+            chuyện. Mục này đứng ngay đầu trang vì gọi khách là việc hay làm nhất. */}
+        <SectionTitle>Thông tin liên hệ</SectionTitle>
+        <Card className="space-y-3.5 px-4 py-3.5">
+          <ContactActions phone={customer.phone} email={customer.email} customerId={customer.id} />
+          <div>
+            <div className="text-[12px] font-medium text-np-text-muted">Địa chỉ</div>
+            <div className="mt-0.5 text-[15px] leading-[1.45] text-np-ink">
+              {[customer.address, customer.location].filter(Boolean).join(", ") ||
+                "Chưa cập nhật"}
             </div>
           </div>
-          <div className="rounded-np-card bg-white px-3.5 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-              Đơn 12 tháng
-            </div>
-            <div className="mt-1 text-[18px] font-extrabold text-np-ink tabular-nums">
-              {stats.orderCount} đơn
-            </div>
-          </div>
-        </div>
-
-        {/* Nút tác vụ nhanh */}
-        <div className="grid grid-cols-4 gap-2 px-4 pt-2.5">
-          <ActionBtn
-            icon={<Phone size={20} strokeWidth={2.25} />}
-            label="Gọi"
-            onClick={() => {
-              logAction("call");
-              window.location.href = `tel:${customer.phone}`;
-            }}
-          />
-          <ActionBtn
-            icon={<MessageSquare size={20} strokeWidth={2.25} />}
-            label="Nhắn"
-            onClick={() => {
-              logAction("sms");
-              window.location.href = `sms:${customer.phone}`;
-            }}
-          />
-          <ActionBtn
-            icon={<Mail size={20} strokeWidth={2.25} />}
-            label="Email"
-            disabled={!customer.email}
-            onClick={() => {
-              if (customer.email) {
-                logAction("email");
-                window.location.href = `mailto:${customer.email}`;
-              }
-            }}
-          />
-          <ActionBtn
-            icon={<Plus size={20} strokeWidth={2.25} />}
-            label="Tạo đơn"
-            onClick={() => navigate(`/orders/new?customerId=${customer.id}`)}
-          />
-        </div>
-
-        {/* Ghi chú bệnh nhân — dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc.
-            Bấm vào ô là sửa được ngay, rời ô thì lưu. */}
-        <SectionTitle>Ghi chú</SectionTitle>
-        <Card className="space-y-2 p-4">
-          <Textarea
-            value={noteValue}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            onBlur={() => {
-              if (noteDraft === null) return; // chưa sửa gì
-              if (noteDraft.trim() === (customer.medicalNote ?? "").trim()) {
-                setNoteDraft(null); // không đổi nội dung, bỏ qua
-                return;
-              }
-              noteMut.mutate(noteDraft);
-            }}
-            disabled={noteMut.isPending}
-            placeholder="Ghi chú về dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc"
-            className="min-h-[84px] resize-none"
-          />
-          {customer.medicalNoteAt && (
-            <div className="text-[11px] text-np-text-muted">
-              Cập nhật bởi {customerData.medicalNoteByName ?? "nhân viên"} ·{" "}
-              {fmtEventTime(String(customer.medicalNoteAt))}
-            </div>
-          )}
         </Card>
 
         {/* Lịch tái khám — danh sách từng lượt order_item (database), gọi như màn /recalls.
@@ -502,95 +606,47 @@ export default function CustomerDetail() {
           onCall={openCallSheet}
         />
 
-        {/* Thông tin liên hệ — mặc định chỉ hiện số điện thoại, mở rộng để xem đầy đủ */}
-        <SectionTitle>Thông tin liên hệ</SectionTitle>
-        <Card className="overflow-hidden p-0">
-          <InfoLine
-            icon={<Phone size={16} strokeWidth={2.25} />}
-            label="Số điện thoại"
-            value={customer.phone}
-          />
-          {contactOpen && (
-            <>
-              {customer.email && (
-                <InfoLine icon={<Mail size={16} strokeWidth={2.25} />} label="Email" value={customer.email} valueClass="text-np-link" />
-              )}
-              <InfoLine
-                icon={<MapPin size={16} strokeWidth={2.25} />}
-                label="Địa chỉ"
-                value={
-                  customer.address
-                    ? `${customer.address}${customer.location ? ` · ${customer.location}` : ""}`
-                    : "Chưa cập nhật địa chỉ"
-                }
-              />
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setContactOpen((v) => !v)}
-            className="flex w-full items-center justify-center gap-1 border-t border-np-surface-pressed py-2.5 text-[12px] font-semibold text-np-link transition-colors active:bg-np-surface-pressed"
-          >
-            {contactOpen ? "Thu gọn" : "Xem thêm"}
-            {contactOpen ? (
-              <ChevronUp size={14} strokeWidth={2.5} />
-            ) : (
-              <ChevronDown size={14} strokeWidth={2.5} />
-            )}
-          </button>
-        </Card>
+        {/* Lịch sử khám bệnh — chờ API HIS */}
+        <SectionTitle>Lịch sử khám bệnh</SectionTitle>
+        <MedicalHistorySection customerId={customerId} />
+        {/* Ghi chú bệnh nhân: dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc.
+            Dùng mẫu chung của app, xem tại chỗ và sửa trong hộp riêng. */}
+        <NoteSection
+          value={customer.medicalNote ?? ""}
+          placeholder="Dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc"
+          saving={noteMut.isPending}
+          onSave={(note) => noteMut.mutateAsync(note)}
+        />
 
-        {/* Lịch sử tương tác — nhật ký hành động tự ghi nhận (ADR-003) */}
+        {/* Lịch sử tương tác — nhật ký hành động tự ghi nhận (ADR-003).
+            Bỏ sự kiện gọi nhắc lịch: mục Lịch sử gọi ngay phía trên đã in đủ từng
+            lượt kèm dịch vụ, ghi chú và người gọi, nên để lại đây là kể lần thứ ba
+            cùng một việc. */}
         <SectionTitle>Lịch sử tương tác</SectionTitle>
-        <Card className="p-4">
-          {customerData.events.length === 0 ? (
-            <p className="py-2 text-center text-[12px] italic text-np-text-muted">
-              Chưa có hoạt động nào
-            </p>
-          ) : (
-            <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[17px] before:top-2 before:w-px before:bg-np-border">
-              {customerData.events.map((e) => {
-                const orderCode = e.orderId
-                  ? customerData.orders.find((o) => o.id === e.orderId)?.code
-                  : undefined;
-                const v = eventView(e, orderCode);
-                return (
-                  <div key={e.id} className="relative min-h-[36px] pl-10">
-                    <div className="absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-np-border bg-white text-np-text-sub">
-                      {v.icon}
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[12px] font-bold text-np-ink">{v.title}</span>
-                        <span className="text-[11px] text-np-text-muted">{fmtEventTime(e.createdAt)}</span>
-                        {e.actorName && <Badge tone="neutral">{e.actorName}</Badge>}
-                      </div>
-                      {v.detail && (
-                        <p className="text-[13px] leading-relaxed text-np-text-sub">{v.detail}</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+        <ActivityLog
+          entries={otherEvents.map((e) => {
+            const orderCode = e.orderId
+              ? customerData.orders.find((o) => o.id === e.orderId)?.code
+              : undefined;
+            const v = eventView(e, orderCode);
+            return {
+              id: e.id,
+              at: e.createdAt,
+              actor: e.actorName ?? "Hệ thống",
+              action: v.action,
+              detail: v.detail,
+            };
+          })}
+          preview={EVENT_PREVIEW}
+          moreTitle="Lịch sử tương tác"
+        />
 
-        {/* Đơn hàng */}
-        <SectionTitle
-          action={
-            <NPButton size="sm" tone="primary" icon={Plus} onClick={() => navigate("/orders/new")}>
-              Tạo đơn
-            </NPButton>
-          }
-        >
-          Đơn hàng
-        </SectionTitle>
+        {/* Đơn hàng. Không đặt nút tạo đơn ở đây: hàng tác vụ phía trên đã có, và
+            bản ở đây quên kèm mã khách nên người dùng phải chọn lại khách. */}
+        <SectionTitle>Đơn hàng</SectionTitle>
         <Card className="overflow-hidden p-0">
           {orders.length === 0 ? (
-            <div className="py-8 text-center text-[13px] text-np-text-muted">
-              Chưa có đơn hàng nào
-            </div>
+            <EmptyBlock>Chưa có đơn hàng nào</EmptyBlock>
           ) : (
             orders.map((o, i) => (
               <Row
@@ -608,11 +664,12 @@ export default function CustomerDetail() {
                     <OrderStatusBadges
                       appointmentStatus={o.appointmentStatus}
                       visitStatus={o.visitStatus}
+                      refundType={o.refundType}
                     />
                   </div>
                 }
                 trailing={
-                  <div className="flex-shrink-0 text-right text-[14px] font-bold text-np-ink tabular-nums">
+                  <div className="flex-shrink-0 text-right text-[15px] font-semibold text-np-ink tabular-nums">
                     {fmtVND(o.totalPrice)}
                   </div>
                 }
@@ -622,157 +679,22 @@ export default function CustomerDetail() {
           )}
         </Card>
 
-        {/* Lịch sử khám bệnh — chờ API HIS */}
-        <SectionTitle>Lịch sử khám bệnh</SectionTitle>
-        <MedicalHistorySection customerId={customerId} />
       </div>
 
       {/* Kết quả gọi 1 lượt tái khám (giống màn /recalls) */}
-      <Sheet open={!!callSheet.item} onOpenChange={(open) => (open ? null : closeCallSheet())}>
-        <SheetContent side="bottom" className="rounded-t-2xl border-0 p-5 pt-3 [&>button]:hidden">
-          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-np-surface-pressed" />
-
-          <div className="mb-4 flex items-center justify-between">
-            <SheetTitle className="text-[16px] font-bold text-np-ink">Kết quả gọi</SheetTitle>
-            <button
-              type="button"
-              aria-label="Đóng"
-              onClick={closeCallSheet}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-np-surface-sub text-np-text-sub"
-            >
-              <X size={16} strokeWidth={2.25} />
-            </button>
-          </div>
-
-          {callSheet.item && (
-            <>
-              {/* Thẻ khách */}
-              <div className="mb-4 flex items-center gap-3 rounded-np-card bg-np-surface-sub p-3">
-                <Avatar name={customer.name} size={40} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-bold text-np-ink">{customer.name}</div>
-                  <div className="truncate text-[12px] text-np-text-muted">
-                    {customer.phone || "Chưa có số"} · {callSheet.item.serviceName}
-                  </div>
-                </div>
-              </div>
-
-              {/* Liên hệ: gọi điện / nhắn Zalo */}
-              <div className="mb-4 flex gap-2.5">
-                <a
-                  href={digitsOnly(customer.phone) ? `tel:${digitsOnly(customer.phone)}` : undefined}
-                  aria-disabled={!digitsOnly(customer.phone)}
-                  className={cn(
-                    "flex flex-1 flex-col items-center gap-1 rounded-np-card border border-np-border-strong bg-white p-3 text-[13px] font-bold text-np-ink",
-                    !digitsOnly(customer.phone) && "pointer-events-none opacity-50",
-                  )}
-                >
-                  <Phone size={18} strokeWidth={2.25} className="text-np-brand" />
-                  Gọi điện
-                </a>
-                <a
-                  href={digitsOnly(customer.phone) ? `https://zalo.me/${digitsOnly(customer.phone)}` : undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-disabled={!digitsOnly(customer.phone)}
-                  className={cn(
-                    "flex flex-1 flex-col items-center gap-1 rounded-np-card border border-np-border-strong bg-white p-3 text-[13px] font-bold text-np-ink",
-                    !digitsOnly(customer.phone) && "pointer-events-none opacity-50",
-                  )}
-                >
-                  <MessageCircle size={18} strokeWidth={2.25} className="text-np-brand" />
-                  Nhắn Zalo
-                </a>
-              </div>
-
-              {/* Kết quả */}
-              <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.4px] text-np-text-muted">
-                Kết quả cuộc gọi
-              </div>
-              <div className="grid grid-cols-3 gap-2.5">
-                {OUTCOME_OPTIONS.map((o) => {
-                  const sel = callSheet.outcome === o.value;
-                  const Icon = o.icon;
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => setCallSheet((p) => ({ ...p, outcome: o.value }))}
-                      className={cn(
-                        "relative flex flex-col items-center gap-2 rounded-np-card p-3 text-center transition-colors",
-                        sel ? "border-2 border-np-ink" : "border border-np-border-strong",
-                      )}
-                    >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-np-surface-sub text-np-text-sub">
-                        <Icon size={18} strokeWidth={2.25} />
-                      </span>
-                      <span className="text-[12px] font-bold leading-tight text-np-ink">{o.label}</span>
-                      {sel && (
-                        <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-np-ink text-white">
-                          <Check size={12} strokeWidth={3} />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Ghi chú */}
-              <div className="mb-1.5 mt-4 flex items-center justify-between">
-                <span className="text-[12px] font-bold uppercase tracking-[0.4px] text-np-text-muted">Ghi chú</span>
-                <span className="text-[11px] text-np-text-muted">Tùy chọn</span>
-              </div>
-              <Textarea
-                placeholder="VD: Khách bận, hẹn gọi lại tuần sau..."
-                className="min-h-[72px]"
-                value={callSheet.note}
-                onChange={(e) => setCallSheet((p) => ({ ...p, note: e.target.value }))}
-              />
-              <div className="mt-2 flex flex-wrap gap-2">
-                {NOTE_CHIPS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setCallSheet((p) => ({ ...p, note: p.note ? `${p.note}, ${t}` : t }))}
-                    className="rounded-full border border-np-border-strong bg-white px-3 py-1.5 text-[12px] font-semibold text-np-text-sub"
-                  >
-                    + {t}
-                  </button>
-                ))}
-              </div>
-
-              {/* Lưu + Hủy — bọc trong div để không là con <button> trực tiếp của
-                  SheetContent (tránh bị ẩn bởi [&>button]:hidden dùng cho nút Close). */}
-              <div className="mt-5">
-                <NPButton
-                  tone="primary"
-                  size="lg"
-                  icon={Check}
-                  disabled={logRecallMut.isPending}
-                  onClick={() =>
-                    callSheet.item &&
-                    logRecallMut.mutate({
-                      orderItemId: callSheet.item.orderItemId,
-                      outcome: callSheet.outcome,
-                      note: callSheet.note,
-                    })
-                  }
-                  className="w-full justify-center"
-                >
-                  {logRecallMut.isPending ? "Đang lưu..." : "Lưu kết quả"}
-                </NPButton>
-                <button
-                  type="button"
-                  onClick={closeCallSheet}
-                  className="mt-2 h-10 w-full text-[14px] font-bold text-np-text-sub"
-                >
-                  Hủy
-                </button>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+      <CallResultSheet
+        open={!!callSheet.item}
+        onClose={closeCallSheet}
+        customerId={customer.id}
+        customerName={customer.name}
+        phone={customer.phone}
+        serviceName={callSheet.item?.serviceName ?? ""}
+        saving={logRecallMut.isPending}
+        onSave={({ outcome, note }) =>
+          callSheet.item &&
+          logRecallMut.mutate({ orderItemId: callSheet.item.orderItemId, outcome, note })
+        }
+      />
     </Screen>
   );
 }
@@ -795,29 +717,40 @@ function RecallSection({
 
   if (items.length === 0 && logs.length === 0) {
     return (
-      <Card className="p-4">
-        <div className="text-center text-[13px] text-np-text-muted">Chưa có lịch tái khám</div>
+      <Card>
+        <EmptyBlock>Chưa có lịch tái khám</EmptyBlock>
       </Card>
     );
   }
 
   return (
-    <div className="space-y-2.5">
-      {/* Mỗi lượt tái khám = 1 thẻ (kiểu màn /recalls) */}
-      {items.map((it) => {
+    <>
+      {/* Một khối trắng liền, các lượt ngăn nhau bằng vạch mảnh. Trước đây mỗi lượt
+          là một thẻ rời trôi trên nền xám, đọc như nhiều mục riêng biệt chứ không
+          phải một danh sách. */}
+      <Card>
+      {items.map((it, i) => {
         const label = timeLabel(daysOverdue(it.recallDueDate));
         const statusChip =
           it.recallStatus === "scheduled"
-            ? { text: "Đã đặt lịch", tone: "success" as BadgeTone }
+            ? { text: RECALL_OUTCOME_LABEL.scheduled, tone: "success" as BadgeTone }
             : it.recallStatus === "refused"
-              ? { text: "Khách từ chối", tone: "neutral" as BadgeTone }
+              // Khách từ chối tái khám là mất doanh thu, không phải nhãn thường.
+              ? { text: "Khách từ chối", tone: "critical" as BadgeTone }
               : null;
         return (
-          <Card key={it.orderItemId} className="p-4">
+          <div
+            key={it.orderItemId}
+            className={cn(
+              "px-4 py-3.5",
+              !(i === items.length - 1 && logs.length === 0) &&
+                "np-divider",
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate text-[15px] font-bold text-np-ink">
+                  <span className="text-[15px] font-semibold text-np-ink">
                     {it.serviceName || "Dịch vụ tái khám"}
                   </span>
                   {/* Lượt chưa xử lý: nhãn thời gian; đã xử lý: nhãn trạng thái */}
@@ -827,69 +760,51 @@ function RecallSection({
                     <Badge tone={label.tone}>{label.text}</Badge>
                   )}
                 </div>
-                <div className="mt-1 flex items-center gap-1.5 text-[12px] text-np-text-muted">
-                  <Calendar size={13} strokeWidth={2.25} className="flex-shrink-0" />
+                <div className="mt-1 flex items-center gap-1.5 text-[13px] text-np-text-sub">
+                  <Calendar size={14} strokeWidth={2.25} className="flex-shrink-0" />
                   Hẹn {fmtRecallDate(it.recallDueDate)}
                 </div>
+                {/* Khi nhãn phía trên đã nói kết quả gọi thì đây chỉ ghi thời điểm,
+                    không lặp lại đúng chữ đó lần thứ hai cách nhau 20px. */}
                 {it.lastCall && (
-                  <div className="mt-0.5 text-[12px] text-np-text-muted">
-                    {OUTCOME_LABEL[it.lastCall.outcome] ?? it.lastCall.outcome}
-                    {fmtCallTime(it.lastCall.at) ? ` · ${fmtCallTime(it.lastCall.at)}` : ""}
+                  <div className="mt-0.5 text-[13px] text-np-text-sub">
+                    {statusChip
+                      ? `Đã gọi ${fmtCallTime(it.lastCall.at)}`
+                      : `${RECALL_OUTCOME_LABEL[it.lastCall.outcome as RecallOutcome] ?? it.lastCall.outcome}${
+                          fmtCallTime(it.lastCall.at) ? ` · ${fmtCallTime(it.lastCall.at)}` : ""
+                        }`}
                   </div>
                 )}
               </div>
               <NPButton
                 tone="primary"
                 size="sm"
-                icon={Phone}
                 onClick={() => onCall(it)}
                 className="flex-shrink-0 self-center"
               >
-                Gọi
+                Hành động
               </NPButton>
             </div>
-          </Card>
+          </div>
         );
       })}
 
-      {/* Lịch sử gọi (mọi lượt) */}
+      {/* Lịch sử gọi không nằm thẳng trong mục nữa: 9 lượt gọi đổ ra tại chỗ làm
+          mục Tái khám dài gấp mấy lần phần cần nhìn. Nay chỉ còn một nút, cần tra
+          mới mở. */}
       {logs.length > 0 && (
-        <Card className="p-4">
-          <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-muted">
-            Lịch sử gọi ({logs.length})
-          </div>
-          <div className="space-y-2">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className="rounded-np-button border border-np-border bg-np-surface-sub p-2.5"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[12px] font-bold text-np-ink">
-                    {OUTCOME_LABEL[log.outcome] ?? log.outcome}
-                  </span>
-                  <span className="flex-shrink-0 text-[10px] text-np-text-muted tabular-nums">
-                    {new Date(log.createdAt).toLocaleDateString("vi-VN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-                {serviceByItem.get(log.orderItemId) && (
-                  <div className="mt-0.5 text-[11px] text-np-text-sub">
-                    {serviceByItem.get(log.orderItemId)}
-                  </div>
-                )}
-                {log.note && <div className="mt-1 text-[11px] text-np-text-sub">{log.note}</div>}
-                <div className="mt-0.5 text-[10px] text-np-text-muted">bởi {log.actorName}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <div className="border-t border-np-surface-pressed">
+          <ActivityLog
+            entries={logs.map((log) => callEntry(log, serviceByItem.get(log.orderItemId)))}
+            preview={LOG_PREVIEW}
+            moreLabel={`Xem lịch sử gọi (${logs.length})`}
+            moreTitle={`Lịch sử gọi (${logs.length})`}
+          />
+        </div>
       )}
-    </div>
+      </Card>
+
+    </>
   );
 }
 
@@ -907,13 +822,13 @@ function MedicalHistorySection({ customerId }: { customerId: number }) {
 
   if (!opened) {
     return (
-      <Card className="p-4">
+      <Card className="px-4 py-3.5">
         <NPButton
           tone="ghost"
           size="sm"
-          icon={Stethoscope}
+          icon={MedicalServices}
           onClick={() => setOpened(true)}
-          className="w-full"
+          className="w-full justify-center"
         >
           Xem lịch sử khám bệnh
         </NPButton>
@@ -922,80 +837,47 @@ function MedicalHistorySection({ customerId }: { customerId: number }) {
   }
 
   return (
-    <Card className="p-4">
+    <Card>
       {records.length === 0 ? (
-        <div className="py-3 text-center">
-          <Stethoscope size={28} className="mx-auto text-np-border-strong" strokeWidth={2} />
-          <div className="mt-2 text-[13px] font-medium text-np-text-muted">
-            Chưa nối hệ thống bệnh án
-          </div>
-        </div>
+        <EmptyBlock>Chưa nối hệ thống bệnh án</EmptyBlock>
       ) : (
         // Chỗ đổ dữ liệu HIS khi nối xong.
-        <div className="space-y-3">
-          {records.map((r) => (
-            <div key={r.id} className="border-b border-np-surface-pressed pb-3 last:border-0 last:pb-0">
-              <div className="text-[13px] font-bold text-np-ink">{r.title}</div>
-              <div className="mt-0.5 text-[12px] text-np-text-muted">{r.date}</div>
-              <div className="mt-1 text-[12px] text-np-text-sub">{r.detail}</div>
-            </div>
-          ))}
-        </div>
+        records.map((r, i) => (
+          <div
+            key={r.id}
+            className={cn("px-4 py-3.5", i !== records.length - 1 && "np-divider")}
+          >
+            <div className="text-[15px] font-semibold text-np-ink">{r.title}</div>
+            <div className="mt-0.5 text-[12px] text-np-text-muted">{r.date}</div>
+            <div className="mt-0.5 text-[13px] text-np-text-sub">{r.detail}</div>
+          </div>
+        ))
       )}
     </Card>
   );
 }
 
-function InfoLine({
-  icon,
-  label,
-  value,
-  valueClass,
-  last,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  valueClass?: string;
-  last?: boolean;
-}) {
+/** Một lượt gọi tái khám. Dùng chung cho bản hé xem trong mục và hộp xem đầy đủ. */
+/**
+ * Một lượt gọi tái khám viết thành câu cho nhật ký chung: kết quả gọi nằm trong
+ * phần chữ đậm vì đó là thứ người dùng dò, ghi chú đẩy xuống phần nhạt.
+ */
+function callEntry(log: RecallLogEntry, serviceName?: string): ActivityEntry {
+  const ketQua = RECALL_OUTCOME_LABEL[log.outcome as RecallOutcome] ?? log.outcome;
+  return {
+    id: log.id,
+    at: log.createdAt,
+    actor: log.actorName,
+    action: `gọi ${serviceName ?? "tái khám"}, ${ketQua.charAt(0).toLowerCase()}${ketQua.slice(1)}`,
+    // Ghi chú là chữ người dùng tự gõ, đứng sau dấu chấm nên hoa chữ đầu cho liền câu.
+    detail: log.note ? log.note.charAt(0).toUpperCase() + log.note.slice(1) : undefined,
+  };
+}
+
+/** Khối rỗng dùng chung cho mọi mục, để bốn chỗ rỗng không ra bốn kiểu khác nhau. */
+function EmptyBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`flex items-start gap-3 px-4 py-3 ${last ? "" : "border-b border-np-surface-pressed"}`}>
-      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-np-surface-sub text-np-text-sub">
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
-          {label}
-        </div>
-        <div className={`mt-0.5 text-[14px] font-semibold text-np-ink ${valueClass ?? ""}`}>
-          {value}
-        </div>
-      </div>
-    </div>
+    <div className="px-4 py-8 text-center text-[13px] text-np-text-muted">{children}</div>
   );
 }
 
-function ActionBtn({
-  icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="flex flex-col items-center gap-1.5 rounded-np-card bg-white px-1 py-2.5 transition-colors active:bg-np-surface-pressed disabled:opacity-40"
-    >
-      <span className="text-np-brand-ink">{icon}</span>
-      <span className="text-[11px] font-semibold text-np-ink">{label}</span>
-    </button>
-  );
-}

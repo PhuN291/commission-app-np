@@ -19,7 +19,10 @@
   --color-np-ink: #1A1C1D;
   --color-np-ink-sub: #303030;
   --color-np-text-sub: #616161;
-  --color-np-text-muted: #8C9196;
+  /* #8C9196 cũ chỉ đạt 3.18:1 trên nền trắng, dưới ngưỡng dễ đọc 4.5:1, nên mọi
+     dòng chữ phụ trong app đều bạc màu. #6E7479 đạt 4.73:1 trên trắng và 4.38:1
+     trên nền xám, vẫn nhạt hơn hẳn --color-np-text-sub nên thứ bậc còn nguyên. */
+  --color-np-text-muted: #6E7479;
   --color-np-text-disabled: #B5B5B5;
 
   /* Borders */
@@ -42,6 +45,24 @@
   --color-np-danger: #D72C0D;
   --color-np-danger-bg: #FFD9D9;
   --color-np-danger-fg: #8E1F0B;
+
+  /* Badge — 6 tông ngữ nghĩa dùng chung cho MỌI nhãn nhỏ trong app.
+     Nền nằm trong dải sáng 88 tới 93% nên không tông nào to tiếng hơn tông nào;
+     phân biệt bằng HƯỚNG MÀU chứ không bằng độ đậm. Tương phản chữ trên nền
+     thấp nhất 5.2, đều trên chuẩn 4.5 cho chữ nhỏ 11px.
+     Đổi màu badge thì sửa ở đây, đừng gõ hex vào component. */
+  --color-np-badge-neutral-bg: #F1F1F2;   /* nhãn thường, không mang trạng thái */
+  --color-np-badge-neutral-fg: #44474A;
+  --color-np-badge-info-bg: #EEF4FD;      /* đang chạy đúng tiến độ */
+  --color-np-badge-info-fg: #1B5490;
+  --color-np-badge-attention-bg: #FCF4E4; /* cần người xử lý */
+  --color-np-badge-attention-fg: #7C5400;
+  --color-np-badge-success-bg: #EDF6F1;   /* kết thúc tốt */
+  --color-np-badge-success-fg: #0B6B56;
+  --color-np-badge-critical-bg: #FDF0EE;  /* kết thúc xấu, mất tiền */
+  --color-np-badge-critical-fg: #93261C;
+  --color-np-badge-muted-bg: #F7F7F8;     /* đã đóng lại, cố ý chìm nhất */
+  --color-np-badge-muted-fg: #64696E;
 
   /* Header */
   --color-np-header: #1A1C1D;
@@ -267,4 +288,41 @@
   inset: -3px;
   z-index: -1;
   filter: blur(8px);
+}
+
+/* ============================================================
+   Vạch ngăn giữa các dòng trong danh sách.
+   Mảnh: dùng scaleY(0.5) nên ra nét nửa pixel thật ở mọi mật độ màn hình,
+   thay vì viền 1px bị nhân lên 2 tới 3 pixel trên điện thoại.
+   Thụt trái 16px: thẳng lề chữ, không cắt ngang cả khối trắng.
+   ============================================================ */
+.np-divider {
+  position: relative;
+}
+.np-divider::after {
+  content: "";
+  position: absolute;
+  inset-inline: 16px 0;
+  bottom: 0;
+  height: 1px;
+  transform: scaleY(0.5);
+  transform-origin: bottom;
+  background: var(--color-np-surface-pressed);
+  pointer-events: none;
+}
+
+/* Bản cho khối cha: mọi con trừ con cuối đều có vạch ngăn, thay cho divide-y. */
+.np-divide > *:not(:last-child) {
+  position: relative;
+}
+.np-divide > *:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-inline: 16px 0;
+  bottom: 0;
+  height: 1px;
+  transform: scaleY(0.5);
+  transform-origin: bottom;
+  background: var(--color-np-surface-pressed);
+  pointer-events: none;
 }

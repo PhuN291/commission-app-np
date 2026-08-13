@@ -95,8 +95,11 @@ export function Screen({
       )}
       <div
         className={cn(
-          "flex flex-1 flex-col overflow-hidden",
-          noHeader ? "bg-white" : "rounded-t-np-sheet bg-np-surface-sub",
+          // Nền xám cho cả hai kiểu. Trước đây màn không có thanh đầu app dùng nền
+          // trắng, nên dải 76px chừa cho TabBar ở đáy hiện ra màu trắng trong khi
+          // màn có thanh đầu lại xám: cùng một app mà đáy hai kiểu khác nhau.
+          "flex flex-1 flex-col overflow-hidden bg-np-bg",
+          !noHeader && "rounded-t-np-sheet",
         )}
       >
         <div className="scrollbar-hide flex-1 overflow-y-auto overflow-x-hidden pb-[76px]">{children}</div>

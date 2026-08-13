@@ -1,11 +1,11 @@
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
 import {
-  Calendar,
-  ShoppingBag,
-  Phone,
   Award,
+  Calendar,
   Info,
-} from "lucide-react";
+  PermPhoneMsg,
+  ShoppingBag,
+} from "@/components/np/icon";
 
 export interface Notification {
   id: number;
@@ -47,7 +47,7 @@ export const mockNotifications: Notification[] = [
     time: "30 phút trước",
     read: false,
     href: "/customers/2",
-    icon: Phone,
+    icon: PermPhoneMsg,
   },
   {
     id: 4,
@@ -97,7 +97,7 @@ export const mockNotifications: Notification[] = [
     time: "Hôm qua",
     read: true,
     href: "/customers/4",
-    icon: Phone,
+    icon: PermPhoneMsg,
   },
   {
     id: 9,

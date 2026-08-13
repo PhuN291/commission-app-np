@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { Search } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 
 type SearchFieldProps = {

@@ -1,14 +1,8 @@
-import { Redirect, useLocation } from "wouter";
+import { useQuayLai } from "@/lib/use-back";
+import { Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Calendar,
-  CheckCircle2,
-  Repeat,
-  XCircle,
-} from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
+import { ArrowDownRight, ArrowUpRight } from "@/components/np/icon";
 import {
   Bar,
   BarChart,
@@ -86,7 +80,7 @@ function monthLabel(thang: string) {
 
 export default function AnalyticsAppointments() {
   const { active, onTab } = useTabNav();
-  const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
 
   // Chặn vai: chỉ quản lý (ceo/tc/kt) xem; vai khác về trang chủ.
   const role = (typeof window !== "undefined"
@@ -110,7 +104,7 @@ export default function AnalyticsAppointments() {
   if (isLoading || !data) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Lịch hẹn" onBack={() => navigate("/")} trailing={<div />} />
+        <DetailHeader title="Lịch hẹn" onBack={quayLai} trailing={<div />} />
         <div className="flex flex-1 items-center justify-center py-20">
           {isLoading ? (
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
@@ -162,9 +156,9 @@ export default function AnalyticsAppointments() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title="Lịch hẹn" onBack={() => navigate("/")} trailing={<div />} />
+      <DetailHeader title="Lịch hẹn" onBack={quayLai} trailing={<div />} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         <PageHeader
           title="Lịch hẹn"
           subtitle="Xu hướng và tỷ lệ hoàn thành"
@@ -172,24 +166,21 @@ export default function AnalyticsAppointments() {
         />
 
         {/* KPI */}
-        <div className="grid grid-cols-2 gap-2.5 px-4">
+        <div className="np-divide bg-white">
           <KpiCard
             title="Tổng lịch hẹn"
             display={kpis.tongLichHen.value.toLocaleString("vi-VN")}
             changePct={kpis.tongLichHen.changePct}
-            icon={Calendar}
           />
           <KpiCard
             title="Tỷ lệ đến khám"
             display={`${kpis.tyLeDenKham.value}%`}
             changePct={kpis.tyLeDenKham.changePct}
-            icon={CheckCircle2}
           />
           <KpiCard
             title="Tỷ lệ không đến"
             display={`${kpis.tyLeKhongDen.value}%`}
             changePct={kpis.tyLeKhongDen.changePct}
-            icon={XCircle}
             invertChange
             warn={kpis.tyLeKhongDen.value > NO_SHOW_TARGET}
           />
@@ -197,7 +188,6 @@ export default function AnalyticsAppointments() {
             title="Tỷ lệ tái khám"
             display={`${kpis.tyLeTaiKham.value}%`}
             changePct={kpis.tyLeTaiKham.changePct}
-            icon={Repeat}
             note="Theo lượt đến hạn trong kỳ"
           />
         </div>
@@ -343,7 +333,7 @@ export default function AnalyticsAppointments() {
         <SectionTitle>Phân tích không đến</SectionTitle>
         <Card className="space-y-4 p-4">
           <div className="flex flex-col items-center">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+            <p className="mb-2 text-[10px] font-bold text-np-text-muted">
               Tỷ lệ hiện tại
             </p>
             <div className="relative h-[100px] w-[200px]">
@@ -373,7 +363,7 @@ export default function AnalyticsAppointments() {
           </div>
 
           <div className="border-t border-np-surface-pressed pt-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+            <p className="mb-2 text-[10px] font-bold text-np-text-muted">
               Xu hướng 6 tháng
             </p>
             <div className="h-[120px]">
@@ -440,7 +430,6 @@ export default function AnalyticsAppointments() {
           )}
         </Card>
 
-        <div className="h-5" />
       </div>
     </Screen>
   );
@@ -487,7 +476,6 @@ function KpiCard({
   title,
   display,
   changePct,
-  icon: Icon,
   note,
   invertChange,
   warn,
@@ -495,29 +483,20 @@ function KpiCard({
   title: string;
   display: string;
   changePct: number | null;
-  icon: LucideIcon;
   note?: string;
   invertChange?: boolean;
   warn?: boolean;
 }) {
   return (
-    <div className="rounded-np-card bg-white p-3.5">
-      <div className="mb-2 flex items-start justify-between">
-        <div
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg",
-            warn ? "bg-np-danger-bg" : "bg-np-brand-soft",
-          )}
-        >
-          <Icon size={18} strokeWidth={2} className={warn ? "text-np-danger" : "text-np-brand-ink"} />
-        </div>
-        <ChangePill pct={changePct} invert={invertChange} />
+    <div className="flex items-start justify-between gap-3 bg-white px-4 py-3.5">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold text-np-text-muted">{title}</p>
+        <p className={cn("mt-0.5 text-[22px] font-extrabold tracking-[-0.4px] tabular-nums", warn ? "text-np-danger" : "text-np-ink")}>
+          {display}
+        </p>
+        {note && <p className="mt-1 text-[11px] leading-tight text-np-text-muted">{note}</p>}
       </div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">{title}</p>
-      <p className={cn("mt-0.5 text-[20px] font-extrabold tabular-nums", warn ? "text-np-danger" : "text-np-ink")}>
-        {display}
-      </p>
-      {note && <p className="mt-1 text-[10px] leading-tight text-np-text-muted">{note}</p>}
+      <ChangePill pct={changePct} invert={invertChange} />
     </div>
   );
 }

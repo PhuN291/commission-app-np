@@ -5,8 +5,8 @@
  */
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Bell, Loader2 } from "lucide-react";
-import { PageHeader, Screen, SectionTitle, useTabNav } from "@/components/np";
+import { Bell, Loader2 } from "@/components/np/icon";
+import { Badge, PageHeader, Screen, SectionTitle, useTabNav } from "@/components/np";
 import { authFetch, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { NotificationType } from "@shared/types";
@@ -16,7 +16,6 @@ type Notification = {
   userId: number;
   type: NotificationType;
   tag: string;
-  tone: string;
   title: string;
   body: string;
   link: string;
@@ -98,7 +97,6 @@ export default function Notifications() {
     <Screen activeTab={active} onTab={onTab}>
       <PageHeader
         title="Thông báo"
-        subtitle={data.unread > 0 ? `${data.unread} chưa đọc` : "Đã đọc hết"}
         action={
           data.unread > 0 ? (
             <button
@@ -126,7 +124,7 @@ export default function Notifications() {
           {unreadList.length > 0 && (
             <>
               <SectionTitle>Chưa đọc</SectionTitle>
-              <div className="flex flex-col gap-2 px-4">
+              <div className="flex flex-col gap-2">
                 {unreadList.map((n) => (
                   <NotifCard key={n.id} n={n} onClick={() => handleRead(n)} />
                 ))}
@@ -136,7 +134,7 @@ export default function Notifications() {
           {readList.length > 0 && (
             <>
               <SectionTitle>Trước đó</SectionTitle>
-              <div className="flex flex-col gap-2 px-4">
+              <div className="flex flex-col gap-2">
                 {readList.map((n) => (
                   <NotifCard key={n.id} n={n} onClick={() => handleRead(n)} />
                 ))}
@@ -156,7 +154,7 @@ function NotifCard({ n, onClick }: { n: Notification; onClick: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-start gap-2.5 rounded-np-card border p-3.5 text-left transition-transform active:scale-[0.99]",
+        "flex w-full items-start gap-2.5 border-y p-3.5 text-left transition-transform active:scale-[0.99]",
         unread ? "border-transparent bg-np-brand-soft/30" : "border-np-surface-pressed bg-white",
       )}
     >
@@ -173,9 +171,7 @@ function NotifCard({ n, onClick }: { n: Notification; onClick: () => void }) {
           >
             {n.title}
           </div>
-          <span className="flex-shrink-0 rounded-full bg-np-surface-pressed px-2 py-0.5 text-[10px] font-semibold tracking-[0.2px] text-np-ink">
-            {n.tag}
-          </span>
+          <Badge className="flex-shrink-0">{n.tag}</Badge>
         </div>
         <div className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-np-text-sub">{n.body}</div>
         <div className="mt-1 text-[11px] text-np-text-muted tabular-nums">{timeAgo(n.createdAt)}</div>

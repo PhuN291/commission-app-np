@@ -127,6 +127,7 @@ export interface IStorage {
 
   getAllCustomers(): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
+  findCustomerByPhone(phone: string): Promise<Customer | undefined>;
   getCustomerOrders(phone: string): Promise<Order[]>;
   searchCustomers(query: string): Promise<Customer[]>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
@@ -431,6 +432,11 @@ export class MemoryStorage implements IStorage {
     return [...this.customers];
   }
 
+  async findCustomerByPhone(phone: string): Promise<Customer | undefined> {
+    const p = phone.trim();
+    return Array.from(this.customers.values()).find((c) => c.phone === p);
+  }
+
   async getCustomer(id: number): Promise<Customer | undefined> {
     return this.customers.find(c => c.id === id);
   }
@@ -528,6 +534,8 @@ export class MemoryStorage implements IStorage {
       source: insertOrder.source ?? "manual",
       idempotencyKey: insertOrder.idempotencyKey ?? null,
       saleUserId: insertOrder.saleUserId ?? null,
+      indicatedByUserId: insertOrder.indicatedByUserId ?? null,
+      performedByUserId: insertOrder.performedByUserId ?? null,
       insuranceAmount: insertOrder.insuranceAmount ?? 0,
       voucherAmount: insertOrder.voucherAmount ?? 0,
       voucherCode: insertOrder.voucherCode ?? null,

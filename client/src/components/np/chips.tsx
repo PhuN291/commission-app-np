@@ -15,7 +15,10 @@ type ChipsProps = {
 
 export function Chips({ items, active, onChange, className }: ChipsProps) {
   return (
-    <div className={cn("scrollbar-hide flex gap-1.5 overflow-x-auto px-4 py-3", className)}>
+    // Lề ngang của hàng là 6px, cộng với 10px lề trong của từng chip thành 16px,
+    // nhờ vậy chữ chip đầu tiên vẫn thẳng hàng với nội dung còn lại của trang dù
+    // chip không còn khung viền để làm mốc.
+    <div className={cn("scrollbar-hide flex gap-0.5 overflow-x-auto px-1.5 py-2", className)}>
       {items.map((it) => {
         const on = it.key === active;
         return (
@@ -24,10 +27,12 @@ export function Chips({ items, active, onChange, className }: ChipsProps) {
             type="button"
             onClick={() => onChange?.(it.key)}
             className={cn(
-              "flex flex-shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-np-chip border px-3.5 py-[7px] text-[13px]",
+              "flex flex-shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-np-chip px-2.5 py-1.5 text-[13px] transition-colors",
+              // Chỉ mục đang chọn mới có nền xám. Các mục còn lại là chữ trần,
+              // đỡ rối mắt và hàng lọc bớt chiếm chỗ.
               on
-                ? "border-np-ink bg-np-ink font-bold text-white"
-                : "border-np-border-strong bg-white font-semibold text-np-text-sub",
+                ? "bg-np-surface-pressed font-bold text-np-ink"
+                : "font-semibold text-np-text-sub hover:bg-np-surface-sub",
             )}
           >
             {it.label}
@@ -35,7 +40,7 @@ export function Chips({ items, active, onChange, className }: ChipsProps) {
               <span
                 className={cn(
                   "text-[12px] font-medium tabular-nums",
-                  on ? "text-white/70" : "text-np-text-muted",
+                  on ? "text-np-text-sub" : "text-np-text-muted",
                 )}
               >
                 {it.count}

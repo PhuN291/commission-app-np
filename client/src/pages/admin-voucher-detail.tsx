@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useParams } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Badge,
   Card,
+  DateTimeField,
   DetailHeader,
   NPButton,
   Screen,
@@ -32,6 +34,7 @@ export default function AdminVoucherDetail() {
   const { active, onTab } = useTabNav();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/admin/vouchers");
   const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const isNew = !params.id || params.id === "new";
@@ -142,7 +145,7 @@ export default function AdminVoucherDetail() {
     if (existingVoucher.usageLimit > 0 && existingVoucher.usedCount >= existingVoucher.usageLimit)
       return { label: "Hết lượt", tone: "critical" };
     if (existingVoucher.endDate && new Date(existingVoucher.endDate) < new Date())
-      return { label: "Hết hạn", tone: "neutral" };
+      return { label: "Hết hạn", tone: "muted" }; // đã đóng, cho chìm xuống
     return { label: "Đang hoạt động", tone: "success" };
   };
 
@@ -157,10 +160,10 @@ export default function AdminVoucherDetail() {
             ? `Đã dùng ${existingVoucher.usedCount}/${existingVoucher.usageLimit} lượt`
             : undefined
         }
-        onBack={() => navigate("/admin/vouchers")}
+        onBack={quayLai}
       />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         {status && (
           <div className="px-4 pt-4">
             <Badge tone={status.tone}>{status.label}</Badge>
@@ -172,7 +175,7 @@ export default function AdminVoucherDetail() {
         <Card className="space-y-1.5 p-4">
           <Label className="text-[12px] font-semibold text-np-text-sub">Mã voucher</Label>
           <Input
-            placeholder="VD: SUMMER30"
+            placeholder="Ví dụ: SUMMER30"
             value={form.code}
             onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
             className="font-mono"
@@ -215,7 +218,7 @@ export default function AdminVoucherDetail() {
             <div className="relative">
               <Input
                 type="number"
-                placeholder={form.discountType === "percent" ? "VD: 20" : "VD: 100000"}
+                placeholder={form.discountType === "percent" ? "Ví dụ: 20" : "Ví dụ: 100000"}
                 value={form.value}
                 onChange={(e) => setForm({ ...form, value: e.target.value })}
                 className="pr-10"
@@ -232,7 +235,7 @@ export default function AdminVoucherDetail() {
               <div className="relative">
                 <Input
                   type="number"
-                  placeholder="VD: 500000"
+                  placeholder="Ví dụ: 500000"
                   value={form.maxDiscount}
                   onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })}
                   className="pr-8"
@@ -252,7 +255,7 @@ export default function AdminVoucherDetail() {
             <Label className="text-[12px] font-semibold text-np-text-sub">Đơn tối thiểu (₫)</Label>
             <Input
               type="number"
-              placeholder="VD: 500000"
+              placeholder="Ví dụ: 500000"
               value={form.minOrder}
               onChange={(e) => setForm({ ...form, minOrder: e.target.value })}
             />
@@ -263,7 +266,7 @@ export default function AdminVoucherDetail() {
             </Label>
             <Input
               type="number"
-              placeholder="VD: 50"
+              placeholder="Ví dụ: 50"
               value={form.usageLimit}
               onChange={(e) => setForm({ ...form, usageLimit: e.target.value })}
             />
@@ -273,21 +276,26 @@ export default function AdminVoucherDetail() {
         {/* Thời hạn */}
         <SectionTitle>Thời hạn hiệu lực</SectionTitle>
         <Card className="p-4">
-          <div className="grid grid-cols-2 gap-3">
+          {/* Xếp dọc chứ không hai cột: lịch tháng bung ra cần đủ bề ngang, nhét
+              vào nửa khung 390px thì ô ngày bị bóp còn hơn 160px. */}
+          <div className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-[12px] font-semibold text-np-text-sub">Bắt đầu</Label>
-              <Input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+              <DateTimeField
+                date={form.startDate}
+                onDateChange={(v) => setForm({ ...form, startDate: v })}
+                withTime={false}
+                placeholder="Chọn ngày bắt đầu"
               />
             </div>
             <div className="space-y-1.5">
               <Label className="text-[12px] font-semibold text-np-text-sub">Kết thúc</Label>
-              <Input
-                type="date"
-                value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+              <DateTimeField
+                date={form.endDate}
+                onDateChange={(v) => setForm({ ...form, endDate: v })}
+                withTime={false}
+                min={form.startDate || undefined}
+                placeholder="Chọn ngày kết thúc"
               />
             </div>
           </div>
@@ -364,7 +372,6 @@ export default function AdminVoucherDetail() {
           </NPButton>
         </div>
 
-        <div className="h-5" />
       </div>
     </Screen>
   );

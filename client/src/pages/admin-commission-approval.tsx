@@ -12,13 +12,12 @@
  */
 
 import { useState } from "react";
+import { useQuayLai } from "@/lib/use-back";
 import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/queryClient";
 import {
   AlertTriangle,
-  ArrowDownCircle,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -27,8 +26,9 @@ import {
   FileSpreadsheet,
   Gift,
   ShieldAlert,
+  Verified,
   XCircle,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
   Badge,
   Card,
@@ -178,6 +178,7 @@ function currentCycleId(): string {
 export default function AdminCommissionApproval() {
   const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
   const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
   const canView = role === "kt" || role === "ceo" || role === "tc";
   const canEdit = role === "kt";
@@ -357,7 +358,7 @@ export default function AdminCommissionApproval() {
   if (isLoading || !data) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Duyệt hoa hồng" onBack={() => navigate("/")} />
+        <DetailHeader title="Duyệt hoa hồng" onBack={quayLai} />
         <div className="flex flex-1 items-center justify-center py-20">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
         </div>
@@ -376,9 +377,9 @@ export default function AdminCommissionApproval() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title="Duyệt hoa hồng" onBack={() => navigate("/")} />
+      <DetailHeader title="Duyệt hoa hồng" onBack={quayLai} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         <PageHeader title={`Duyệt hoa hồng ${cycleLabel(cycle).toLowerCase()}`} />
 
         {/* Cycle selector */}
@@ -747,7 +748,7 @@ function CRTab({
   return (
     <>
       {/* Stats summary */}
-      <div className="mx-4 mb-3 grid grid-cols-2 gap-2.5">
+      <div className="mb-3 grid grid-cols-2 gap-2.5">
         <StatCard
           label="Chờ duyệt"
           count={data.stats.pending.count}
@@ -779,14 +780,14 @@ function CRTab({
 
       {/* Order groups */}
       {data.orderGroups.length === 0 ? (
-        <Card className="mx-4 px-5 py-12 text-center">
-          <CheckCircle2 size={36} className="mx-auto text-np-border-strong" />
+        <Card className="px-5 py-12 text-center">
+          <Verified size={36} className="mx-auto text-np-border-strong" />
           <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
             Chưa có hoa hồng trong kỳ
           </div>
         </Card>
       ) : (
-        <div className="mx-4 space-y-2">
+        <div className="space-y-2">
           {data.orderGroups.map((g) => (
             <OrderGroupCard
               key={g.orderId}
@@ -818,10 +819,10 @@ function StatCard({
   tone: "attention" | "success";
 }) {
   const colorClass =
-    tone === "attention" ? "text-np-attention-ink" : "text-np-success-ink";
+    tone === "attention" ? "text-np-badge-attention-fg" : "text-np-badge-success-fg";
   return (
-    <div className="rounded-np-card bg-white px-3.5 py-3">
-      <div className="text-[11px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+    <div className="bg-white px-3.5 py-3">
+      <div className="text-[11px] font-bold text-np-text-muted">
         {label}
       </div>
       <div className={"mt-1 text-[20px] font-extrabold tabular-nums " + colorClass}>{count}</div>
@@ -854,7 +855,7 @@ function OrderGroupCard({
   const pendingCRs = group.crs.filter((c) => c.status === "CHO_DUYET");
   const total = group.crs.reduce((s, c) => s + c.amount, 0);
   return (
-    <Card className="mx-0 overflow-hidden p-0 shadow-[0_1px_3px_rgba(17,24,28,0.06),0_1px_2px_rgba(17,24,28,0.04)]">
+    <Card className="overflow-hidden p-0">
       <button
         type="button"
         onClick={onToggle}
@@ -862,7 +863,7 @@ function OrderGroupCard({
       >
         {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-muted">
+          <div className="text-[11px] font-bold text-np-text-muted">
             {group.orderCode}
           </div>
           <div className="mt-0.5 truncate text-[13px] font-bold text-np-ink">
@@ -877,7 +878,7 @@ function OrderGroupCard({
             {fmtVND(total)}
           </div>
           {pendingCRs.length > 0 && (
-            <div className="text-[11px] font-medium text-np-attention-ink">
+            <div className="text-[11px] font-medium text-np-badge-attention-fg">
               {pendingCRs.length} chờ
             </div>
           )}
@@ -898,7 +899,7 @@ function OrderGroupCard({
             <NPButton
               tone="primary"
               size="sm"
-              icon={CheckCircle2}
+              icon={Verified}
               className="mt-2 w-full justify-center"
               onClick={onBulkOrder}
               disabled={isApproving}
@@ -955,7 +956,7 @@ function CRRow({
       </div>
       {canEdit && isPending && (
         <div className="mt-2 flex gap-2">
-          <NPButton tone="primary" size="sm" icon={CheckCircle2} onClick={onApprove}>
+          <NPButton tone="primary" size="sm" icon={Verified} onClick={onApprove}>
             Duyệt
           </NPButton>
           <NPButton tone="ghost" size="sm" icon={XCircle} onClick={onReject}>
@@ -982,8 +983,8 @@ function ComplaintTab({
 }) {
   if (cards.length === 0) {
     return (
-      <Card className="mx-4 px-5 py-12 text-center">
-        <CheckCircle2 size={36} className="mx-auto text-np-border-strong" />
+      <Card className="px-5 py-12 text-center">
+        <Verified size={36} className="mx-auto text-np-border-strong" />
         <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
           Chưa có khiếu nại chờ xử lý
         </div>
@@ -991,12 +992,12 @@ function ComplaintTab({
     );
   }
   return (
-    <div className="mx-4 space-y-2">
+    <div className="space-y-2">
       {cards.map((card) => (
         <Card key={card.cr.id} className="p-4">
           <div className="flex items-start justify-between gap-2.5">
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-muted">
+              <div className="text-[11px] font-bold text-np-text-muted">
                 {card.orderCode}
               </div>
               <div className="mt-0.5 text-[13px] font-bold text-np-ink">
@@ -1059,7 +1060,7 @@ function AdjustmentTab({
   const approved = items.filter((a) => a.status === "APPROVED" || a.status === "EDITED");
 
   return (
-    <div className="mx-4 space-y-3">
+    <div className="space-y-3">
       {/* Section 1: Pending queue */}
       <div>
         <h3 className="mb-2 text-[13px] font-bold text-np-ink">Chờ CEO duyệt ({pending.length})</h3>
@@ -1092,7 +1093,7 @@ function AdjustmentTab({
         </h3>
         {approved.length === 0 ? (
           <Card className="px-5 py-8 text-center">
-            <CheckCircle2 size={28} className="mx-auto text-np-border-strong" />
+            <Verified size={28} className="mx-auto text-np-border-strong" />
             <div className="mt-2 text-[12px] font-medium text-np-text-muted">
               Chưa có điều chỉnh được duyệt
             </div>
@@ -1147,7 +1148,7 @@ function AdjustmentRow({
     <div
       className={
         "flex items-start gap-3 px-4 py-3.5" +
-        (last ? "" : " border-b border-np-surface-pressed")
+        (last ? "" : " np-divider")
       }
     >
       <div
@@ -1179,7 +1180,7 @@ function AdjustmentRow({
       <div
         className={
           "flex-shrink-0 text-[14px] font-extrabold tabular-nums " +
-          (isThuong ? "text-np-success-ink" : "text-np-danger")
+          (isThuong ? "text-np-badge-success-fg" : "text-np-danger")
         }
       >
         {fmtSignedVND(adj.amount)}
@@ -1203,7 +1204,7 @@ function ExportTab({
 }) {
   const exportable = stats.approved.count + stats.pending.count;
   return (
-    <div className="mx-4 space-y-3">
+    <div className="space-y-3">
       <Card className="p-4">
         <div className="flex items-center gap-2">
           <FileSpreadsheet size={20} className="text-np-brand-ink" />
@@ -1214,7 +1215,7 @@ function ExportTab({
 
         <div className="mt-3 grid grid-cols-2 gap-2.5">
           <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-muted">
+            <div className="text-[11px] font-bold text-np-text-muted">
               Tổng khoản
             </div>
             <div className="mt-1 text-[18px] font-extrabold tabular-nums text-np-ink">
@@ -1222,10 +1223,10 @@ function ExportTab({
             </div>
           </div>
           <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-muted">
+            <div className="text-[11px] font-bold text-np-text-muted">
               Đã duyệt
             </div>
-            <div className="mt-1 text-[18px] font-extrabold tabular-nums text-np-success-ink">
+            <div className="mt-1 text-[18px] font-extrabold tabular-nums text-np-badge-success-fg">
               {stats.approved.count}
             </div>
           </div>

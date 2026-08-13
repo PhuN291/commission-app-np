@@ -340,7 +340,7 @@ export const RECALL_OUTCOMES = [
 export type RecallOutcome = (typeof RECALL_OUTCOMES)[number];
 
 export const RECALL_OUTCOME_LABEL: Record<RecallOutcome, string> = {
-  scheduled: "Đã đặt lịch tái khám",
+  scheduled: "Đã đặt lịch",
   no_answer: "Chưa bắt máy",
   refused: "Khách từ chối",
   other: "Khác",

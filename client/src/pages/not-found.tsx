@@ -1,4 +1,4 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle } from "@/components/np/icon";
 import { useLocation } from "wouter";
 import { NPButton, Screen } from "@/components/np";
 

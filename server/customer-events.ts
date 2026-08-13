@@ -12,8 +12,11 @@ export type CustomerEventType =
   | "sms"
   | "email"
   | "order_created"
+  | "order_updated"
   | "status_change"
-  | "recall_call";
+  | "recall_call"
+  | "note_updated"
+  | "note_cleared";
 
 export async function logCustomerEvent(input: {
   customerId?: number;

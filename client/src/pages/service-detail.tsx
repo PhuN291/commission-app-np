@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useParams } from "wouter";
 import {
   BadgePercent,
   CheckCircle2,
   Clock,
   Hash,
+  MedicalServices,
   Minus,
   Package,
   Plus,
   Shield,
   ShoppingCart,
-  Stethoscope,
   UserRound,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
   Badge,
   Card,
@@ -465,6 +466,7 @@ export const SERVICE_PACKAGES: Record<string, ServicePackage[]> = {
 export default function ServiceDetail() {
   const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/services");
   const params = useParams<{ id: string }>();
   const serviceId = parseInt(params.id || "0");
   const [expandedMarkers, setExpandedMarkers] = useState<Record<string, boolean>>({});
@@ -501,7 +503,7 @@ export default function ServiceDetail() {
   if (isLoading) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Dịch vụ" onBack={() => navigate("/services")} />
+        <DetailHeader title="Dịch vụ" onBack={quayLai} />
         <div className="flex flex-1 items-center justify-center py-20">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
         </div>
@@ -512,7 +514,7 @@ export default function ServiceDetail() {
   if (!service) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Dịch vụ" onBack={() => navigate("/services")} />
+        <DetailHeader title="Dịch vụ" onBack={quayLai} />
         <div className="flex flex-1 flex-col items-center justify-center py-20">
           <p className="text-np-text-muted">Không tìm thấy dịch vụ</p>
           <button
@@ -529,19 +531,19 @@ export default function ServiceDetail() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title={service.title} onBack={() => navigate("/services")} />
+      <DetailHeader title={service.title} onBack={quayLai} />
 
-      <div className="bg-np-surface-sub pb-24">
+      <div className="min-h-full flow-root bg-np-bg pb-24">
         {/* Hero */}
         <div className="bg-white px-4 py-4">
           <div className="flex items-start gap-3">
             <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-np-card bg-np-surface-sub">
-              <Stethoscope size={24} strokeWidth={2.2} className="text-np-text-sub" />
+              <MedicalServices size={24} strokeWidth={2.2} className="text-np-text-sub" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-[18px] font-bold text-np-ink">{service.title}</h2>
-                <span className="flex items-center gap-1 rounded bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+                <span className="flex items-center gap-1 rounded bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold text-np-text-muted">
                   <Hash size={10} /> {service.code}
                 </span>
               </div>
@@ -575,7 +577,7 @@ export default function ServiceDetail() {
             icon={<UserRound size={15} strokeWidth={2.25} />}
             label="Chỉ định"
             trailing={
-              <Badge tone={service.requiresDoctor ? "attention" : "neutral"}>
+              <Badge>
                 {service.requiresDoctor ? "Bác sĩ" : "Kỹ thuật viên"}
               </Badge>
             }
@@ -589,7 +591,9 @@ export default function ServiceDetail() {
             icon={<Shield size={15} strokeWidth={2.25} />}
             label="Bảo hiểm"
             trailing={
-              <Badge tone={service.insurance === "Có hỗ trợ" ? "success" : "critical"}>
+              // Bảo hiểm là thuộc tính cố định của dịch vụ. Tô đỏ khi không hỗ trợ là báo
+              // động giả trên màn tra cứu, người xem tưởng có gì đó hỏng.
+              <Badge tone={service.insurance === "Có hỗ trợ" ? "success" : "neutral"}>
                 {service.insurance}
               </Badge>
             }
@@ -632,7 +636,7 @@ export default function ServiceDetail() {
                           className={
                             mIdx === pkg.markers.length - 1
                               ? ""
-                              : "border-b border-np-surface-pressed"
+                              : "np-divider"
                           }
                         >
                           <button
@@ -668,7 +672,6 @@ export default function ServiceDetail() {
           </>
         )}
 
-        <div className="h-5" />
       </div>
 
       {/* Sticky CTA */}
@@ -696,7 +699,7 @@ export default function ServiceDetail() {
                 key={idx}
                 type="button"
                 onClick={() => setSelectedPackageIdx(idx)}
-                className={`w-full border-b border-np-surface-pressed px-5 py-4 text-left transition-colors last:border-0 ${
+                className={`w-full np-divider px-5 py-4 text-left transition-colors last:border-0 ${
                   selectedPackageIdx === idx ? "bg-np-brand-soft" : "hover:bg-np-surface-sub"
                 }`}
               >

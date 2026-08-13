@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuayLai } from "@/lib/use-back";
 import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/queryClient";
@@ -16,10 +17,13 @@ import {
   AlertTriangle,
   Smartphone,
   UserPlus,
-  UserX,
   Users,
-} from "lucide-react";
+  UserX,
+  Verified,
+} from "@/components/np/icon";
 import {
+  ActivityLog,
+  DateTimeField,
   Avatar,
   Badge,
   Card,
@@ -142,6 +146,7 @@ const emptyForm: FormState = {
 export default function AdminStaff() {
   const { active: navActive, onTab } = useTabNav();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -426,12 +431,13 @@ export default function AdminStaff() {
 
   return (
     <Screen activeTab={navActive} onTab={onTab} noHeader>
-      <DetailHeader title="Quản lý nhân sự" onBack={() => navigate("/")} />
+      <DetailHeader title="Quản lý nhân sự" onBack={quayLai} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         <PageHeader
           title={isCeo ? "Quản lý nhân sự" : "Nhân sự (chỉ xem)"}
-          subtitle={`${inTabList.length} người${isTc ? " · Chỉ được đánh dấu sắp nghỉ" : ""}`}
+          // Bỏ phần đếm số vì chip ngay dưới đã có, chỉ giữ lời nhắc quyền hạn.
+          subtitle={isTc ? "Chỉ được đánh dấu sắp nghỉ" : undefined}
           action={
             canEdit ? (
               <NPButton tone="primary" size="sm" icon={UserPlus} onClick={openAdd}>
@@ -501,7 +507,7 @@ export default function AdminStaff() {
                 onClick={() => openEdit(m)}
                 className={
                   "flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors active:bg-np-surface-pressed" +
-                  (i === staffList.length - 1 ? "" : " border-b border-np-surface-pressed")
+                  (i === staffList.length - 1 ? "" : " np-divider")
                 }
               >
                 <Avatar name={m.name} size={40} />
@@ -515,16 +521,22 @@ export default function AdminStaff() {
                   <div className="mt-0.5 truncate text-[12px] text-np-text-sub tabular-nums">
                     {m.phone}
                     {m.ihosUserId ? (
-                      <span className="ml-2 font-mono text-np-brand-ink">iHOS✓ {m.ihosUserId}</span>
+                      <span className="ml-2 inline-flex items-center gap-1 font-mono text-np-brand-ink">
+                        <Verified size={12} /> iHOS {m.ihosUserId}
+                      </span>
                     ) : m.role === "doctor" ? (
-                      <span className="ml-2 font-mono text-np-danger">⚠ Thiếu iHOS</span>
+                      <span className="ml-2 inline-flex items-center gap-1 font-mono text-np-danger">
+                        <AlertTriangle size={12} /> Thiếu iHOS
+                      </span>
                     ) : null}
                   </div>
                   {m.status === "pending_offboarding" && m.offboardingDate && (
-                    <div className="mt-1 text-[11px] font-medium text-np-attention-ink">
+                    <div className="mt-1 text-[11px] font-medium text-np-badge-attention-fg">
                       Ngày nghỉ: {formatDate(m.offboardingDate)}
                       {m.pendingOrders > 0 && (
-                        <span className="ml-2 text-np-danger">⚠️ {m.pendingOrders} đơn chưa xong</span>
+                        <span className="ml-2 inline-flex items-center gap-1 text-np-danger">
+                          <AlertTriangle size={12} /> {m.pendingOrders} đơn chưa xong
+                        </span>
                       )}
                     </div>
                   )}
@@ -534,7 +546,6 @@ export default function AdminStaff() {
           )}
         </Card>
 
-        <div className="h-5" />
       </div>
 
       {/* Sheet detail */}
@@ -543,7 +554,7 @@ export default function AdminStaff() {
           className="flex w-full flex-col gap-0 bg-white p-0 sm:max-w-md"
           side="right"
         >
-          <SheetHeader className="flex-shrink-0 border-b border-np-surface-pressed px-6 pb-4 pr-12 pt-6">
+          <SheetHeader className="flex-shrink-0 np-divider px-6 pb-4 pr-12 pt-6">
             <SheetTitle className="text-[16px] font-bold text-np-ink">
               {editingId ? `Chi tiết: ${editingStaff?.name ?? ""}` : "Thêm nhân sự"}
             </SheetTitle>
@@ -713,34 +724,20 @@ export default function AdminStaff() {
 
                 {/* Section: Audit log */}
                 <SectionDivider label="Lịch sử thay đổi" />
-                <div className="max-h-[200px] overflow-y-auto rounded-np-card border border-np-border bg-white">
-                  {auditEntries.length === 0 ? (
-                    <div className="px-3 py-4 text-center text-[12px] text-np-text-muted">
-                      Chưa có lịch sử
-                    </div>
-                  ) : (
-                    auditEntries.map((entry, idx) => (
-                      <div
-                        key={entry.id}
-                        className={
-                          "px-3 py-2 text-[12px]" +
-                          (idx === auditEntries.length - 1 ? "" : " border-b border-np-surface-pressed")
-                        }
-                      >
-                        <div className="flex items-baseline justify-between">
-                          <span className="font-medium text-np-ink">
-                            {AUDIT_ACTION_LABEL[entry.action] ?? entry.action}
-                          </span>
-                          <span className="text-[10px] text-np-text-muted tabular-nums">
-                            {formatTimestamp(entry.timestamp)}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-np-text-sub">
-                          bởi {entry.actorName}
-                        </div>
-                      </div>
-                    ))
-                  )}
+                {/* Nhật ký dùng mẫu chung của app: gom theo ngày, giờ nằm trên
+                    từng dòng, tên người viết thẳng vào câu. */}
+                <div className="max-h-[200px] overflow-y-auto rounded-np-card border border-np-border">
+                  <ActivityLog
+                    entries={auditEntries.map((entry) => ({
+                      id: entry.id,
+                      at: entry.timestamp,
+                      actor: entry.actorName,
+                      // Nhãn trong AUDIT_ACTION_LABEL viết hoa chữ đầu vì đứng
+                      // riêng, ở đây nó nối sau tên người nên phải hạ xuống.
+                      action: thuongHoaDau(AUDIT_ACTION_LABEL[entry.action] ?? entry.action),
+                    }))}
+                    emptyText="Chưa có lịch sử"
+                  />
                 </div>
               </>
             )}
@@ -800,11 +797,12 @@ export default function AdminStaff() {
               Nhân viên sẽ chuyển sang trạng thái "Sắp nghỉ". Cần bàn giao các đơn chưa xong trước ngày nghỉ.
             </p>
             <Label className="text-[12px] font-semibold text-np-text-sub">Ngày nghỉ dự kiến</Label>
-            <Input
-              type="date"
-              value={offboardingDialog.date}
+            <DateTimeField
+              date={offboardingDialog.date}
+              onDateChange={(v) => setOffboardingDialog((p) => ({ ...p, date: v }))}
+              withTime={false}
               min={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setOffboardingDialog((p) => ({ ...p, date: e.target.value }))}
+              placeholder="Chọn ngày nghỉ"
             />
           </div>
           <DialogFooter>
@@ -898,7 +896,7 @@ function FormField({
 
 function SectionDivider({ label, icon: Icon }: { label: string; icon?: React.ElementType }) {
   return (
-    <div className="flex items-center gap-2 pt-2 text-[11px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+    <div className="flex items-center gap-2 pt-2 text-[11px] font-bold text-np-text-muted">
       {Icon && <Icon size={13} />}
       <span>{label}</span>
       <div className="flex-1 border-t border-np-surface-pressed" />
@@ -919,6 +917,11 @@ function StatusBadge({ status }: { status: UserStatus }) {
 function formatDate(yyyyMmDd: string): string {
   const [y, m, d] = yyyyMmDd.split("-");
   return `${d}/${m}/${y}`;
+}
+
+/** Hạ chữ cái đầu để nhãn hành động nối được sau tên người. */
+function thuongHoaDau(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
 function formatTimestamp(ms: number): string {

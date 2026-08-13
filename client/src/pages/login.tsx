@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "@/components/np/icon";
 import { NPButton, Screen } from "@/components/np";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useToast } from "@/hooks/use-toast";
@@ -336,7 +336,7 @@ function PhoneStep({ value, onChange, onSubmit, error, loading }: PhoneStepProps
             placeholder="0901 234 567"
             value={formatVNPhone(value)}
             onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 11))}
-            className="h-11 w-full rounded-np-button border border-np-border-strong bg-np-surface-sub px-3.5 text-[15px] tabular-nums text-np-ink placeholder:text-np-text-muted focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-np-brand-ink"
+            className="h-11 w-full rounded-np-button border-0 bg-np-surface-sub px-3.5 text-[15px] tabular-nums text-np-ink placeholder:text-np-text-muted focus:bg-np-surface-pressed focus:outline-none"
           />
         </div>
 

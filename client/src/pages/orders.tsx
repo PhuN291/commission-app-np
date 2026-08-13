@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getCurrentUserId } from "@/lib/queryClient";
-import { Calendar, Check, Plus, ShoppingBag, SlidersHorizontal } from "lucide-react";
+import { Check, Plus, ShoppingBag, SlidersHorizontal } from "@/components/np/icon";
 import {
   Card,
   Chips,
@@ -20,7 +20,6 @@ import {
   ORDER_FILTER_TABS,
   deriveOrderStatus,
   isLate15min,
-  isRescheduled,
   type OrderStatusCode,
 } from "@shared/status";
 import type { Order } from "@shared/schema";
@@ -39,33 +38,55 @@ function orderTimestamp(createdAt: string): number {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+const THU = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+
 /**
- * Ngày khách hẹn → "Hôm nay/Hôm qua/Ngày mai HH:mm"; ngày khác chuẩn hoá "DD/MM/YYYY HH:mm".
- * Nhận cả 'DD/MM/YYYY' lẫn 'YYYY-MM-DD' (dữ liệu đang lẫn 2 kiểu).
+ * Tiêu đề nhóm ngày theo lúc tạo đơn: "Hôm nay", "Hôm qua", tên thứ trong vòng 7
+ * ngày, xa hơn thì "DD/MM/YYYY".
+ *
+ * Dùng chữ cho mấy ngày gần vì đó là khoảng sale còn nhớ việc mình vừa làm, đọc
+ * "Hôm qua" nhanh hơn phải trừ nhẩm ngày trong đầu.
  */
-function appointmentLabel(dateStr: string | null, timeStr: string | null): string {
-  const time = timeStr ? ` ${timeStr}` : "";
-  if (!dateStr) return timeStr ?? "";
-  const s = dateStr.trim();
-  let dd = 0;
-  let mm = 0;
-  let yyyy = 0;
-  if (s.includes("/")) {
-    [dd, mm, yyyy] = s.split("/").map(Number);
-  } else if (s.includes("-")) {
-    [yyyy, mm, dd] = s.split("-").map(Number);
-  }
-  if (!dd || !mm || !yyyy) return `${dateStr}${time}`;
-  const day = new Date(yyyy, mm - 1, dd).getTime();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.round((day - today.getTime()) / 86_400_000);
-  if (diff === 0) return `Hôm nay${time}`;
-  if (diff === -1) return `Hôm qua${time}`;
-  if (diff === 1) return `Ngày mai${time}`;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(dd)}/${pad(mm)}/${yyyy}${time}`;
+function nhomNgayTao(createdAt: string): string {
+  const t = orderTimestamp(createdAt);
+  if (!t) return "Không rõ ngày";
+  const moc = new Date(t);
+  moc.setHours(0, 0, 0, 0);
+  const homNay = new Date();
+  homNay.setHours(0, 0, 0, 0);
+  const cach = Math.round((homNay.getTime() - moc.getTime()) / 86_400_000);
+  if (cach === 0) return "Hôm nay";
+  if (cach === 1) return "Hôm qua";
+  if (cach > 1 && cach < 7) return THU[moc.getDay()];
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(moc.getDate())}/${p(moc.getMonth() + 1)}/${moc.getFullYear()}`;
 }
+
+/** Giờ tạo đơn "HH:mm". Ngày đã nằm ở tiêu đề nhóm nên dòng đơn chỉ cần giờ. */
+function gioTao(createdAt: string): string {
+  const t = (createdAt ?? "").trim().split(" ")[1] ?? "";
+  return /^\d{1,2}:\d{2}/.test(t) ? t.slice(0, 5) : "";
+}
+
+/**
+ * Số dịch vụ của đơn. Bảng orders chỉ lưu một chuỗi tên nối bằng ", " (order_items
+ * vẫn gộp chung một dòng), nên đếm bằng cách tách đúng chuỗi màn hình đang in.
+ */
+function soDichVu(serviceName: string): number {
+  const n = (serviceName ?? "").split(",").filter((x) => x.trim()).length;
+  return n || 1;
+}
+
+/**
+ * Dấu chấm ngăn giữa tên khách, số dịch vụ và giờ.
+ *
+ * Dùng dấu chấm tròn "•" thay cho dấu chấm giữa "·" nhỏ xíu: ba mẩu thông tin nằm
+ * liền nhau trên một dòng, dấu ngăn mờ quá thì đọc thành một câu dính liền.
+ */
+function Cham() {
+  return <span className="mx-1.5 text-np-text-muted">•</span>;
+}
+
 
 const DATE_OPTIONS = [
   { value: "all", label: "Mọi lúc" },
@@ -158,6 +179,23 @@ export default function Orders() {
     });
   }, [orders, searchTerm, activeFilter, dateFilter, sortBy]);
 
+  /**
+   * Gom theo ngày tạo. Chỉ gom khi đang sắp theo thời gian: sắp theo giá trị thì
+   * ngày nhảy loạn, mỗi nhóm một dòng, dải tiêu đề thành nhiễu chứ không giúp gì.
+   */
+  const gomTheoNgay = sortBy === "newest" || sortBy === "oldest";
+  const nhomDon = useMemo(() => {
+    if (!gomTheoNgay) return [{ ngay: null as string | null, items: filtered }];
+    const ra: { ngay: string | null; items: typeof filtered }[] = [];
+    for (const o of filtered) {
+      const ngay = nhomNgayTao(o.createdAt);
+      const cuoi = ra[ra.length - 1];
+      if (cuoi && cuoi.ngay === ngay) cuoi.items.push(o);
+      else ra.push({ ngay, items: [o] });
+    }
+    return ra;
+  }, [filtered, gomTheoNgay]);
+
   const chipItems: ChipItem[] = useMemo(() => {
     const tabs: ChipItem[] = ORDER_FILTER_TABS.map((tab) => ({
       key: tab.value,
@@ -189,7 +227,6 @@ export default function Orders() {
     <Screen activeTab={active} onTab={onTab}>
       <PageHeader
         title="Đơn hàng"
-        subtitle={`${filtered.length} đơn`}
         action={
           <NPButton tone="primary" size="sm" icon={Plus} onClick={() => navigate("/orders/new")}>
             Tạo đơn
@@ -334,62 +371,67 @@ export default function Orders() {
             </div>
           </div>
         ) : (
-          filtered.map((o, i) => (
-            <button
-              type="button"
-              key={o.id}
-              onClick={() => navigate(`/orders/${o.id}`)}
-              className={
-                "flex w-full flex-col gap-1.5 px-4 py-3.5 text-left transition-colors active:bg-np-surface-pressed" +
-                (i === filtered.length - 1 ? "" : " border-b border-np-surface-pressed")
-              }
-            >
-              <div className="flex items-center justify-between gap-2">
-                {o.appointmentDate || o.appointmentTime ? (
-                  <span className="flex items-center gap-1 text-[12px] font-medium text-np-text-muted">
-                    <Calendar size={12} strokeWidth={2.25} />
-                    {appointmentLabel(o.appointmentDate, o.appointmentTime)}
-                  </span>
-                ) : (
-                  <span />
-                )}
-                <span className="text-[12px] font-semibold text-np-text-muted">{o.code}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-bold text-np-ink">
-                    {o.patientName}
-                    {isRescheduled(o.appointmentStatus) && (
-                      <span className="ml-1.5 text-[11px] font-medium text-np-text-muted">
-                        (đã dời lịch)
+          nhomDon.map((nhom, ni) => (
+            <div key={nhom.ngay ?? ni}>
+              {nhom.ngay && (
+                <div className="bg-np-surface-sub px-4 py-1.5 text-[12px] font-bold text-np-text-muted">
+                  {nhom.ngay}
+                </div>
+              )}
+              {nhom.items.map((o, i) => {
+                const cuoiBang =
+                  ni === nhomDon.length - 1 && i === nhom.items.length - 1;
+                const gio = gioTao(o.createdAt);
+                return (
+                  <button
+                    type="button"
+                    key={o.id}
+                    onClick={() => navigate(`/orders/${o.id}`)}
+                    className={
+                      "flex w-full flex-col px-4 py-3.5 text-left transition-colors active:bg-np-surface-pressed" +
+                      (cuoiBang ? "" : " np-divider")
+                    }
+                  >
+                    <div className="flex items-baseline justify-between gap-2.5">
+                      <span className="truncate text-[15px] font-bold text-np-ink">{o.code}</span>
+                      <span className="flex-shrink-0 text-[15px] font-extrabold text-np-ink tabular-nums">
+                        {fmtVND(o.totalPrice)}
                       </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 truncate text-[13px] font-medium text-np-text-sub">
-                    {o.serviceName}
-                  </div>
-                </div>
-                <div className="flex-shrink-0 text-right">
-                  <div className="text-[15px] font-extrabold text-np-ink tabular-nums">
-                    {fmtVND(o.totalPrice)}
-                  </div>
-                  <div className="mt-0.5 text-[12px] font-bold text-np-brand-ink">
-                    +{fmtVND(o.commission)}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-0.5">
-                <OrderStatusBadges
-                  appointmentStatus={o.appointmentStatus}
-                  visitStatus={o.visitStatus}
-                />
-              </div>
-            </button>
+                    </div>
+                    {/* Tên khách, số dịch vụ, giờ tạo dồn một dòng. Tên dịch vụ đầy đủ
+                        dài tới cả trăm ký tự nên trước đây luôn bị cắt cụt, đếm số
+                        vừa gọn vừa nói đúng đơn có mấy dịch vụ. */}
+                    <div className="mt-0.5 flex items-baseline justify-between gap-2.5">
+                      <span className="truncate text-[13px] font-medium text-np-text-sub">
+                        {o.patientName}
+                        <Cham />
+                        {soDichVu(o.serviceName)} dịch vụ
+                        {gio && (
+                          <>
+                            <Cham />
+                            {gio}
+                          </>
+                        )}
+                      </span>
+                      <span className="flex-shrink-0 text-[12px] font-bold text-np-brand-ink tabular-nums">
+                        +{fmtVND(o.commission)}
+                      </span>
+                    </div>
+                    <div className="mt-1.5">
+                      <OrderStatusBadges
+                        appointmentStatus={o.appointmentStatus}
+                        visitStatus={o.visitStatus}
+                        refundType={o.refundType}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           ))
         )}
       </Card>
 
-      <div className="h-5" />
     </Screen>
   );
 }

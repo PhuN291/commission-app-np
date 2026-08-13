@@ -9,11 +9,13 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Redirect, useLocation } from "wouter";
+import { useQuayLai } from "@/lib/use-back";
+import { Redirect } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/queryClient";
-import { History, Info } from "lucide-react";
+import { History, Info } from "@/components/np/icon";
 import {
+  ActivityLog,
   Card,
   DetailHeader,
   NPButton,
@@ -88,7 +90,7 @@ function formatDate(iso: string): string {
 
 export default function AdminCommissionConfig() {
   const { active: navActive, onTab: onNavTab } = useTabNav();
-  const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -212,9 +214,9 @@ export default function AdminCommissionConfig() {
 
   return (
     <Screen activeTab={navActive} onTab={onNavTab} noHeader>
-      <DetailHeader title="Tỷ lệ hoa hồng" onBack={() => navigate("/")} />
+      <DetailHeader title="Tỷ lệ hoa hồng" onBack={quayLai} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         {/* Banner info */}
         <div className="mx-4 mt-3 flex items-start gap-2 rounded-np-card border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] font-medium text-np-text-sub">
           <Info size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
@@ -318,51 +320,29 @@ export default function AdminCommissionConfig() {
           side="right"
           className="flex w-full flex-col gap-0 bg-white p-0 sm:max-w-md"
         >
-          <SheetHeader className="flex-shrink-0 border-b border-np-surface-pressed px-6 pb-4 pr-12 pt-6">
+          <SheetHeader className="flex-shrink-0 np-divider px-6 pb-4 pr-12 pt-6">
             <SheetTitle className="text-[16px] font-bold text-np-ink">
               Lịch sử thay đổi tỷ lệ
             </SheetTitle>
           </SheetHeader>
 
-          <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
-            {history.length === 0 ? (
-              <div className="px-3 py-8 text-center text-[13px] text-np-text-muted">
-                Chưa có thay đổi
-              </div>
-            ) : (
-              history.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="rounded-np-card border border-np-border bg-white p-3"
-                >
-                  <div className="flex items-baseline justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-bold text-np-ink">
-                        {ROLE_LABEL[entry.role as CommissionableRole] ?? entry.role}
-                        {entry.ranking ? ` · ${RANKING_LABEL[entry.ranking as Ranking]}` : ""}
-                      </span>
-                      <span className="text-[14px] font-extrabold text-np-brand-ink tabular-nums">
-                        {bpToPercent(entry.percentBp)}%
-                      </span>
-                    </div>
-                    {entry.effectiveTo === null && (
-                      <span className="rounded-np-badge bg-np-brand-soft px-1.5 py-0.5 text-[10px] font-bold text-np-brand-ink">
-                        Hiện tại
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-[11px] text-np-text-muted">
-                    Hiệu lực từ: {formatDate(entry.effectiveFrom)}
-                    {entry.effectiveTo && (
-                      <> · Hết hiệu lực: {formatDate(entry.effectiveTo)}</>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-np-text-muted">
-                    Bởi: {entry.createdByName}
-                  </div>
-                </div>
-              ))
-            )}
+          {/* Nhật ký dùng mẫu chung của app: gom theo ngày, giờ nằm trên từng
+              dòng, tên người viết thẳng vào câu. */}
+          <div className="flex-1 overflow-y-auto py-1">
+            <ActivityLog
+              entries={history.map((entry) => ({
+                id: entry.id,
+                at: entry.effectiveFrom,
+                actor: entry.createdByName,
+                action: `đặt hoa hồng ${ROLE_LABEL[entry.role as CommissionableRole] ?? entry.role}${
+                  entry.ranking ? ` bậc ${RANKING_LABEL[entry.ranking as Ranking]}` : ""
+                } thành ${bpToPercent(entry.percentBp)}%`,
+                detail: entry.effectiveTo
+                  ? `Hết hiệu lực ${formatDate(entry.effectiveTo)}`
+                  : "Đang áp dụng",
+              }))}
+              emptyText="Chưa có thay đổi"
+            />
           </div>
 
           <div className="z-10 flex flex-shrink-0 gap-2 border-t border-np-border bg-white px-6 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">

@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Medal, TrendingUp, Trophy } from "lucide-react";
+import { Clock, EditorChoice, Medal, TrendingUp, Verified, XCircle } from "@/components/np/icon";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
   Card,
@@ -122,12 +122,12 @@ function PersonalRankView() {
 
       {/* Hero card — current rank + tier position */}
       <Card className="px-4 py-5">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
+        <div className="text-[11px] font-semibold text-np-text-muted">
           Bậc hiện tại
         </div>
         <div className="mt-2 flex items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-np-brand-soft to-np-brand-soft/60 text-[24px]">
-            {rankingEmoji(user.ranking)}
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-np-brand-soft to-np-brand-soft/60">
+            <Medal size={26} color={rankingColor(user.ranking)} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[22px] font-extrabold tracking-[-0.4px] text-np-ink">
@@ -145,7 +145,7 @@ function PersonalRankView() {
           </div>
         </div>
         <div className="mt-4 border-t border-np-surface-pressed pt-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
+          <div className="text-[11px] font-semibold text-np-text-muted">
             Doanh số tháng
           </div>
           <div className="mt-1 text-[20px] font-extrabold text-np-ink tabular-nums">
@@ -157,7 +157,7 @@ function PersonalRankView() {
       {/* Progress section — chỉ hiện khi không ở đỉnh tier */}
       {isAtTopTier ? (
         <Card className="mt-4 flex items-center gap-3 px-4 py-4">
-          <Trophy size={28} className="flex-shrink-0 text-np-rank-vang" style={{ color: "var(--color-np-rank-vang, #D97706)" }} />
+          <EditorChoice size={28} className="flex-shrink-0 text-np-rank-vang" style={{ color: "var(--color-np-rank-vang, #D97706)" }} />
           <div>
             <div className="text-[14px] font-bold text-np-ink">Bậc cao nhất</div>
             <div className="mt-0.5 text-[12px] text-np-text-sub">
@@ -200,15 +200,15 @@ function PersonalRankView() {
               </div>
             )}
             {remaining === 0 && currentMonthProgress >= 100 && (
-              <div className="border-t border-np-surface-pressed pt-3 text-center text-[13px] font-bold text-np-success-ink">
-                ✓ Đã đạt mục tiêu tháng này
+              <div className="flex items-center justify-center gap-1.5 border-t border-np-surface-pressed pt-3 text-[13px] font-bold text-np-badge-success-fg">
+                <Verified size={15} />
+                Đã đạt mục tiêu tháng này
               </div>
             )}
           </Card>
         </>
       ) : null}
 
-      <div className="h-5" />
     </Screen>
   );
 }
@@ -236,7 +236,13 @@ function MonthRow({
         </span>
         <span className="flex items-center gap-1.5 font-medium tabular-nums text-np-text-sub">
           <span className={current ? "text-np-ink font-bold" : ""}>{fmtVND(revenue)}</span>
-          <span className="text-[14px]">{achieved ? "✅" : current ? "⏳" : "❌"}</span>
+          {achieved ? (
+            <Verified size={15} className="text-np-badge-success-fg" />
+          ) : current ? (
+            <Clock size={15} className="text-np-text-muted" />
+          ) : (
+            <XCircle size={15} className="text-np-text-muted" />
+          )}
         </span>
       </div>
       <NPProgress value={pct} />
@@ -244,24 +250,28 @@ function MonthRow({
   );
 }
 
-function rankingEmoji(ranking: Ranking | null): string {
+/**
+ * Màu huy hiệu theo bậc. Dùng MỘT hình dáng huy hiệu chung, phân biệt bằng màu của
+ * design token, thay cho mỗi bậc một emoji (emoji hiển thị khác nhau tuỳ máy và
+ * làm giao diện trông rẻ tiền).
+ */
+function rankingColor(ranking: Ranking | null): string {
   switch (ranking) {
     case "M0":
-      return "🌱";
+      return "var(--color-np-text-muted)";
     case "M1":
-      return "🥉";
+      return "var(--color-np-rank-dong)";
     case "M2":
-      return "🥈";
+      return "var(--color-np-rank-bac)";
     case "M3":
-      return "🥇";
-    case "L1":
-      return "⚕️";
     case "L2":
-      return "🩺";
+      return "var(--color-np-rank-vang)";
+    case "L1":
+      return "var(--color-np-rank-dong)";
     case "L3":
-      return "🏆";
+      return "var(--color-np-rank-kim)";
     default:
-      return "-";
+      return "var(--color-np-text-muted)";
   }
 }
 
@@ -288,10 +298,11 @@ function getRankTier(revenue: number) {
   return { name: "Đồng", color: "var(--color-np-rank-dong)", bg: "var(--color-np-rank-dong-bg)" };
 }
 
+// Huy hiệu hạng 1-2-3: cùng một hình, khác màu (vàng, bạc, đồng).
 const PODIUM_CONFIG = [
-  { medal: "🥇", ring: "#D97706", bg: "linear-gradient(135deg, #FBBF24 0%, #D97706 100%)" },
-  { medal: "🥈", ring: "#9CA3AF", bg: "linear-gradient(135deg, #D1D5DB 0%, #6B7280 100%)" },
-  { medal: "🥉", ring: "#B45309", bg: "linear-gradient(135deg, #D97706 0%, #92400E 100%)" },
+  { medalColor: "#D97706", ring: "#D97706", bg: "linear-gradient(135deg, #FBBF24 0%, #D97706 100%)" },
+  { medalColor: "#6B7280", ring: "#9CA3AF", bg: "linear-gradient(135deg, #D1D5DB 0%, #6B7280 100%)" },
+  { medalColor: "#92400E", ring: "#B45309", bg: "linear-gradient(135deg, #D97706 0%, #92400E 100%)" },
 ];
 
 function FullLeaderboardView() {
@@ -367,7 +378,9 @@ function FullLeaderboardView() {
                   >
                     {getInitials(person.name)}
                   </div>
-                  <div className="absolute -bottom-1 -right-1 text-[18px]">{cfg.medal}</div>
+                  <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                    <Medal size={15} color={cfg.medalColor} />
+                  </div>
                 </div>
                 <p className="mt-1 text-center text-[13px] font-bold text-np-ink">{person.name}</p>
                 <p className="text-[11px] text-np-text-muted">{person.role}</p>
@@ -395,7 +408,7 @@ function FullLeaderboardView() {
             <div
               key={p.id}
               className={`relative flex items-center gap-3 px-4 py-3.5 ${
-                i === sorted.length - 1 ? "" : "border-b border-np-surface-pressed"
+                i === sorted.length - 1 ? "" : "np-divider"
               } ${isCurrentUser ? "bg-np-brand-soft/40" : ""}`}
             >
               {isCurrentUser && (
@@ -452,7 +465,6 @@ function FullLeaderboardView() {
         </>
       )}
 
-      <div className="h-5" />
     </Screen>
   );
 }

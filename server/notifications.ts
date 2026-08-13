@@ -17,16 +17,12 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { currentCycleId } from "./income";
 
-export type NotificationTone = "hoahong" | "taikham" | "thuong" | "phat";
-
 export type Notification = {
   id: string;
   userId: number;
   type: NotificationType;
   /** Nhãn danh mục hiển thị ở badge (vd "Hoa hồng"). */
   tag: string;
-  /** Màu badge theo danh mục. */
-  tone: NotificationTone;
   title: string;
   body: string;
   /** Path để FE navigate khi tap. */
@@ -75,7 +71,6 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
           userId,
           type: "cr.rejected",
           tag: "Hoa hồng",
-          tone: "hoahong",
           title: "Bị từ chối",
           body,
           link: `/orders/${r.orderId}`,
@@ -88,7 +83,6 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
           userId,
           type: "cr.approved",
           tag: "Hoa hồng",
-          tone: "hoahong",
           title: "Được duyệt",
           body,
           link: `/income`,
@@ -108,7 +102,6 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
         userId,
         type: "cr.pending_approval",
         tag: "Hoa hồng",
-        tone: "hoahong",
         title: `${pending} khoản chờ duyệt`,
         body: `${pending} khoản hoa hồng từ các đơn đã hoàn thành đang chờ Kế toán duyệt`,
         link: `/admin/commission-approval`,
@@ -160,7 +153,6 @@ async function genFromRecalls(userId: number, role: UserRole): Promise<Notificat
       userId,
       type: "recall.due",
       tag: "Tái khám",
-      tone: "taikham",
       title,
       body: `${c.name} · ${c.phone}`,
       link: `/customers/${c.id}`,
@@ -187,7 +179,6 @@ async function genFromAdjustments(userId: number, role: UserRole): Promise<Notif
       userId,
       type: "adjustment.created",
       tag: isThuong ? "Thưởng" : "Phạt",
-      tone: isThuong ? "thuong" : "phat",
       title: isThuong ? `+${fmtVND(a.amount)}đ` : `-${fmtVND(a.amount)}đ`,
       body: a.reason,
       link: `/income`,

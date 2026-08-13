@@ -14,20 +14,22 @@
  * KHÔNG hiển thị %cap (per task spec).
  */
 
+import monogram from "@assets/np-monogram.png";
 import { useState } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
   AlertTriangle,
-  ArrowDownCircle,
+  ContentPasteSearch,
   ChevronRight,
   Gift,
   Info,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
   Badge,
   Card,
+  CR_TONE,
   NPButton,
   PageHeader,
   Screen,
@@ -248,7 +250,15 @@ export default function Income() {
           className="relative overflow-hidden rounded-np-card p-[22px] text-white"
           style={{ background: "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)" }}
         >
-          <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
+          {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
+              mép phải và mép trên nên chỉ thấy một phần, đủ nhận ra mà không giành chỗ
+              của con số. aria-hidden vì đây là hoa văn, không phải thông tin. */}
+          <img
+            src={monogram}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-2 top-2 h-[104px] w-auto select-none opacity-[0.24]"
+          />
           <div className="relative">
             <div className="mb-1.5 text-[11px] font-medium text-white/80">
               Thực nhận
@@ -279,7 +289,7 @@ export default function Income() {
 
       {/* Empty state */}
       {isEmpty && (
-        <Card className="mx-4 mt-5 px-5 py-12 text-center">
+        <Card className="mt-5 px-5 py-12 text-center">
           <Info size={36} className="mx-auto text-np-border-strong" />
           <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
             Chưa có hoa hồng {cycleLabel(cycle).toLowerCase()}
@@ -311,11 +321,11 @@ export default function Income() {
                   }}
                   className={
                     "cursor-pointer px-4 py-3.5 transition-colors hover:bg-np-surface-sub active:bg-np-surface-pressed" +
-                    (gi === data.crGroups.length - 1 ? "" : " border-b border-np-surface-pressed")
+                    (gi === data.crGroups.length - 1 ? "" : " np-divider")
                   }
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-sub">
+                    <span className="text-[11px] font-bold text-np-text-sub">
                       {g.orderCode}
                     </span>
                     <ChevronRight size={16} strokeWidth={2.25} className="flex-shrink-0 text-np-text-muted" />
@@ -396,7 +406,6 @@ export default function Income() {
         </>
       )}
 
-      <div className="h-5" />
 
       {/* Khiếu nại dialog (reuse pattern Task 13) */}
       <Dialog
@@ -462,14 +471,6 @@ export default function Income() {
 // ─────────────────────────────────────────────────────────────────
 
 function CRRow({ cr, onComplaint }: { cr: APICR; onComplaint: () => void }) {
-  const statusTone =
-    cr.status === "DUOC_DUYET"
-      ? "success"
-      : cr.status === "TU_CHOI"
-        ? "critical"
-        : cr.status === "KHIEU_NAI"
-          ? "attention"
-          : "neutral";
   const eligible = canKhieuNai({ status: cr.status, rejectedAt: cr.rejectedAt });
   const hoursLeft = hoursRemainingKhieuNai(cr.rejectedAt);
   const showKhieuNai = cr.status === "TU_CHOI";
@@ -478,7 +479,7 @@ function CRRow({ cr, onComplaint }: { cr: APICR; onComplaint: () => void }) {
     <div className="flex items-start justify-between gap-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={statusTone as any}>{CR_STATUS_LABEL[cr.status]}</Badge>
+          <Badge tone={CR_TONE[cr.status]}>{CR_STATUS_LABEL[cr.status]}</Badge>
         </div>
         {cr.status === "TU_CHOI" && cr.rejectedReason && (
           <div className="mt-1 text-[11px] text-np-text-sub">
@@ -513,17 +514,10 @@ function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
     <div
       className={
         "flex items-start gap-3 px-4 py-3.5" +
-        (last ? "" : " border-b border-np-surface-pressed")
+        (last ? "" : " np-divider")
       }
     >
-      <div
-        className={
-          "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-np-button " +
-          (isThuong ? "bg-np-brand-soft text-np-brand-ink" : "bg-np-danger-bg/40 text-np-danger")
-        }
-      >
-        <Icon size={16} strokeWidth={2.25} />
-      </div>
+      <Icon size={18} strokeWidth={2.25} className="mt-1 flex-shrink-0 text-np-text-muted" />
       <div className="min-w-0 flex-1">
         <span className="text-[13px] font-bold text-np-ink">
           {isThuong ? "Thưởng" : "Phạt"}
@@ -533,7 +527,7 @@ function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
       <div
         className={
           "flex-shrink-0 text-[14px] font-extrabold tabular-nums " +
-          (isThuong ? "text-np-success-ink" : "text-np-danger")
+          (isThuong ? "text-np-badge-success-fg" : "text-np-danger")
         }
       >
         {fmtSignedVND(adj.amount)}
@@ -547,12 +541,10 @@ function ClawbackRow({ clawback, last }: { clawback: Clawback; last?: boolean })
     <div
       className={
         "flex items-start gap-3 px-4 py-3.5" +
-        (last ? "" : " border-b border-np-surface-pressed")
+        (last ? "" : " np-divider")
       }
     >
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-np-button bg-np-danger-bg/40 text-np-danger">
-        <ArrowDownCircle size={16} strokeWidth={2.25} />
-      </div>
+      <ContentPasteSearch size={18} strokeWidth={2.25} className="mt-1 flex-shrink-0 text-np-text-muted" />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-bold text-np-ink">{clawback.sourceOrderCode}</div>
         <div className="mt-0.5 text-[12px] text-np-text-sub">{clawback.reason}</div>
