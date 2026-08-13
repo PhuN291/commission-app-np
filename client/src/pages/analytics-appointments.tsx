@@ -462,7 +462,11 @@ function ChangePill({ pct, invert }: { pct: number | null; invert?: boolean }) {
     <div
       className={cn(
         "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-        good ? "bg-np-brand-soft text-np-brand-ink" : "bg-np-danger-bg text-np-danger",
+        // Về token badge cho khớp bản song sinh ở màn Tổng quan. Cặp cũ đo được
+        // 4.26 và 3.80, cả hai đều dưới chuẩn 4.5 cho chữ 10px.
+        good
+          ? "bg-np-badge-success-bg text-np-badge-success-fg"
+          : "bg-np-badge-critical-bg text-np-badge-critical-fg",
       )}
     >
       {up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}

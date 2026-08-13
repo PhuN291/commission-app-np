@@ -47,11 +47,14 @@
   --color-np-danger-fg: #8E1F0B;
 
   /* Badge — 6 tông ngữ nghĩa dùng chung cho MỌI nhãn nhỏ trong app.
-     Nền nằm trong dải sáng 88 tới 93% nên không tông nào to tiếng hơn tông nào;
-     phân biệt bằng HƯỚNG MÀU chứ không bằng độ đậm. Tương phản chữ trên nền
-     thấp nhất 5.2, đều trên chuẩn 4.5 cho chữ nhỏ 11px.
-     Đổi màu badge thì sửa ở đây, đừng gõ hex vào component. */
-  --color-np-badge-neutral-bg: #F1F1F2;   /* nhãn thường, không mang trạng thái */
+     Năm tông có màu nằm trong dải sáng 89 tới 93% nên không tông nào to tiếng
+     hơn tông nào; phân biệt bằng HƯỚNG MÀU chứ không bằng độ đậm. Riêng neutral
+     phải đậm hơn (81%) vì nó cùng họ xám với nền trang, nhạt bằng các tông kia
+     thì chip tan biến. Tương phản chữ trên nền thấp nhất 5.2, đều trên chuẩn 4.5
+     cho chữ nhỏ 11px. Đổi màu badge thì sửa ở đây, đừng gõ hex vào component. */
+  /* Đậm hơn nền trang #F1F1F1 một bậc: để #F1F1F2 thì chip neutral đặt trên
+     nền trang tan biến hoàn toàn, tương phản 1.001. */
+  --color-np-badge-neutral-bg: #E8E9EB;   /* nhãn thường, không mang trạng thái */
   --color-np-badge-neutral-fg: #44474A;
   --color-np-badge-info-bg: #EEF4FD;      /* đang chạy đúng tiến độ */
   --color-np-badge-info-fg: #1B5490;

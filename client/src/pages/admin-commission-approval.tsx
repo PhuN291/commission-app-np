@@ -32,6 +32,7 @@ import {
 import {
   Badge,
   Card,
+  CR_TONE,
   DetailHeader,
   NPButton,
   PageHeader,
@@ -924,14 +925,6 @@ function CRRow({
   onApprove: () => void;
   onReject: () => void;
 }) {
-  const tone =
-    cr.status === "DUOC_DUYET"
-      ? "success"
-      : cr.status === "TU_CHOI"
-        ? "critical"
-        : cr.status === "KHIEU_NAI"
-          ? "attention"
-          : "neutral";
   const isPending = cr.status === "CHO_DUYET";
   return (
     <div className="rounded-np-button border border-np-border bg-white p-3">
@@ -941,7 +934,7 @@ function CRRow({
             <span className="text-[13px] font-bold text-np-ink">
               {ROLE_LABEL[cr.role as UserRole]}
             </span>
-            <Badge tone={tone as any}>{CR_STATUS_LABEL[cr.status]}</Badge>
+            <Badge tone={CR_TONE[cr.status]}>{CR_STATUS_LABEL[cr.status]}</Badge>
           </div>
           <div className="mt-0.5 text-[11px] text-np-text-muted">{cr.beneficiaryName}</div>
           {cr.rejectedReason && cr.status === "TU_CHOI" && (
@@ -1180,7 +1173,7 @@ function AdjustmentRow({
       <div
         className={
           "flex-shrink-0 text-[14px] font-extrabold tabular-nums " +
-          (isThuong ? "text-np-badge-success-fg" : "text-np-danger")
+          (isThuong ? "text-np-badge-success-fg" : "text-np-badge-critical-fg")
         }
       >
         {fmtSignedVND(adj.amount)}

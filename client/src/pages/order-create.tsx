@@ -737,7 +737,7 @@ export default function OrderCreate() {
                     >
                       <div className="flex items-center justify-between">
                         <span className="inline-flex items-center gap-1 rounded-np-badge bg-np-badge-neutral-bg px-2 py-[3px] text-[11px] font-semibold tabular-nums text-np-badge-neutral-fg">
-                          <Ticket size={11} strokeWidth={2.5} className="text-white/70" />
+                          <Ticket size={11} strokeWidth={2.5} />
                           {voucherBadge(v)}
                         </span>
                         {selected ? (

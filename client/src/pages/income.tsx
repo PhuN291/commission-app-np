@@ -527,7 +527,7 @@ function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
       <div
         className={
           "flex-shrink-0 text-[14px] font-extrabold tabular-nums " +
-          (isThuong ? "text-np-badge-success-fg" : "text-np-danger")
+          (isThuong ? "text-np-badge-success-fg" : "text-np-badge-critical-fg")
         }
       >
         {fmtSignedVND(adj.amount)}
