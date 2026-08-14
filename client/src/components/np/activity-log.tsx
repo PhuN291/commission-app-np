@@ -155,18 +155,26 @@ function DanhSach({ entries }: { entries: ActivityEntry[] }) {
  * hết về đây, chỗ gọi khỏi phải tự chuyển đổi rồi lệch định dạng giữa các màn.
  */
 function docThoiDiem(at: string | number | Date): Date | null {
+  // Chặn cửa: nơi gọi ghép sai tên trường là ra undefined, mà component dùng
+  // chung thì một chỗ ghép sai làm sập cả trang chứ không chỉ hỏng một dòng.
+  if (at == null) return null;
   if (at instanceof Date) return Number.isNaN(at.getTime()) ? null : at;
   if (typeof at === "number") {
     const d = new Date(at);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  const thu = new Date(at);
-  if (!Number.isNaN(thu.getTime())) return thu;
-  // Chuỗi kiểu "13/02/2026 09:00" mà Date không tự đọc được.
+  // Chuỗi gạch chéo phải thử TRƯỚC new Date(). Mọi chuỗi kiểu này trong app đều
+  // là ngày trước tháng sau, còn new Date() đọc theo kiểu Mỹ tháng trước ngày sau
+  // nên "05/08/2026" ra ngày 8 tháng 5, sai mà vẫn hợp lệ nên không ai phát hiện.
+  // Chỉ ngày lớn hơn 12 mới khiến new Date() chịu thua rồi mới rơi xuống đây.
+  // Regex neo đầu chuỗi nên chuỗi ISO không thể khớp nhầm.
   const m = at.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
-  if (!m) return null;
-  const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] ?? 0), +(m[5] ?? 0));
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (m) {
+    const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] ?? 0), +(m[5] ?? 0));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const thu = new Date(at);
+  return Number.isNaN(thu.getTime()) ? null : thu;
 }
 
 function fmtGio(at: string | number | Date): string {

@@ -36,6 +36,7 @@ import {
   type BadgeTone,
 } from "@/components/np";
 import { cn } from "@/lib/utils";
+import { eventView, type ActivityEvent } from "@/lib/activity-text";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import type { Customer, Order } from "@shared/schema";
@@ -43,12 +44,6 @@ import {
   RECALL_OUTCOME_LABEL,
   type RecallOutcome,
 } from "@shared/types";
-import {
-  APPOINTMENT_STATUSES,
-  VISIT_STATUSES,
-  type AppointmentStatusCode,
-  type VisitStatusCode,
-} from "@shared/status";
 
 // 1 lượt tái khám (order_item) của khách — shape khớp GET /api/customers/:id .recallItems.
 type RecallItem = {
@@ -73,46 +68,6 @@ type RecallLogEntry = {
 
 function fmtVND(n: number) {
   return new Intl.NumberFormat("vi-VN").format(n) + "₫";
-}
-
-// Nhật ký hành động khách hàng (ADR-003).
-type CustomerEvent = {
-  id: number;
-  type: string;
-  actorUserId: number | null;
-  actorName: string | null;
-  orderId: number | null;
-  meta: {
-    code?: string;
-    serviceName?: string;
-    tier?: string;
-    fromStatus?: string;
-    toStatus?: string;
-    outcome?: string;
-    appointmentDate?: string;
-    appointmentTime?: string;
-    /** Các chỗ phụ trách vừa đổi, khoá là tên cột trong bảng orders. */
-    assignees?: Record<string, number | null>;
-  } | null;
-  createdAt: string;
-};
-
-/**
- * Chữ trạng thái đọc thẳng từ nguồn dùng chung. Trước đây file tự khai một bảng
- * riêng nên cùng một đơn, dòng nhật ký ghi "Hoàn tất" còn nhãn ngay dưới ghi
- * "Hoàn thành". Hai tầng dùng chung mã `arrived` và `cancelled` với nghĩa khác
- * nhau, nên phải xem `tier` mới tra đúng bảng.
- */
-function statusLabel(code: string | undefined, tier: string | undefined): string {
-  if (!code) return "";
-  if (tier === "visit") return VISIT_STATUSES[code as VisitStatusCode]?.label ?? code;
-  if (tier === "appointment")
-    return APPOINTMENT_STATUSES[code as AppointmentStatusCode]?.label ?? code;
-  return (
-    APPOINTMENT_STATUSES[code as AppointmentStatusCode]?.label ??
-    VISIT_STATUSES[code as VisitStatusCode]?.label ??
-    code
-  );
 }
 
 // Kết quả gọi tái khám — 3 lựa chọn (giống màn "Tái khám cần gọi" /recalls).
@@ -155,105 +110,6 @@ function timeLabel(days: number | null): { text: string; tone: BadgeTone } {
   return { text: `Sắp tới ${-days} ngày`, tone: "info" };
 }
 
-/**
- * Tên cột phụ trách trong bảng orders → chữ người dùng đọc.
- *
- * Phải khớp với hằng PHU_TRACH ở màn chi tiết đơn: cùng một chỗ mà hai màn gọi
- * hai tên thì người đọc nhật ký không biết mình vừa sửa cái gì.
- */
-const PHU_TRACH_LABEL: Record<string, string> = {
-  indicatedByUserId: "Chỉ định",
-  performedByUserId: "Thực hiện",
-  saleUserId: "Tư vấn",
-};
-
-/**
- * Một dòng nhật ký viết như một câu: "Phú Nguyễn gọi điện". Nên `action` luôn bắt
- * đầu bằng động từ thường, phần tên người đứng trước do nơi hiển thị ghép vào.
- */
-function eventView(
-  e: CustomerEvent,
-  orderCode?: string,
-): { action: string; detail: string | null } {
-  const m = e.meta ?? {};
-  const code = orderCode ?? m.code;
-  switch (e.type) {
-    case "call":
-      return { action: "gọi điện", detail: null };
-    case "sms":
-      return { action: "nhắn tin", detail: null };
-    case "email":
-      return { action: "gửi email", detail: null };
-    case "note_updated":
-      return { action: "cập nhật ghi chú", detail: null };
-    case "note_cleared":
-      return { action: "xóa ghi chú", detail: null };
-    case "order_created":
-      return {
-        action: code ? `tạo đơn ${code}` : "tạo đơn",
-        detail: m.serviceName ?? null,
-      };
-    case "order_updated": {
-      // Cùng một loại sự kiện dùng cho ba việc: sửa lịch hẹn, đổi người phụ trách
-      // và đổi dịch vụ. Phân biệt bằng meta để câu nhật ký nói đúng việc vừa làm;
-      // thiếu nhánh nào là việc đó bị kể thành việc khác.
-      const lich = m.appointmentDate
-        ? `${m.appointmentDate}${m.appointmentTime ? ` ${m.appointmentTime}` : ""}`
-        : null;
-      if (lich) {
-        return { action: code ? `sửa lịch hẹn ${code}` : "sửa lịch hẹn", detail: lich };
-      }
-      if (m.assignees) {
-        const cho = Object.keys(m.assignees)
-          .map((k) => PHU_TRACH_LABEL[k])
-          .filter(Boolean);
-        return {
-          action: code ? `đổi người phụ trách đơn ${code}` : "đổi người phụ trách",
-          detail: cho.length > 0 ? cho.join(", ") : null,
-        };
-      }
-      return {
-        action: code ? `đổi dịch vụ đơn ${code}` : "đổi dịch vụ",
-        detail: m.serviceName ?? null,
-      };
-    }
-    case "status_change": {
-      const from = statusLabel(m.fromStatus, m.tier);
-      const to = statusLabel(m.toStatus, m.tier);
-      const what = m.tier === "visit" ? "ca khám" : "lịch hẹn";
-      return {
-        action: code ? `cập nhật ${what} ${code}` : `cập nhật ${what}`,
-        detail: from && to ? `${from} → ${to}` : null,
-      };
-    }
-    case "recall_call":
-      return {
-        action: "gọi nhắc lịch",
-        detail: m.outcome ? (RECALL_OUTCOME_LABEL[m.outcome as RecallOutcome] ?? null) : null,
-      };
-    case "order_refund":
-      return {
-        action: code ? `hoàn tiền đơn ${code}` : "hoàn tiền đơn",
-        detail: m.serviceName ?? null,
-      };
-    case "order_completed":
-      return {
-        action: code ? `hoàn tất đơn ${code}` : "hoàn tất đơn",
-        detail: m.serviceName ?? null,
-      };
-    case "order_cancelled":
-      return {
-        action: code ? `hủy đơn ${code}` : "hủy đơn",
-        detail: m.serviceName ?? null,
-      };
-    case "appointment_reminded":
-      return { action: "nhắc lịch hẹn", detail: null };
-    default:
-      // Loại sự kiện chưa có nhãn: nói chung chung, không để lộ mã tiếng Anh.
-      return { action: "có hoạt động", detail: null };
-  }
-}
-
 /** Số dòng nhật ký hiện sẵn. Phần còn lại nằm sau nút "Xem thêm". */
 const EVENT_PREVIEW = 5;
 
@@ -280,7 +136,7 @@ export default function CustomerDetail() {
     stats: { orderCount: number; totalSpent: number; statsMonths: number; customerSince: string };
     recallItems: RecallItem[];
     recallLogs: RecallLogEntry[];
-    events: CustomerEvent[];
+    events: ActivityEvent[];
   }>({
     queryKey: [`/api/customers/${customerId}`, getCurrentUserId()],
     enabled: customerId > 0,
@@ -628,7 +484,7 @@ export default function CustomerDetail() {
             const orderCode = e.orderId
               ? customerData.orders.find((o) => o.id === e.orderId)?.code
               : undefined;
-            const v = eventView(e, orderCode);
+            const v = eventView(e, { orderCode });
             return {
               id: e.id,
               at: e.createdAt,

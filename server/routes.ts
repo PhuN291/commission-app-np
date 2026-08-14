@@ -988,8 +988,20 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Không có quyền với đơn này" });
       }
       const raw = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+      const cu = order.notes ?? "";
       const updated = await storage.updateOrderNotes(id, raw ? raw : null);
       if (!updated) return res.status(404).json({ message: "Order not found" });
+      // Chỉ ghi nhật ký khi chữ THẬT SỰ đổi: mở hộp ghi chú rồi bấm lưu mà không
+      // sửa gì là chuyện thường ngày, ghi hết thì nhật ký đầy dòng rác.
+      if (raw !== cu) {
+        await logCustomerEvent({
+          phone: order.phone,
+          type: raw ? "note_updated" : "note_cleared",
+          actorUserId: req.currentUser?.id ?? null,
+          orderId: id,
+          meta: { code: order.code },
+        });
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Failed to update notes" });
@@ -1098,15 +1110,21 @@ export async function registerRoutes(
       if (!ngay || !gio) {
         return res.status(400).json({ message: "Thiếu ngày hoặc giờ hẹn" });
       }
+      const doiThat = ngay !== order.appointmentDate || gio !== order.appointmentTime;
       const updated = await storage.updateOrderAppointment(order.id, ngay, gio);
       if (!updated) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
-      await logCustomerEvent({
-        phone: order.phone,
-        type: "order_updated",
-        actorUserId: req.currentUser?.id ?? null,
-        orderId: order.id,
-        meta: { code: order.code, appointmentDate: ngay, appointmentTime: gio },
-      });
+      // Chỉ ghi nhật ký khi ngày giờ THẬT SỰ đổi, giống cách làm với ghi chú đơn:
+      // mở hộp sửa lịch rồi bấm lưu mà không đổi gì là chuyện thường, ghi hết thì
+      // nhật ký đầy dòng lặp lại y một mốc thời gian.
+      if (doiThat) {
+        await logCustomerEvent({
+          phone: order.phone,
+          type: "order_updated",
+          actorUserId: req.currentUser?.id ?? null,
+          orderId: order.id,
+          meta: { code: order.code, appointmentDate: ngay, appointmentTime: gio },
+        });
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Không cập nhật được lịch hẹn" });
@@ -1217,6 +1235,21 @@ export async function registerRoutes(
       } catch (ingestErr) {
         console.error(`[reschedule] ingest lỗi cho đơn mới ${newOrder.id}:`, ingestErr);
       }
+      // Ghi cho ĐƠN CŨ nữa. Màn đơn đã có dòng này qua status_logs, cái thêm được
+      // là màn khách kể đủ trình tự: dời lịch đơn cũ rồi mới tới tạo đơn mới.
+      // Không sinh dòng trùng ở màn đơn vì nhật ký đơn bỏ hết type status_change.
+      await logCustomerEvent({
+        phone: order.phone,
+        type: "status_change",
+        actorUserId: req.currentUser?.id ?? order.userId,
+        orderId: id,
+        meta: {
+          tier: "appointment",
+          fromStatus: order.appointmentStatus,
+          toStatus: "rescheduled",
+          code: order.code,
+        },
+      });
       await logCustomerEvent({
         phone: newOrder.phone,
         type: "order_created",
@@ -1231,21 +1264,92 @@ export async function registerRoutes(
   });
 
   // Get status logs for an order
-  app.get("/api/orders/:id/status-logs", async (req, res) => {
+/**
+ * "DD/MM/YYYY HH:mm" của status_logs → chuỗi ISO, để so sánh được với createdAt
+ * của customer_events khi trộn hai nguồn.
+ *
+ * Đây là phép nghịch đảo của vnTimestamp trong storage.db.ts: nó ghi bằng giờ
+ * máy chủ nên đọc lại bằng giờ máy chủ là khớp. Chuỗi lạ thì trả về nguyên xi,
+ * để dòng đó xếp xuống cuối chứ không bị vứt mất.
+ */
+function isoTuGioVN(s: string): string {
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if (!m) return s;
+  const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] ?? 0), +(m[5] ?? 0));
+  return Number.isNaN(d.getTime()) ? s : d.toISOString();
+}
+
+  /**
+   * Nhật ký đầy đủ của một đơn, gộp từ HAI bảng.
+   *
+   * status_logs giữ các lần chuyển trạng thái (kèm ghi chú, kèm dòng dời lịch của
+   * đơn cũ, và là nơi duy nhất có dữ liệu của đơn tạo trước khi có customer_events).
+   * customer_events giữ những việc không đổi trạng thái: sửa lịch hẹn, đổi dịch vụ,
+   * đổi người phụ trách, sửa ghi chú.
+   *
+   * KHỬ TRÙNG: một lần đổi trạng thái ghi vào CẢ HAI bảng, nên sự kiện
+   * customer_events type "status_change" bị bỏ hẳn ở đây, dòng trạng thái chỉ lấy
+   * từ status_logs. Cố ý không ghép chéo để mượn tên người thao tác cho dòng trạng
+   * thái: ghép theo thời gian gần đúng là có ngày gán nhầm tên, mà gán nhầm còn tệ
+   * hơn để trống.
+   *
+   * Trả về MỚI NHẤT TRƯỚC vì giao diện cắt bớt bằng cách giữ N phần tử đầu; xếp
+   * tăng dần thì mục sẽ hé toàn dòng cũ và giấu mất việc vừa làm.
+   */
+  app.get("/api/orders/:id/history", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const order = await storage.getOrder(id);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      // Cùng quy tắc chủ đơn: NV chỉ xem log đơn của mình; quản lý xem hết.
+      if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      // Cùng quy tắc chủ đơn: NV chỉ xem nhật ký đơn của mình; quản lý xem hết.
       const user = req.currentUser!;
       const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
       if (!seesAll && order.userId !== user.id) {
         return res.status(403).json({ error: "forbidden", message: "Không có quyền xem đơn này" });
       }
-      const logs = await storage.getStatusLogs(id);
-      res.json(logs);
+
+      const [logs, events] = await Promise.all([
+        storage.getStatusLogs(id),
+        storage.getOrderEvents(id),
+      ]);
+
+      const tuStatusLog = logs.map((l) => ({
+        // Tiền tố nguồn vì id hai bảng đụng nhau mà giao diện dùng nó làm khóa.
+        id: `sl:${l.id}`,
+        createdAt: isoTuGioVN(l.timestamp),
+        type: "status_change" as const,
+        // status_logs không lưu người thao tác, để trống chứ không bịa "Hệ thống".
+        actorName: null as string | null,
+        meta: {
+          tier: l.tier,
+          fromStatus: l.fromStatus,
+          toStatus: l.toStatus,
+          note: l.note,
+        },
+      }));
+
+      const tuSuKien = await Promise.all(
+        events
+          .filter((e) => e.type !== "status_change")
+          .map(async (e) => {
+            const actor = e.actorUserId ? await storage.getUser(e.actorUserId) : null;
+            return {
+              id: `ev:${e.id}`,
+              createdAt: e.createdAt.toISOString(),
+              type: e.type,
+              actorName: actor?.name ?? null,
+              meta: (e.meta ?? {}) as Record<string, unknown>,
+            };
+          }),
+      );
+
+      const gop = [...tuStatusLog, ...tuSuKien].sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      );
+      res.json(gop);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch status logs" });
+      console.error("[orders] đọc nhật ký đơn lỗi:", error);
+      res.status(500).json({ message: "Không đọc được nhật ký đơn" });
     }
   });
 

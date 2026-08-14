@@ -1295,6 +1295,15 @@ export class DbStorage implements IStorage {
       .orderBy(desc(customerEvents.createdAt), desc(customerEvents.id));
   }
 
+  /** Nhật ký của riêng một đơn, cho mục Lịch sử đơn ở màn chi tiết. */
+  async getOrderEvents(orderId: number): Promise<CustomerEventRow[]> {
+    return db
+      .select()
+      .from(customerEvents)
+      .where(eq(customerEvents.orderId, orderId))
+      .orderBy(desc(customerEvents.createdAt), desc(customerEvents.id));
+  }
+
   // ───────────────────────── Vouchers ─────────────────────────
 
   async listVouchers(): Promise<VoucherRow[]> {

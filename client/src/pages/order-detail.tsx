@@ -84,6 +84,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { eventView, type ActivityEvent } from "@/lib/activity-text";
 import { useToast } from "@/hooks/use-toast";
 import {
   APPOINTMENT_BUTTONS,
@@ -94,7 +95,7 @@ import {
   type StatusButton,
   type VisitStatusCode,
 } from "@shared/status";
-import type { Customer, Order, Service, StatusLog } from "@shared/schema";
+import type { Customer, Order, Service } from "@shared/schema";
 import {
   CR_STATUS_LABEL,
   ROLE_LABEL,
@@ -276,8 +277,8 @@ export default function OrderDetail() {
   });
   const { data: allOrders = [] } = useQuery<Order[]>({ queryKey: ["/api/orders", uid] });
   const { data: allCustomers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers", uid] });
-  const { data: statusLogs = [] } = useQuery<StatusLog[]>({
-    queryKey: [`/api/orders/${orderId}/status-logs`, uid],
+  const { data: nhatKy = [] } = useQuery<ActivityEvent[]>({
+    queryKey: [`/api/orders/${orderId}/history`, uid],
     enabled: orderId > 0,
   });
   // Lấy nguyên danh sách nhân viên thay vì gọi lẻ từng người: mục Phụ trách có
@@ -287,7 +288,7 @@ export default function OrderDetail() {
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`, uid] });
     queryClient.invalidateQueries({ queryKey: ["/api/orders", uid] });
-    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/status-logs`, uid] });
+    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/history`, uid] });
   };
 
   // Người đã nghỉ vẫn còn trong danh sách để hiện đúng tên trên đơn cũ, nhưng
@@ -886,34 +887,26 @@ export default function OrderDetail() {
           )}
         </Card>
 
-        {/* Lịch sử trạng thái: dùng mẫu nhật ký chung của app, gom theo ngày,
-            giờ nằm trên từng dòng. */}
-        {statusLogs.length > 0 && (
+        {/* Lịch sử đơn: gộp chuyển trạng thái với các thay đổi khác (lịch hẹn,
+            dịch vụ, người phụ trách, ghi chú). Máy chủ đã trộn, khử trùng và xếp
+            mới nhất trước, ở đây chỉ dịch sang câu tiếng Việt. */}
+        {nhatKy.length > 0 && (
           <>
-            <SectionTitle icon={History}>Lịch sử trạng thái</SectionTitle>
+            <SectionTitle icon={History}>Lịch sử đơn</SectionTitle>
             <ActivityLog
-              entries={statusLogs.map((log) => {
-                const isAppt = log.tier === "appointment";
-                const fromInfo = isAppt
-                  ? APPOINTMENT_STATUSES[log.fromStatus as AppointmentStatusCode]
-                  : VISIT_STATUSES[log.fromStatus as VisitStatusCode];
-                const toInfo = isAppt
-                  ? APPOINTMENT_STATUSES[log.toStatus as AppointmentStatusCode]
-                  : VISIT_STATUSES[log.toStatus as VisitStatusCode];
-                const chuyen =
-                  fromInfo && toInfo ? `${fromInfo.label} → ${toInfo.label}` : toInfo?.label;
+              entries={nhatKy.map((e) => {
+                const v = eventView(e, { trongDon: true });
                 return {
-                  id: log.id,
-                  at: log.timestamp,
-                  // Bảng status_logs không lưu người thao tác nên câu mở đầu bằng
-                  // chính hành động, không bịa ra "Hệ thống".
-                  action: isAppt ? "Cập nhật lịch hẹn" : "Cập nhật ca khám",
-                  detail: [chuyen, log.note].filter(Boolean).join(". "),
+                  id: e.id,
+                  at: e.createdAt,
+                  actor: e.actorName,
+                  action: v.action,
+                  detail: v.detail,
                 };
               })}
               preview={LOG_PREVIEW}
-              unitLabel="thay đổi"
-              moreTitle="Lịch sử trạng thái"
+              unitLabel="hoạt động"
+              moreTitle="Lịch sử đơn"
             />
           </>
         )}
