@@ -67,6 +67,21 @@
   --color-np-badge-muted-bg: #F7F7F8;     /* đã đóng lại, cố ý chìm nhất */
   --color-np-badge-muted-fg: #64696E;
 
+  /* Đăng nhập và OTP — bộ nhận diện Nguyên Phương (handoff 1PDM).
+     Cố ý TÁCH khỏi bảng màu teal của phần thân app: hai màn này là cửa vào,
+     mang màu thương hiệu phòng khám chứ không mang màu công cụ nội bộ.
+     Chỉ dùng trong client/src/pages/login.tsx. */
+  --color-np-login-blue: #0D509F;   /* tiêu đề, viền ô đã nhập, đầu gradient */
+  --color-np-login-green: #1CAB89;  /* cuối gradient, link gửi lại, viền khi gõ */
+  --color-np-login-ink: #103A5E;    /* chữ thân */
+  --color-np-login-sub: #8A97A3;    /* chữ phụ, caret ô OTP */
+  --color-np-login-hint: #C0CEDA;   /* chữ mờ trong ô nhập */
+  --color-np-login-border: #D3DEE8;
+  --color-np-login-cell: #F2F5F8;   /* nền ô OTP còn trống */
+
+  /* Hai màn đăng nhập dùng Arial theo handoff, phần còn lại của app dùng Inter. */
+  --font-login: Arial, Helvetica, sans-serif;
+
   /* Header */
   --color-np-header: #1A1C1D;
   --color-np-header-hover: #303030;
@@ -302,6 +317,23 @@
 .np-divider {
   position: relative;
 }
+/* Caret nhấp nháy trong ô OTP: 1.1s step-end đúng theo bản thiết kế. */
+@keyframes np-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.np-caret {
+  animation: np-caret-blink 1.1s step-end infinite;
+}
+
+/* Gradient nhận diện: dải đầu trang và nút chính của màn đăng nhập. */
+.np-login-header {
+  background: linear-gradient(130deg, #0D509F 0%, #14639E 44%, #1CAB89 100%);
+}
+.np-login-cta {
+  background: linear-gradient(90deg, #0D509F, #1CAB89);
+}
+
 .np-divider::after {
   content: "";
   position: absolute;
