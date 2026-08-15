@@ -27,6 +27,14 @@ export type Notification = {
   body: string;
   /** Path để FE navigate khi tap. */
   link: string;
+  /**
+   * Khoản hoa hồng gắn với thông báo, chỉ có ở loại cr.rejected.
+   *
+   * Để nhân viên khiếu nại ngay tại thẻ thông báo. Đây là nơi họ BIẾT tin đầu
+   * tiên; trước đây phải tự mò sang chi tiết đơn rồi tìm đúng dòng mới bấm được.
+   * `rejectedAt` đi kèm để client tự tính còn hạn hay không, khỏi thêm lượt gọi.
+   */
+  cr?: { id: string; orderId: number; rejectedAt: number | null; daKhieuNai: boolean };
   /** ms epoch — null = chưa đọc. */
   readAt: number | null;
   /** ms epoch — sort desc. */
@@ -66,6 +74,7 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
       const order = orderById.get(r.orderId);
       const body = `${order?.code ?? ""} · ${order?.serviceName ?? ""} · ${fmtVND(r.amount)}đ`;
       if (r.status === "TU_CHOI") {
+        const daCo = await storage.getCommissionComplaints(r.id);
         list.push({
           id: `n-cr-rej-${r.id}`,
           userId,
@@ -74,6 +83,12 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
           title: "Bị từ chối",
           body,
           link: `/orders/${r.orderId}`,
+          cr: {
+            id: String(r.id),
+            orderId: r.orderId,
+            rejectedAt: r.rejectedAt ? r.rejectedAt.getTime() : null,
+            daKhieuNai: daCo.length > 0,
+          },
           readAt: null,
           createdAt: r.rejectedAt ? r.rejectedAt.getTime() : Date.now() - DAY_MS,
         });

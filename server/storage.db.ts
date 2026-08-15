@@ -1119,6 +1119,18 @@ export class DbStorage implements IStorage {
       if (!canKhieuNai({ status: cr.status, rejectedAt: rejectedAtMs })) {
         return { ok: false, error: "window_expired" };
       }
+      // Mỗi khoản chỉ khiếu nại MỘT lần, đúng như câu đang hứa với người dùng.
+      // Trước đây chỉ dựa vào việc trạng thái chuyển sang KHIEU_NAI để chặn trùng,
+      // nhưng kế toán chọn giữ nguyên quyết định thì bản ghi về lại TU_CHOI mà
+      // rejectedAt không đổi, nên còn trong 72 giờ là khiếu nại tiếp được.
+      const daCo = (
+        await tx
+          .select({ id: commissionComplaints.id })
+          .from(commissionComplaints)
+          .where(eq(commissionComplaints.crId, crId))
+          .limit(1)
+      )[0];
+      if (daCo) return { ok: false, error: "invalid_state" };
       await tx.update(commissionRecords).set({ status: "KHIEU_NAI" }).where(eq(commissionRecords.id, crId));
       const inserted = (await tx.insert(commissionComplaints).values({ crId, userId, content }).returning())[0];
       return { ok: true, entry: mapComplaintRowToView(inserted) };

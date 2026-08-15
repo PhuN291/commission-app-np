@@ -21,6 +21,7 @@ import {
   Info,
   Medal,
   TrendingDown,
+  ChevronRight,
   TrendingUp,
   Users,
 } from "@/components/np/icon";
@@ -218,6 +219,7 @@ function PersonalView({
           amount={hero.commission}
           showInfoPopover
           trendPct={hero.commissionTrendPct}
+          onXemChiTiet={() => navigate("/income")}
         />
       </div>
 
@@ -442,6 +444,7 @@ function HeroCard({
   showInfoPopover = false,
   variant = "personal",
   trendPct = null,
+  onXemChiTiet,
 }: {
   label: string;
   amount: number;
@@ -449,6 +452,8 @@ function HeroCard({
   showInfoPopover?: boolean;
   variant?: "personal" | "admin";
   trendPct?: number | null;
+  /** Mở nơi liệt kê từng khoản. Con số ở đây là tổng nên không thao tác được gì. */
+  onXemChiTiet?: () => void;
 }) {
   return (
     <div
@@ -525,6 +530,18 @@ function HeroCard({
       </div>
       {subtitle && (
         <div className="mt-2.5 text-[12px] font-medium text-white/75">{subtitle}</div>
+      )}
+      {/* Con số này là TỔNG của nhiều khoản nên không khiếu nại hay thao tác gì
+          tại chỗ được. Dẫn sang nơi liệt kê từng khoản, ở đó mới có nút. */}
+      {onXemChiTiet && (
+        <button
+          type="button"
+          onClick={onXemChiTiet}
+          className="relative mt-3 inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-bold text-white transition-colors active:bg-white/25"
+        >
+          Xem từng khoản
+          <ChevronRight size={14} strokeWidth={2.5} />
+        </button>
       )}
     </div>
   );

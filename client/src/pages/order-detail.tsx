@@ -37,7 +37,9 @@ import {
   ActivityLog,
   Avatar,
   Card,
-  CR_TONE,
+  CommissionRow,
+  ComplaintSheet,
+  loiKhieuNai,
   Chev,
   ContactActions,
   DateTimeField,
@@ -97,11 +99,8 @@ import {
 } from "@shared/status";
 import type { Customer, Order, Service } from "@shared/schema";
 import {
-  CR_STATUS_LABEL,
   ROLE_LABEL,
   SKIPPED_REASON_LABEL,
-  canKhieuNai,
-  hoursRemainingKhieuNai,
   type CRStatus,
   type OrderItemStatus,
   type SkippedReason,
@@ -139,6 +138,8 @@ type APICommissionRecord = {
   createdAt: number;
   rejectedAt: number | null;
   rejectedReason: string | null;
+  /** Khiếu nại đã gửi cho khoản này, null nếu chưa gửi. */
+  complaint: { id: string; content: string; createdAt: number } | null;
 };
 
 type OrderWithDetails = Order & {
@@ -542,16 +543,8 @@ export default function OrderDetail() {
       invalidateAll();
       setComplaintDialog({ open: false, cr: null, content: "" });
     },
-    onError: (err: any) => {
-      const msg =
-        err?.error === "ownership"
-          ? "Chỉ có thể khiếu nại hoa hồng của mình"
-          : err?.error === "window_expired"
-            ? "Đã quá hạn khiếu nại (3 ngày)"
-            : err?.error === "invalid_state"
-              ? "Hoa hồng không thể khiếu nại"
-              : "Không thể gửi khiếu nại";
-      toast({ title: "Lỗi", description: msg, variant: "destructive" });
+    onError: (err: unknown) => {
+      toast({ title: "Lỗi", description: loiKhieuNai(err), variant: "destructive" });
     },
   });
 
@@ -813,13 +806,24 @@ export default function OrderDetail() {
             <SectionTitle icon={Receipt}>Bảng kê hoa hồng</SectionTitle>
             <Card className="overflow-hidden p-0">
               {order.crs.map((cr, i) => (
-                <CRRow
+                <CommissionRow
                   key={cr.id}
-                  cr={cr}
+                  cr={{ ...cr, daKhieuNai: !!cr.complaint }}
                   currentUserId={currentUserId}
-                  canReject={canRejectCR}
-                  onReject={() => setRejectDialog({ open: true, cr, reason: "" })}
+                  showRole
+                  complaint={cr.complaint}
                   onComplaint={() => setComplaintDialog({ open: true, cr, content: "" })}
+                  actions={
+                    canRejectCR && cr.status === "CHO_DUYET" ? (
+                      <NPButton
+                        tone="dark"
+                        size="sm"
+                        onClick={() => setRejectDialog({ open: true, cr, reason: "" })}
+                      >
+                        Từ chối hoa hồng
+                      </NPButton>
+                    ) : undefined
+                  }
                   last={i === order.crs.length - 1}
                 />
               ))}
@@ -1294,56 +1298,21 @@ export default function OrderDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Khiếu nại dialog (NV/BS owner only, 3-day window) */}
-      <Dialog
+      <ComplaintSheet
         open={complaintDialog.open}
         onOpenChange={(open) => setComplaintDialog((p) => ({ ...p, open }))}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Khiếu nại hoa hồng</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {complaintDialog.cr && complaintDialog.cr.rejectedReason && (
-              <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3 text-[12px] text-np-text-sub">
-                <div className="font-bold text-np-text-sub">Lý do từ chối:</div>
-                <div className="mt-0.5 text-np-ink">{complaintDialog.cr.rejectedReason}</div>
-              </div>
-            )}
-            <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">
-                Nội dung khiếu nại
-              </label>
-              <Textarea
-                placeholder="Trình bày lý do khiếu nại để kế toán xem lại..."
-                value={complaintDialog.content}
-                onChange={(e) => setComplaintDialog((p) => ({ ...p, content: e.target.value }))}
-              />
-            </div>
-            <p className="text-[11px] leading-relaxed text-np-text-muted">
-              Khiếu nại trong vòng 3 ngày sau khi hoa hồng bị từ chối. Kế toán sẽ xem lại trong 1-2 ngày.
-            </p>
-          </div>
-          <DialogFooter>
-            <NPButton tone="ghost" onClick={() => setComplaintDialog({ open: false, cr: null, content: "" })}>
-              Hủy
-            </NPButton>
-            <NPButton
-              tone="primary"
-              disabled={!complaintDialog.content || complaintDialog.content.length < 2 || complaintMutation.isPending}
-              onClick={() =>
-                complaintDialog.cr &&
-                complaintMutation.mutate({
-                  crId: complaintDialog.cr.id,
-                  content: complaintDialog.content,
-                })
-              }
-            >
-              {complaintMutation.isPending ? "Đang gửi..." : "Gửi khiếu nại"}
-            </NPButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        cr={complaintDialog.cr}
+        content={complaintDialog.content}
+        onContentChange={(v) => setComplaintDialog((p) => ({ ...p, content: v }))}
+        saving={complaintMutation.isPending}
+        onSubmit={() =>
+          complaintDialog.cr &&
+          complaintMutation.mutate({
+            crId: complaintDialog.cr.id,
+            content: complaintDialog.content,
+          })
+        }
+      />
     </Screen>
   );
 }
@@ -1389,74 +1358,6 @@ function ItemRow({
   );
 }
 
-function CRRow({
-  cr,
-  currentUserId,
-  canReject,
-  onReject,
-  onComplaint,
-  last,
-}: {
-  cr: APICommissionRecord;
-  currentUserId: number;
-  canReject: boolean;
-  onReject: () => void;
-  onComplaint: () => void;
-  last?: boolean;
-}) {
-  const isOwner = cr.userId === currentUserId;
-  const showKhieuNai = isOwner && cr.status === "TU_CHOI";
-  const eligible = canKhieuNai({ status: cr.status, rejectedAt: cr.rejectedAt });
-  const hoursLeft = hoursRemainingKhieuNai(cr.rejectedAt);
-  const showReject = canReject && cr.status === "CHO_DUYET";
-
-
-  return (
-    <div
-      className={
-        "px-4 py-3.5" + (last ? "" : " np-divider")
-      }
-    >
-      <div className="flex items-start justify-between gap-2.5">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[14px] font-bold text-np-ink">
-              {ROLE_LABEL[cr.role as UserRole]}
-            </span>
-            <NPBadge tone={CR_TONE[cr.status]}>{CR_STATUS_LABEL[cr.status]}</NPBadge>
-          </div>
-          {cr.status === "TU_CHOI" && cr.rejectedReason && (
-            <div className="mt-1 text-[11px] text-np-text-sub">
-              Lý do: {cr.rejectedReason}
-            </div>
-          )}
-        </div>
-        <div className="flex-shrink-0 text-[14px] font-extrabold text-np-brand-ink tabular-nums">
-          {fmtVND(cr.amount)}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="mt-2 flex flex-wrap gap-2">
-        {showReject && (
-          <NPButton tone="dark" size="sm" onClick={onReject}>
-            Từ chối hoa hồng
-          </NPButton>
-        )}
-        {showKhieuNai &&
-          (eligible ? (
-            <NPButton tone="primary" size="sm" onClick={onComplaint}>
-              Khiếu nại hoa hồng (Còn {hoursLeft}h)
-            </NPButton>
-          ) : (
-            <NPButton tone="ghost" size="sm" disabled>
-              Quá hạn khiếu nại (3 ngày)
-            </NPButton>
-          ))}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Một dòng phụ trách: nhãn vai bên trái, người được gán bên phải.

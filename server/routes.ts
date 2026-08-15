@@ -727,7 +727,17 @@ export async function registerRoutes(
         );
 
         // CR visibility (R-9-1): NV chỉ thấy hoa hồng của mình, quản lý thấy hết.
-        const crs = seesAll ? allCrs : allCrs.filter((cr) => cr.userId === user.id);
+        const crsLoc = seesAll ? allCrs : allCrs.filter((cr) => cr.userId === user.id);
+
+        // Gắn khiếu nại đã gửi vào từng khoản. Hai việc cần tới nó: ẩn nút khiếu
+        // nại của khoản đã gửi rồi (mỗi khoản chỉ một lần), và cho người gửi đọc
+        // lại nội dung mình đã viết, thứ trước đây gửi xong là mất hút.
+        const crs = await Promise.all(
+          crsLoc.map(async (cr) => {
+            const ds = await storage.getCommissionComplaints(Number(cr.id));
+            return { ...cr, complaint: ds[0] ?? null };
+          }),
+        );
 
         res.json({ ...order, items, crs });
       } catch (error) {

@@ -6,10 +6,20 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Bell, Loader2 } from "@/components/np/icon";
-import { Badge, PageHeader, Screen, SectionTitle, useTabNav } from "@/components/np";
+import {
+  Badge,
+  ComplaintSheet,
+  NPButton,
+  PageHeader,
+  Screen,
+  SectionTitle,
+  loiKhieuNai,
+  useTabNav,
+} from "@/components/np";
+import { useToast } from "@/hooks/use-toast";
 import { authFetch, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import type { NotificationType } from "@shared/types";
+import { canKhieuNai, hoursRemainingKhieuNai, type NotificationType } from "@shared/types";
 
 type Notification = {
   id: string;
@@ -19,6 +29,8 @@ type Notification = {
   title: string;
   body: string;
   link: string;
+  /** Chỉ có ở thông báo hoa hồng bị từ chối, để khiếu nại ngay tại thẻ. */
+  cr?: { id: string; orderId: number; rejectedAt: number | null; daKhieuNai: boolean } | null;
   readAt: number | null;
   createdAt: number;
 };
@@ -46,6 +58,35 @@ export default function Notifications() {
   const [, navigate] = useLocation();
   const [data, setData] = useState<ApiResponse>({ notifications: [], unread: 0 });
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const [hopKhieuNai, setHopKhieuNai] = useState<{
+    open: boolean;
+    n: Notification | null;
+    content: string;
+  }>({ open: false, n: null, content: "" });
+  const [dangGui, setDangGui] = useState(false);
+
+  async function guiKhieuNai() {
+    const cr = hopKhieuNai.n?.cr;
+    if (!cr || dangGui) return;
+    setDangGui(true);
+    try {
+      const res = await authFetch(`/api/orders/${cr.orderId}/cr/${cr.id}/complaint`, {
+        method: "POST",
+        body: JSON.stringify({ content: hopKhieuNai.content }),
+      });
+      if (!res.ok) throw await res.json().catch(() => ({}));
+      toast({ title: "Đã gửi khiếu nại", description: "Kế toán sẽ xem lại trong 1 tới 2 ngày." });
+      setHopKhieuNai({ open: false, n: null, content: "" });
+      // Nạp lại để nút biến mất khỏi thẻ vừa gửi.
+      const d = await (await authFetch("/api/notifications/me")).json();
+      setData(d);
+    } catch (err) {
+      toast({ title: "Lỗi", description: loiKhieuNai(err), variant: "destructive" });
+    } finally {
+      setDangGui(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +167,12 @@ export default function Notifications() {
               <SectionTitle>Chưa đọc</SectionTitle>
               <div className="flex flex-col gap-2">
                 {unreadList.map((n) => (
-                  <NotifCard key={n.id} n={n} onClick={() => handleRead(n)} />
+                  <NotifCard
+                    key={n.id}
+                    n={n}
+                    onClick={() => handleRead(n)}
+                    onComplaint={() => setHopKhieuNai({ open: true, n, content: "" })}
+                  />
                 ))}
               </div>
             </>
@@ -136,46 +182,96 @@ export default function Notifications() {
               <SectionTitle>Trước đó</SectionTitle>
               <div className="flex flex-col gap-2">
                 {readList.map((n) => (
-                  <NotifCard key={n.id} n={n} onClick={() => handleRead(n)} />
+                  <NotifCard
+                    key={n.id}
+                    n={n}
+                    onClick={() => handleRead(n)}
+                    onComplaint={() => setHopKhieuNai({ open: true, n, content: "" })}
+                  />
                 ))}
               </div>
             </>
           )}
         </div>
       )}
+
+      <ComplaintSheet
+        open={hopKhieuNai.open}
+        onOpenChange={(open) => setHopKhieuNai((p) => ({ ...p, open }))}
+        cr={null}
+        content={hopKhieuNai.content}
+        onContentChange={(v) => setHopKhieuNai((p) => ({ ...p, content: v }))}
+        saving={dangGui}
+        onSubmit={guiKhieuNai}
+      />
     </Screen>
   );
 }
 
-function NotifCard({ n, onClick }: { n: Notification; onClick: () => void }) {
+function NotifCard({
+  n,
+  onClick,
+  onComplaint,
+}: {
+  n: Notification;
+  onClick: () => void;
+  onComplaint: () => void;
+}) {
   const unread = n.readAt === null;
+  // Nút khiếu nại chỉ hiện khi khoản đó thật sự còn khiếu nại được: đúng luật
+  // dùng chung ở shared/types, không đoán theo tiêu đề thông báo.
+  const choKhieuNai =
+    !!n.cr &&
+    !n.cr.daKhieuNai &&
+    canKhieuNai({ status: "TU_CHOI", rejectedAt: n.cr.rejectedAt });
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "flex w-full items-start gap-2.5 border-y p-3.5 text-left transition-transform active:scale-[0.99]",
+        "border-y",
         unread ? "border-transparent bg-np-brand-soft/30" : "border-np-surface-pressed bg-white",
       )}
     >
-      <div className="w-2 flex-shrink-0 pt-[6px]">
-        {unread && <span aria-label="Chưa đọc" className="block h-2 w-2 rounded-full bg-np-brand-ink" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              "min-w-0 flex-1 truncate text-[14px] leading-tight text-np-ink",
-              unread ? "font-bold" : "font-semibold",
-            )}
-          >
-            {n.title}
-          </div>
-          <Badge className="flex-shrink-0">{n.tag}</Badge>
+      {/* Nút khiếu nại phải là anh em với nút mở thông báo, không lồng trong nó:
+          nút trong nút là thẻ không hợp lệ và trình duyệt bỏ luôn nút bên trong. */}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-start gap-2.5 p-3.5 text-left transition-transform active:scale-[0.99]"
+      >
+        <div className="w-2 flex-shrink-0 pt-[6px]">
+          {unread && (
+            <span aria-label="Chưa đọc" className="block h-2 w-2 rounded-full bg-np-brand-ink" />
+          )}
         </div>
-        <div className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-np-text-sub">{n.body}</div>
-        <div className="mt-1 text-[11px] text-np-text-muted tabular-nums">{timeAgo(n.createdAt)}</div>
-      </div>
-    </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                "min-w-0 flex-1 truncate text-[14px] leading-tight text-np-ink",
+                unread ? "font-bold" : "font-semibold",
+              )}
+            >
+              {n.title}
+            </div>
+            <Badge className="flex-shrink-0">{n.tag}</Badge>
+          </div>
+          <div className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-np-text-sub">
+            {n.body}
+          </div>
+          <div className="mt-1 text-[11px] tabular-nums text-np-text-muted">
+            {timeAgo(n.createdAt)}
+          </div>
+        </div>
+      </button>
+
+      {choKhieuNai && n.cr && (
+        <div className="px-3.5 pb-3.5 pl-[26px]">
+          <NPButton tone="primary" size="sm" onClick={onComplaint}>
+            Khiếu nại hoa hồng (còn {hoursRemainingKhieuNai(n.cr.rejectedAt)}h)
+          </NPButton>
+        </div>
+      )}
+    </div>
   );
 }

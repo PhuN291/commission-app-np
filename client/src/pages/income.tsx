@@ -27,9 +27,10 @@ import {
   Info,
 } from "@/components/np/icon";
 import {
-  Badge,
   Card,
-  CR_TONE,
+  CommissionRow,
+  ComplaintSheet,
+  loiKhieuNai,
   NPButton,
   PageHeader,
   Screen,
@@ -37,25 +38,14 @@ import {
   useTabNav,
 } from "@/components/np";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
-  CR_STATUS_LABEL,
-  canKhieuNai,
-  hoursRemainingKhieuNai,
   type CRStatus,
   type UserRole,
 } from "@shared/types";
@@ -191,15 +181,7 @@ export default function Income() {
       setComplaintDialog({ open: false, cr: null, content: "" });
     },
     onError: (err: any) => {
-      const msg =
-        err?.error === "ownership"
-          ? "Chỉ có thể khiếu nại hoa hồng của mình"
-          : err?.error === "window_expired"
-            ? "Đã quá hạn khiếu nại (3 ngày)"
-            : err?.error === "invalid_state"
-              ? "Hoa hồng không thể khiếu nại"
-              : "Không thể gửi khiếu nại";
-      toast({ title: "Lỗi", description: msg, variant: "destructive" });
+      toast({ title: "Lỗi", description: loiKhieuNai(err), variant: "destructive" });
     },
   });
 
@@ -342,12 +324,13 @@ export default function Income() {
                   </div>
                   <div className="mt-2 space-y-2">
                     {g.crs.map((cr) => (
-                      <CRRow
+                      <CommissionRow
                         key={cr.id}
                         cr={cr}
-                        onComplaint={() =>
-                          setComplaintDialog({ open: true, cr, content: "" })
-                        }
+                        currentUserId={Number(getCurrentUserId())}
+                        onComplaint={() => setComplaintDialog({ open: true, cr, content: "" })}
+                        className="px-0 py-0"
+                        last
                       />
                     ))}
                   </div>
@@ -407,61 +390,22 @@ export default function Income() {
       )}
 
 
-      {/* Khiếu nại dialog (reuse pattern Task 13) */}
-      <Dialog
+      <ComplaintSheet
         open={complaintDialog.open}
         onOpenChange={(open) => setComplaintDialog((p) => ({ ...p, open }))}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Khiếu nại hoa hồng</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {complaintDialog.cr && complaintDialog.cr.rejectedReason && (
-              <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3 text-[12px]">
-                <div className="font-bold text-np-text-sub">Lý do từ chối:</div>
-                <div className="mt-0.5 text-np-ink">{complaintDialog.cr.rejectedReason}</div>
-              </div>
-            )}
-            <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">
-                Nội dung khiếu nại
-              </label>
-              <Textarea
-                placeholder="Lý do khiếu nại..."
-                value={complaintDialog.content}
-                onChange={(e) => setComplaintDialog((p) => ({ ...p, content: e.target.value }))}
-              />
-            </div>
-            <p className="text-[11px] leading-relaxed text-np-text-muted">
-              Khiếu nại trong vòng 3 ngày. Kế toán xem lại trong 1-2 ngày. Chỉ khiếu nại được 1 lần.
-            </p>
-          </div>
-          <DialogFooter>
-            <NPButton tone="ghost" onClick={() => setComplaintDialog({ open: false, cr: null, content: "" })}>
-              Hủy
-            </NPButton>
-            <NPButton
-              tone="primary"
-              disabled={
-                !complaintDialog.content ||
-                complaintDialog.content.length < 2 ||
-                complaintMut.isPending
-              }
-              onClick={() =>
-                complaintDialog.cr &&
-                complaintMut.mutate({
-                  orderId: complaintDialog.cr.orderId,
-                  crId: complaintDialog.cr.id,
-                  content: complaintDialog.content,
-                })
-              }
-            >
-              {complaintMut.isPending ? "Đang gửi..." : "Gửi khiếu nại"}
-            </NPButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        cr={complaintDialog.cr}
+        content={complaintDialog.content}
+        onContentChange={(v) => setComplaintDialog((p) => ({ ...p, content: v }))}
+        saving={complaintMut.isPending}
+        onSubmit={() =>
+          complaintDialog.cr &&
+          complaintMut.mutate({
+            orderId: complaintDialog.cr.orderId,
+            crId: complaintDialog.cr.id,
+            content: complaintDialog.content,
+          })
+        }
+      />
     </Screen>
   );
 }
@@ -469,43 +413,6 @@ export default function Income() {
 // ─────────────────────────────────────────────────────────────────
 // Subcomponents
 // ─────────────────────────────────────────────────────────────────
-
-function CRRow({ cr, onComplaint }: { cr: APICR; onComplaint: () => void }) {
-  const eligible = canKhieuNai({ status: cr.status, rejectedAt: cr.rejectedAt });
-  const hoursLeft = hoursRemainingKhieuNai(cr.rejectedAt);
-  const showKhieuNai = cr.status === "TU_CHOI";
-
-  return (
-    <div className="flex items-start justify-between gap-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={CR_TONE[cr.status]}>{CR_STATUS_LABEL[cr.status]}</Badge>
-        </div>
-        {cr.status === "TU_CHOI" && cr.rejectedReason && (
-          <div className="mt-1 text-[11px] text-np-text-sub">
-            Lý do: {cr.rejectedReason}
-          </div>
-        )}
-        {showKhieuNai && (
-          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-            {eligible ? (
-              <NPButton tone="primary" size="sm" onClick={onComplaint}>
-                Khiếu nại (còn {hoursLeft}h)
-              </NPButton>
-            ) : (
-              <NPButton tone="ghost" size="sm" disabled>
-                Quá hạn khiếu nại (3 ngày)
-              </NPButton>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex-shrink-0 text-[14px] font-extrabold tabular-nums text-np-brand-ink">
-        {fmtVND(cr.amount)}
-      </div>
-    </div>
-  );
-}
 
 function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
   const isThuong = adj.type === "thuong";
