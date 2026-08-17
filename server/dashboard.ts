@@ -262,7 +262,7 @@ export async function getAdminDashboard(userId: number): Promise<AdminDashboard 
     view: "admin",
     user: stripPassword(user),
     hero: {
-      label: "Tổng hoa hồng chi PK tháng",
+      label: "Tổng hoa hồng chi",
       clinicCommission,
       clinicRevenue,
     },

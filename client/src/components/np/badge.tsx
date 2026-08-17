@@ -1,18 +1,36 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type BadgeTone = "neutral" | "success" | "attention" | "critical";
+/**
+ * Sáu tông ngữ nghĩa. Chọn theo Ý NGHĨA của nội dung, không chọn theo màu muốn nhìn:
+ *
+ * - neutral   nhãn thường, không mang trạng thái (chức danh, bậc, kỳ lương)
+ * - info      việc đang chạy đúng tiến độ (đã xác nhận, đã nhắc, đang khám)
+ * - attention cần người xử lý (chờ xác nhận, dời lịch, đến hạn hôm nay)
+ * - success   kết thúc tốt (hoàn thành, đã duyệt)
+ * - critical  kết thúc xấu hoặc mất tiền (không đến, hoàn tiền, trễ hạn)
+ * - muted     đã đóng lại, cố ý chìm nhất (đã hủy)
+ */
+export type BadgeTone = "neutral" | "info" | "attention" | "success" | "critical" | "muted";
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   tone?: BadgeTone;
   children: ReactNode;
 };
 
+/**
+ * Màu đọc từ token trong index.css, KHÔNG gõ hex ở đây.
+ *
+ * Trước đây bốn tông gõ thẳng hex vào file này nên bộ token màu trong index.css
+ * nói một đằng còn badge hiện một nẻo, sửa token không ảnh hưởng gì tới badge.
+ */
 const TONES: Record<BadgeTone, string> = {
-  neutral: "bg-[#E7E7E7] text-np-ink",
-  success: "bg-[#E5EFEB] text-[#0B6B56]",
-  attention: "bg-[#F4ECD9] text-[#8A6300]",
-  critical: "bg-[#F5DCD9] text-[#8F2A1E]",
+  neutral: "bg-np-badge-neutral-bg text-np-badge-neutral-fg",
+  info: "bg-np-badge-info-bg text-np-badge-info-fg",
+  attention: "bg-np-badge-attention-bg text-np-badge-attention-fg",
+  success: "bg-np-badge-success-bg text-np-badge-success-fg",
+  critical: "bg-np-badge-critical-bg text-np-badge-critical-fg",
+  muted: "bg-np-badge-muted-bg text-np-badge-muted-fg",
 };
 
 export function Badge({ tone = "neutral", className, children, ...props }: BadgeProps) {

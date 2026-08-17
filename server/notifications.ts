@@ -17,20 +17,24 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { currentCycleId } from "./income";
 
-export type NotificationTone = "hoahong" | "taikham" | "thuong" | "phat";
-
 export type Notification = {
   id: string;
   userId: number;
   type: NotificationType;
   /** Nhãn danh mục hiển thị ở badge (vd "Hoa hồng"). */
   tag: string;
-  /** Màu badge theo danh mục. */
-  tone: NotificationTone;
   title: string;
   body: string;
   /** Path để FE navigate khi tap. */
   link: string;
+  /**
+   * Khoản hoa hồng gắn với thông báo, chỉ có ở loại cr.rejected.
+   *
+   * Để nhân viên khiếu nại ngay tại thẻ thông báo. Đây là nơi họ BIẾT tin đầu
+   * tiên; trước đây phải tự mò sang chi tiết đơn rồi tìm đúng dòng mới bấm được.
+   * `rejectedAt` đi kèm để client tự tính còn hạn hay không, khỏi thêm lượt gọi.
+   */
+  cr?: { id: string; orderId: number; rejectedAt: number | null; daKhieuNai: boolean };
   /** ms epoch — null = chưa đọc. */
   readAt: number | null;
   /** ms epoch — sort desc. */
@@ -70,15 +74,21 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
       const order = orderById.get(r.orderId);
       const body = `${order?.code ?? ""} · ${order?.serviceName ?? ""} · ${fmtVND(r.amount)}đ`;
       if (r.status === "TU_CHOI") {
+        const daCo = await storage.getCommissionComplaints(r.id);
         list.push({
           id: `n-cr-rej-${r.id}`,
           userId,
           type: "cr.rejected",
           tag: "Hoa hồng",
-          tone: "hoahong",
           title: "Bị từ chối",
           body,
           link: `/orders/${r.orderId}`,
+          cr: {
+            id: String(r.id),
+            orderId: r.orderId,
+            rejectedAt: r.rejectedAt ? r.rejectedAt.getTime() : null,
+            daKhieuNai: daCo.length > 0,
+          },
           readAt: null,
           createdAt: r.rejectedAt ? r.rejectedAt.getTime() : Date.now() - DAY_MS,
         });
@@ -88,7 +98,6 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
           userId,
           type: "cr.approved",
           tag: "Hoa hồng",
-          tone: "hoahong",
           title: "Được duyệt",
           body,
           link: `/income`,
@@ -108,7 +117,6 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
         userId,
         type: "cr.pending_approval",
         tag: "Hoa hồng",
-        tone: "hoahong",
         title: `${pending} khoản chờ duyệt`,
         body: `${pending} khoản hoa hồng từ các đơn đã hoàn thành đang chờ Kế toán duyệt`,
         link: `/admin/commission-approval`,
@@ -160,7 +168,6 @@ async function genFromRecalls(userId: number, role: UserRole): Promise<Notificat
       userId,
       type: "recall.due",
       tag: "Tái khám",
-      tone: "taikham",
       title,
       body: `${c.name} · ${c.phone}`,
       link: `/customers/${c.id}`,
@@ -187,7 +194,6 @@ async function genFromAdjustments(userId: number, role: UserRole): Promise<Notif
       userId,
       type: "adjustment.created",
       tag: isThuong ? "Thưởng" : "Phạt",
-      tone: isThuong ? "thuong" : "phat",
       title: isThuong ? `+${fmtVND(a.amount)}đ` : `-${fmtVND(a.amount)}đ`,
       body: a.reason,
       link: `/income`,

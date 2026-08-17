@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useQuayLai } from "@/lib/use-back";
 import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/queryClient";
@@ -15,7 +16,7 @@ import {
   Info,
   Save,
   Sparkles,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
   Card,
   DetailHeader,
@@ -68,6 +69,7 @@ type PayCycleData = {
 export default function AdminSettings() {
   const { active: navActive, onTab: onNavTab } = useTabNav();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -105,25 +107,25 @@ export default function AdminSettings() {
 
   return (
     <Screen activeTab={navActive} onTab={onNavTab} noHeader>
-      <DetailHeader title="Cài đặt hệ thống" onBack={() => navigate("/")} />
+      <DetailHeader title="Cài đặt hệ thống" onBack={quayLai} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         {!canEdit && (
           <div className="mx-4 mt-3 flex items-start gap-2 rounded-np-card border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] font-medium text-np-text-sub">
             <Info size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
             <span>
-              Bạn đang ở chế độ xem. Chỉ CEO mới chỉnh sửa được.
+              Chế độ xem. Chỉ CEO chỉnh sửa được.
             </span>
           </div>
         )}
 
-        <SectionTitle>Cấu hình</SectionTitle>
+        <SectionTitle>Thiết lập</SectionTitle>
         <Card className="overflow-hidden p-0">
           <Accordion type="multiple" className="w-full">
             {/* 1 — Phần trăm hoa hồng (link) */}
             <LinkRow
               n={1}
-              title="Phần trăm hoa hồng"
+              title="Tỷ lệ hoa hồng"
               subtitle="Mức hoa hồng theo vai và hạng"
               onClick={() => navigate("/admin/commission-config")}
             />
@@ -142,7 +144,7 @@ export default function AdminSettings() {
             </SectionItem>
 
             {/* 4 — Kì lương (mục cuối) */}
-            <SectionItem value="s7" n={4} title="Kì lương" last>
+            <SectionItem value="s7" n={4} title="Kỳ lương" last>
               <PayCycleSection data={payCycle} canEdit={canEdit} />
             </SectionItem>
           </Accordion>
@@ -172,7 +174,7 @@ function SectionItem({
   return (
     <AccordionItem
       value={value}
-      className={last ? "border-b-0" : "border-b border-np-surface-pressed"}
+      className={last ? "border-b-0" : "np-divider"}
     >
       <AccordionTrigger className="px-4 py-3.5 hover:no-underline">
         <div className="flex items-center gap-3">
@@ -201,7 +203,7 @@ function LinkRow({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 border-b border-np-surface-pressed px-4 py-3.5 text-left transition-colors active:bg-np-surface-pressed"
+      className="flex w-full items-center gap-3 np-divider px-4 py-3.5 text-left transition-colors active:bg-np-surface-pressed"
     >
       <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-np-brand-soft text-[12px] font-bold text-np-brand-ink">
         {n}
@@ -281,7 +283,7 @@ function AutoRuleCard({ rule, canEdit }: { rule: AutoRuleData; canEdit: boolean 
     },
     onError: (err: any) => {
       toast({
-        title: "Không lưu được, thử lại",
+        title: "Không lưu được",
         description: err?.message || err?.error || "Vui lòng thử lại",
         variant: "destructive",
       });
@@ -405,7 +407,7 @@ function PayCycleSection({
     },
     onError: (err: any) => {
       toast({
-        title: "Không lưu được, thử lại",
+        title: "Không lưu được",
         description: err?.message || err?.error || "Vui lòng thử lại",
         variant: "destructive",
       });
@@ -426,7 +428,7 @@ function PayCycleSection({
         <div className="flex items-start gap-2">
           <Calendar size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
           <div className="flex-1">
-            <div className="text-[12px] font-semibold uppercase tracking-wide text-np-text-muted">
+            <div className="text-[12px] font-semibold text-np-text-muted">
               Chu kỳ trả lương
             </div>
             <div className="text-[14px] font-bold text-np-ink">

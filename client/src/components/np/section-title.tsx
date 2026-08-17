@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 
 type SectionTitleProps = {
@@ -15,13 +15,18 @@ export function SectionTitle({ children, action, className, style, icon: Icon }:
   return (
     <div
       className={cn(
-        "flex items-center justify-between px-5 pb-2 pt-[18px]",
+        // Tiêu đề nằm TRONG khối trắng, dính liền với Card ngay bên dưới.
+        // Khoảng cách với mục trước đẩy ra ngoài thành mt-2.5 để vẫn còn dải nền
+        // ngăn giữa các mục, thay vì gộp mọi thứ thành một mảng trắng liền.
+        "mt-2.5 flex items-center justify-between gap-3 bg-white px-4 pb-2.5 pt-4",
         className,
       )}
       style={style}
     >
-      <span className="inline-flex items-center gap-1.5 text-[13px] font-bold tracking-[-0.1px] text-np-ink">
-        {Icon && <Icon size={14} strokeWidth={2.25} className="text-np-text-muted" />}
+      {/* Cỡ chữ phải LỚN hơn nội dung bên dưới (Row là 15px), nếu không thì tiêu
+          đề chìm nghỉm và người đọc không thấy ranh giới giữa các mục. */}
+      <span className="inline-flex items-center gap-1.5 text-[16px] font-bold tracking-[-0.2px] text-np-ink">
+        {Icon && <Icon size={16} strokeWidth={2.25} className="text-np-text-muted" />}
         {children}
       </span>
       {action}

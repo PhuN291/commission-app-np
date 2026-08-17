@@ -1,5 +1,6 @@
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
+import { useTheoDoiDieuHuong } from "@/lib/use-back";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -36,6 +37,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function Router() {
+  // Đếm số trang đã qua để nút quay lại biết có lịch sử mà lùi hay không.
+  useTheoDoiDieuHuong();
   return (
     <Switch>
       <Route path="/login" component={Login}/>

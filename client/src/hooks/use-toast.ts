@@ -6,7 +6,12 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+/**
+ * Giữ toast trong danh sách thêm chừng này sau khi đóng, đủ để chạy hết hoạt ảnh
+ * biến mất. Bản shadcn gốc để 1.000.000ms (gần 17 phút) nên mỗi lần báo lại treo
+ * một hẹn giờ chạy suốt phiên làm việc.
+ */
+const TOAST_REMOVE_DELAY = 500
 
 type ToasterToast = ToastProps & {
   id: string

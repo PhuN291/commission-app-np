@@ -127,7 +127,13 @@ export const orders = pgTable("orders", {
   customerId: integer("customer_id"),
   source: text("source").notNull().default("manual"), // 'manual' | 'ihos' | 'website'
   idempotencyKey: text("idempotency_key").unique(),    // chống nhận trùng webhook (R-12-4)
-  saleUserId: integer("sale_user_id"),                 // NV phụ trách (vai Sale)
+  // ── Phụ trách đơn: 3 chỗ, sửa được qua PATCH /api/orders/:id/assignees.
+  // Cố ý TÁCH KHỎI bảng order_role_assignments (thứ quyết định ai ăn hoa hồng):
+  // đây là ghi nhận ai làm gì trên ca, đổi ở đây KHÔNG dịch chuyển hoa hồng đã
+  // chốt. Muốn nối hai thứ lại thì phải tính lại hoa hồng, việc đó chưa làm.
+  saleUserId: integer("sale_user_id"),                       // Tư vấn (vai Sale)
+  indicatedByUserId: integer("indicated_by_user_id"),        // Chỉ định
+  performedByUserId: integer("performed_by_user_id"),        // Thực hiện
   insuranceAmount: integer("insurance_amount").notNull().default(0),
   voucherAmount: integer("voucher_amount").notNull().default(0),
   voucherCode: text("voucher_code"), // mã voucher đã áp (null = không dùng)
@@ -158,7 +164,9 @@ export type StatusLog = typeof statusLogs.$inferSelect;
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  phone: text("phone").notNull(),
+  // Số điện thoại là mã nhận diện khách: đơn nối với khách qua cột này, trùng số
+  // là hai hồ sơ cùng ăn chung một tập đơn. Tên thì cho phép trùng.
+  phone: text("phone").notNull().unique(),
   email: text("email"),
   address: text("address"),
   location: text("location"),
@@ -169,6 +177,14 @@ export const customers = pgTable("customers", {
   nextRecallDueAt: timestamp("next_recall_due_at"),
   // Nhân viên chăm gốc (R-8-6). null = chưa gán. Set lần đầu khi tạo đơn (ingest).
   primaryAssignedUserId: integer("primary_assigned_user_id"),
+  // Khách VIP: gán tay, KHÔNG tự suy theo mức chi tiêu (đã chốt với anh Phú).
+  isVip: boolean("is_vip").notNull().default(false),
+  // Ghi chú bệnh nhân: dị ứng thuốc, tiền sử bệnh, lưu ý khi chăm sóc.
+  // Dữ liệu y tế do nhân viên tự nhập, KHÔNG đồng bộ HIS, nên lưu kèm người nhập
+  // và thời điểm để truy vết. timestamptz tránh lệch +7h.
+  medicalNote: text("medical_note"),
+  medicalNoteBy: integer("medical_note_by"),
+  medicalNoteAt: timestamp("medical_note_at", { withTimezone: true }),
 });
 
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true });

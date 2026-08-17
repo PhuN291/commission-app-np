@@ -1,16 +1,16 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
 import {
   BarChart3,
-  BriefcaseMedical,
   ChevronDown,
-  Home,
+  HomeHealth,
   LogOut,
+  MedicalServices,
   Package,
-  PhoneCall,
+  PermPhoneMsg,
   Settings,
-} from "lucide-react";
+} from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { queryClient } from "@/lib/queryClient";
@@ -30,10 +30,10 @@ type MenuNode =
   | { type: "group"; icon?: LucideIcon; label: string; children: MenuNode[]; roles?: UserRole[] };
 
 const MENU: MenuNode[] = [
-  { type: "link", icon: Home, label: "Trang chủ", href: "/" },
-  { type: "link", icon: BriefcaseMedical, label: "Dịch vụ", href: "/services" },
+  { type: "link", icon: HomeHealth, label: "Trang chủ", href: "/" },
+  { type: "link", icon: MedicalServices, label: "Dịch vụ", href: "/services" },
   { type: "link", icon: Package, label: "Đơn hàng", href: "/orders" },
-  { type: "link", icon: PhoneCall, label: "Tái khám cần gọi", href: "/recalls" },
+  { type: "link", icon: PermPhoneMsg, label: "Tái khám cần gọi", href: "/recalls" },
   {
     type: "group",
     icon: BarChart3,
@@ -144,7 +144,7 @@ export function MoreMenuSheet({ open, onOpenChange }: MoreMenuSheetProps) {
         </div>
 
         {/* Header */}
-        <div className="border-b border-np-surface-pressed px-5 pb-3 pt-3">
+        <div className="np-divider px-5 pb-3 pt-3">
           <SheetTitle className="text-[17px] font-bold tracking-[-0.1px] text-np-ink">
             Menu
           </SheetTitle>

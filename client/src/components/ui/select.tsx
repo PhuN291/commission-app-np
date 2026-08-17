@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
-import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Check, ChevronDown, ChevronUp } from "@/components/np/icon"
 
 import { cn } from "@/lib/utils"
 
@@ -20,7 +20,7 @@ const SelectTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       // NP design system: match Input/Textarea — bg gray, border-strong, rounded-np-button.
-      "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-np-button border border-np-border-strong bg-np-surface-sub px-3 py-2 text-[14px] text-np-ink ring-offset-background transition-colors data-[placeholder]:text-np-text-muted focus:bg-white focus:outline-none focus:ring-2 focus:ring-np-brand-ink disabled:cursor-not-allowed disabled:opacity-60 [&>span]:line-clamp-1",
+      "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-np-button border-0 bg-np-surface-sub px-3 py-2 text-[14px] text-np-ink ring-offset-background transition-colors data-[placeholder]:text-np-text-muted focus:bg-np-surface-pressed focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 [&>span]:line-clamp-1",
       className
     )}
     {...props}

@@ -1,14 +1,8 @@
-import { Redirect, useLocation } from "wouter";
+import { useQuayLai } from "@/lib/use-back";
+import { Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Calendar,
-  CheckCircle2,
-  Repeat,
-  XCircle,
-} from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
+import { ArrowDownRight, ArrowUpRight } from "@/components/np/icon";
 import {
   Bar,
   BarChart,
@@ -86,7 +80,7 @@ function monthLabel(thang: string) {
 
 export default function AnalyticsAppointments() {
   const { active, onTab } = useTabNav();
-  const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
 
   // Chặn vai: chỉ quản lý (ceo/tc/kt) xem; vai khác về trang chủ.
   const role = (typeof window !== "undefined"
@@ -110,7 +104,7 @@ export default function AnalyticsAppointments() {
   if (isLoading || !data) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Lịch hẹn" onBack={() => navigate("/")} trailing={<div />} />
+        <DetailHeader title="Lịch hẹn" onBack={quayLai} trailing={<div />} />
         <div className="flex flex-1 items-center justify-center py-20">
           {isLoading ? (
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
@@ -162,34 +156,31 @@ export default function AnalyticsAppointments() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title="Lịch hẹn" onBack={() => navigate("/")} trailing={<div />} />
+      <DetailHeader title="Lịch hẹn" onBack={quayLai} trailing={<div />} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         <PageHeader
           title="Lịch hẹn"
-          subtitle="Xu hướng và tỉ lệ hoàn thành"
+          subtitle="Xu hướng và tỷ lệ hoàn thành"
           action={<Badge tone="neutral">{cycleLabel(data.cycle)}</Badge>}
         />
 
         {/* KPI */}
-        <div className="grid grid-cols-2 gap-2.5 px-4">
+        <div className="np-divide bg-white">
           <KpiCard
             title="Tổng lịch hẹn"
             display={kpis.tongLichHen.value.toLocaleString("vi-VN")}
             changePct={kpis.tongLichHen.changePct}
-            icon={Calendar}
           />
           <KpiCard
             title="Tỷ lệ đến khám"
             display={`${kpis.tyLeDenKham.value}%`}
             changePct={kpis.tyLeDenKham.changePct}
-            icon={CheckCircle2}
           />
           <KpiCard
             title="Tỷ lệ không đến"
             display={`${kpis.tyLeKhongDen.value}%`}
             changePct={kpis.tyLeKhongDen.changePct}
-            icon={XCircle}
             invertChange
             warn={kpis.tyLeKhongDen.value > NO_SHOW_TARGET}
           />
@@ -197,7 +188,6 @@ export default function AnalyticsAppointments() {
             title="Tỷ lệ tái khám"
             display={`${kpis.tyLeTaiKham.value}%`}
             changePct={kpis.tyLeTaiKham.changePct}
-            icon={Repeat}
             note="Theo lượt đến hạn trong kỳ"
           />
         </div>
@@ -255,7 +245,7 @@ export default function AnalyticsAppointments() {
         <SectionTitle>Phân bố theo khung giờ</SectionTitle>
         <Card className="p-4">
           {hourData.length === 0 ? (
-            <Empty>Chưa có lịch hẹn có giờ hẹn trong kỳ</Empty>
+            <Empty>Chưa có lịch hẹn đặt giờ trong kỳ</Empty>
           ) : (
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -343,8 +333,8 @@ export default function AnalyticsAppointments() {
         <SectionTitle>Phân tích không đến</SectionTitle>
         <Card className="space-y-4 p-4">
           <div className="flex flex-col items-center">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-              Tỉ lệ hiện tại
+            <p className="mb-2 text-[10px] font-bold text-np-text-muted">
+              Tỷ lệ hiện tại
             </p>
             <div className="relative h-[100px] w-[200px]">
               <svg viewBox="0 0 200 110" className="h-full w-full">
@@ -373,7 +363,7 @@ export default function AnalyticsAppointments() {
           </div>
 
           <div className="border-t border-np-surface-pressed pt-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+            <p className="mb-2 text-[10px] font-bold text-np-text-muted">
               Xu hướng 6 tháng
             </p>
             <div className="h-[120px]">
@@ -433,14 +423,13 @@ export default function AnalyticsAppointments() {
                 </div>
               ))}
               <div className="flex items-center justify-between border-t border-np-surface-pressed pt-2">
-                <span className="text-[12px] font-bold text-np-text-sub">Tỉ lệ đặt lại</span>
+                <span className="text-[12px] font-bold text-np-text-sub">Tỷ lệ đặt lại</span>
                 <span className="text-[15px] font-bold text-np-brand-ink">{kpis.tyLeTaiKham.value}%</span>
               </div>
             </>
           )}
         </Card>
 
-        <div className="h-5" />
       </div>
     </Screen>
   );
@@ -463,7 +452,7 @@ function ChangePill({ pct, invert }: { pct: number | null; invert?: boolean }) {
   if (pct === null) {
     return (
       <span className="rounded-full bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold text-np-text-muted">
-        —
+        -
       </span>
     );
   }
@@ -473,7 +462,11 @@ function ChangePill({ pct, invert }: { pct: number | null; invert?: boolean }) {
     <div
       className={cn(
         "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-        good ? "bg-np-brand-soft text-np-brand-ink" : "bg-np-danger-bg text-np-danger",
+        // Về token badge cho khớp bản song sinh ở màn Tổng quan. Cặp cũ đo được
+        // 4.26 và 3.80, cả hai đều dưới chuẩn 4.5 cho chữ 10px.
+        good
+          ? "bg-np-badge-success-bg text-np-badge-success-fg"
+          : "bg-np-badge-critical-bg text-np-badge-critical-fg",
       )}
     >
       {up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
@@ -487,7 +480,6 @@ function KpiCard({
   title,
   display,
   changePct,
-  icon: Icon,
   note,
   invertChange,
   warn,
@@ -495,29 +487,20 @@ function KpiCard({
   title: string;
   display: string;
   changePct: number | null;
-  icon: LucideIcon;
   note?: string;
   invertChange?: boolean;
   warn?: boolean;
 }) {
   return (
-    <div className="rounded-np-card bg-white p-3.5">
-      <div className="mb-2 flex items-start justify-between">
-        <div
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg",
-            warn ? "bg-np-danger-bg" : "bg-np-brand-soft",
-          )}
-        >
-          <Icon size={18} strokeWidth={2} className={warn ? "text-np-danger" : "text-np-brand-ink"} />
-        </div>
-        <ChangePill pct={changePct} invert={invertChange} />
+    <div className="flex items-start justify-between gap-3 bg-white px-4 py-3.5">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold text-np-text-muted">{title}</p>
+        <p className={cn("mt-0.5 text-[22px] font-extrabold tracking-[-0.4px] tabular-nums", warn ? "text-np-danger" : "text-np-ink")}>
+          {display}
+        </p>
+        {note && <p className="mt-1 text-[11px] leading-tight text-np-text-muted">{note}</p>}
       </div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">{title}</p>
-      <p className={cn("mt-0.5 text-[20px] font-extrabold tabular-nums", warn ? "text-np-danger" : "text-np-ink")}>
-        {display}
-      </p>
-      {note && <p className="mt-1 text-[10px] leading-tight text-np-text-muted">{note}</p>}
+      <ChangePill pct={changePct} invert={invertChange} />
     </div>
   );
 }

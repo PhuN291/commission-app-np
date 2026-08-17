@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { useQuayLai } from "@/lib/use-back";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Plus, Ticket } from "lucide-react";
+import { CalendarDays, Plus, Ticket } from "@/components/np/icon";
 import {
   Badge,
   Card,
@@ -24,6 +25,11 @@ type VoucherStatus = "active" | "expired" | "used_up";
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
+const fmtDate = (s: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+};
+
 function getVoucherStatus(v: VoucherRow): VoucherStatus {
   if (v.usageLimit > 0 && v.usedCount >= v.usageLimit) return "used_up";
   if (v.endDate && new Date(v.endDate) < new Date()) return "expired";
@@ -32,13 +38,14 @@ function getVoucherStatus(v: VoucherRow): VoucherStatus {
 
 const STATUS_TONE: Record<VoucherStatus, { label: string; tone: BadgeTone }> = {
   active: { label: "Đang hoạt động", tone: "success" },
-  expired: { label: "Hết hạn", tone: "neutral" },
+  expired: { label: "Hết hạn", tone: "muted" }, // đã đóng, cho chìm xuống
   used_up: { label: "Hết lượt", tone: "critical" },
 };
 
 export default function AdminVouchers() {
   const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
@@ -91,12 +98,11 @@ export default function AdminVouchers() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title="Voucher" onBack={() => navigate("/")} />
+      <DetailHeader title="Voucher" onBack={quayLai} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         <PageHeader
           title="Quản lý Voucher"
-          subtitle={`${filtered.length} / ${vouchers.length} voucher`}
           action={
             <NPButton tone="primary" size="sm" icon={Plus} onClick={() => navigate("/admin/vouchers/new")}>
               Tạo mới
@@ -112,7 +118,7 @@ export default function AdminVouchers() {
             <div className="px-5 py-12 text-center">
               <Ticket size={36} className="mx-auto text-np-border-strong" />
               <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
-                Không tìm thấy voucher nào
+                Không tìm thấy voucher
               </div>
             </div>
           ) : (
@@ -126,7 +132,7 @@ export default function AdminVouchers() {
                   key={v.id}
                   className={
                     "px-4 py-3.5 transition-colors active:bg-np-surface-pressed" +
-                    (i === filtered.length - 1 ? "" : " border-b border-np-surface-pressed")
+                    (i === filtered.length - 1 ? "" : " np-divider")
                   }
                 >
                   <button
@@ -151,7 +157,7 @@ export default function AdminVouchers() {
                         {v.startDate && v.endDate && (
                           <span className="flex items-center gap-1">
                             <CalendarDays size={11} strokeWidth={2.25} />
-                            {v.startDate} → {v.endDate}
+                            {fmtDate(v.startDate)} → {fmtDate(v.endDate)}
                           </span>
                         )}
                         <span className="tabular-nums">
@@ -182,7 +188,6 @@ export default function AdminVouchers() {
           )}
         </Card>
 
-        <div className="h-5" />
       </div>
     </Screen>
   );

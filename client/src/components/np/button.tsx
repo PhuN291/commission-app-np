@@ -1,5 +1,5 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 
 export type ButtonTone = "primary" | "dark" | "ghost";
@@ -15,13 +15,18 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 const TONE_CLASSES: Record<ButtonTone, string> = {
   primary: "border-0 bg-np-brand text-white hover:bg-np-brand-hover",
   dark: "border-0 bg-np-ink text-white hover:bg-np-ink-sub",
-  ghost: "border border-np-border-strong bg-white text-np-ink hover:bg-np-surface-sub",
+  // Bóng rất nhẹ để ô trắng nổi khỏi nền xám, bấm xuống thì tắt bóng cho cảm
+  // giác nút lún vào. Nền trắng viền xám trơn nằm trên nền #F1F1F1 nhìn khá phẳng.
+  ghost:
+    "border border-np-border-strong bg-white text-np-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-shadow hover:bg-np-surface-sub active:shadow-none",
 };
 
+// Thấp hơn bậc cũ 2 tới 4px cho gọn gàng hơn. Cỡ chữ giữ nguyên nên nút chỉ mỏng
+// đi chứ chữ không bị bóp.
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: "h-8 px-4 text-[13px]",
-  md: "h-10 px-4 text-[14px]",
-  lg: "h-12 px-4 text-[14px]",
+  sm: "h-[30px] px-4 text-[13px]",
+  md: "h-9 px-4 text-[14px]",
+  lg: "h-11 px-4 text-[14px]",
 };
 
 export const NPButton = forwardRef<HTMLButtonElement, ButtonProps>(

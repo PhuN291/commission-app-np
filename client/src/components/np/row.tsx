@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 
 type RowProps = {
@@ -20,7 +20,7 @@ export function Row({ leading, title, subtitle, meta, trailing, onClick, last, c
       className={cn(
         "flex min-h-[60px] items-center gap-3.5 px-4 py-3.5",
         onClick ? "cursor-pointer" : "cursor-default",
-        !last && "border-b border-np-surface-pressed",
+        !last && "np-divider",
         className,
       )}
     >

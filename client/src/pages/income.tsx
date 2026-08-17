@@ -14,20 +14,23 @@
  * KHÔNG hiển thị %cap (per task spec).
  */
 
+import monogram from "@assets/np-monogram.png";
 import { useState } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
   AlertTriangle,
-  ArrowDownCircle,
+  ContentPasteSearch,
   ChevronRight,
   Gift,
   Info,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
-  Badge,
   Card,
+  CommissionRow,
+  ComplaintSheet,
+  loiKhieuNai,
   NPButton,
   PageHeader,
   Screen,
@@ -35,25 +38,14 @@ import {
   useTabNav,
 } from "@/components/np";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
-  CR_STATUS_LABEL,
-  canKhieuNai,
-  hoursRemainingKhieuNai,
   type CRStatus,
   type UserRole,
 } from "@shared/types";
@@ -189,15 +181,7 @@ export default function Income() {
       setComplaintDialog({ open: false, cr: null, content: "" });
     },
     onError: (err: any) => {
-      const msg =
-        err?.error === "ownership"
-          ? "Chỉ có thể khiếu nại hoa hồng của mình"
-          : err?.error === "window_expired"
-            ? "Đã quá hạn khiếu nại (3 ngày)"
-            : err?.error === "invalid_state"
-              ? "Khoản hoa hồng không ở trạng thái cho phép"
-              : "Không thể gửi khiếu nại";
-      toast({ title: "Lỗi", description: msg, variant: "destructive" });
+      toast({ title: "Lỗi", description: loiKhieuNai(err), variant: "destructive" });
     },
   });
 
@@ -248,8 +232,19 @@ export default function Income() {
           className="relative overflow-hidden rounded-np-card p-[22px] text-white"
           style={{ background: "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)" }}
         >
-          <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
+          {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
+              mép phải và mép trên nên chỉ thấy một phần, đủ nhận ra mà không giành chỗ
+              của con số. aria-hidden vì đây là hoa văn, không phải thông tin. */}
+          <img
+            src={monogram}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-2 top-2 h-[104px] w-auto select-none opacity-[0.24]"
+          />
           <div className="relative">
+            <div className="mb-1.5 text-[11px] font-medium text-white/80">
+              Thực nhận
+            </div>
             <div className="flex items-baseline gap-1">
               <span className="text-[34px] font-extrabold leading-none tracking-[-0.8px] tabular-nums">
                 {new Intl.NumberFormat("vi-VN").format(data.netHh)}
@@ -276,7 +271,7 @@ export default function Income() {
 
       {/* Empty state */}
       {isEmpty && (
-        <Card className="mx-4 mt-5 px-5 py-12 text-center">
+        <Card className="mt-5 px-5 py-12 text-center">
           <Info size={36} className="mx-auto text-np-border-strong" />
           <div className="mt-2.5 text-[13px] font-medium text-np-text-muted">
             Chưa có hoa hồng {cycleLabel(cycle).toLowerCase()}
@@ -308,11 +303,11 @@ export default function Income() {
                   }}
                   className={
                     "cursor-pointer px-4 py-3.5 transition-colors hover:bg-np-surface-sub active:bg-np-surface-pressed" +
-                    (gi === data.crGroups.length - 1 ? "" : " border-b border-np-surface-pressed")
+                    (gi === data.crGroups.length - 1 ? "" : " np-divider")
                   }
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-sub">
+                    <span className="text-[11px] font-bold text-np-text-sub">
                       {g.orderCode}
                     </span>
                     <ChevronRight size={16} strokeWidth={2.25} className="flex-shrink-0 text-np-text-muted" />
@@ -329,12 +324,13 @@ export default function Income() {
                   </div>
                   <div className="mt-2 space-y-2">
                     {g.crs.map((cr) => (
-                      <CRRow
+                      <CommissionRow
                         key={cr.id}
                         cr={cr}
-                        onComplaint={() =>
-                          setComplaintDialog({ open: true, cr, content: "" })
-                        }
+                        currentUserId={Number(getCurrentUserId())}
+                        onComplaint={() => setComplaintDialog({ open: true, cr, content: "" })}
+                        className="px-0 py-0"
+                        last
                       />
                     ))}
                   </div>
@@ -393,63 +389,23 @@ export default function Income() {
         </>
       )}
 
-      <div className="h-5" />
 
-      {/* Khiếu nại dialog (reuse pattern Task 13) */}
-      <Dialog
+      <ComplaintSheet
         open={complaintDialog.open}
         onOpenChange={(open) => setComplaintDialog((p) => ({ ...p, open }))}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Khiếu nại hoa hồng</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {complaintDialog.cr && complaintDialog.cr.rejectedReason && (
-              <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3 text-[12px]">
-                <div className="font-bold text-np-text-sub">Lý do từ chối:</div>
-                <div className="mt-0.5 text-np-ink">{complaintDialog.cr.rejectedReason}</div>
-              </div>
-            )}
-            <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">
-                Nội dung khiếu nại
-              </label>
-              <Textarea
-                placeholder="Trình bày lý do khiếu nại để kế toán xem lại..."
-                value={complaintDialog.content}
-                onChange={(e) => setComplaintDialog((p) => ({ ...p, content: e.target.value }))}
-              />
-            </div>
-            <p className="text-[11px] leading-relaxed text-np-text-muted">
-              Khiếu nại trong vòng 3 ngày. Kế toán xem lại trong 1-2 ngày. Chỉ khiếu nại được 1 lần.
-            </p>
-          </div>
-          <DialogFooter>
-            <NPButton tone="ghost" onClick={() => setComplaintDialog({ open: false, cr: null, content: "" })}>
-              Hủy
-            </NPButton>
-            <NPButton
-              tone="primary"
-              disabled={
-                !complaintDialog.content ||
-                complaintDialog.content.length < 2 ||
-                complaintMut.isPending
-              }
-              onClick={() =>
-                complaintDialog.cr &&
-                complaintMut.mutate({
-                  orderId: complaintDialog.cr.orderId,
-                  crId: complaintDialog.cr.id,
-                  content: complaintDialog.content,
-                })
-              }
-            >
-              {complaintMut.isPending ? "Đang gửi..." : "Gửi khiếu nại"}
-            </NPButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        cr={complaintDialog.cr}
+        content={complaintDialog.content}
+        onContentChange={(v) => setComplaintDialog((p) => ({ ...p, content: v }))}
+        saving={complaintMut.isPending}
+        onSubmit={() =>
+          complaintDialog.cr &&
+          complaintMut.mutate({
+            orderId: complaintDialog.cr.orderId,
+            crId: complaintDialog.cr.id,
+            content: complaintDialog.content,
+          })
+        }
+      />
     </Screen>
   );
 }
@@ -458,51 +414,6 @@ export default function Income() {
 // Subcomponents
 // ─────────────────────────────────────────────────────────────────
 
-function CRRow({ cr, onComplaint }: { cr: APICR; onComplaint: () => void }) {
-  const statusTone =
-    cr.status === "DUOC_DUYET"
-      ? "success"
-      : cr.status === "TU_CHOI"
-        ? "critical"
-        : cr.status === "KHIEU_NAI"
-          ? "attention"
-          : "neutral";
-  const eligible = canKhieuNai({ status: cr.status, rejectedAt: cr.rejectedAt });
-  const hoursLeft = hoursRemainingKhieuNai(cr.rejectedAt);
-  const showKhieuNai = cr.status === "TU_CHOI";
-
-  return (
-    <div className="flex items-start justify-between gap-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={statusTone as any}>{CR_STATUS_LABEL[cr.status]}</Badge>
-        </div>
-        {cr.status === "TU_CHOI" && cr.rejectedReason && (
-          <div className="mt-1 text-[11px] text-np-text-sub">
-            Lý do: {cr.rejectedReason}
-          </div>
-        )}
-        {showKhieuNai && (
-          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-            {eligible ? (
-              <NPButton tone="primary" size="sm" onClick={onComplaint}>
-                Khiếu nại hoa hồng (Còn {hoursLeft}h)
-              </NPButton>
-            ) : (
-              <NPButton tone="ghost" size="sm" disabled>
-                Quá hạn khiếu nại (3 ngày)
-              </NPButton>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex-shrink-0 text-[14px] font-extrabold tabular-nums text-np-brand-ink">
-        {fmtVND(cr.amount)}
-      </div>
-    </div>
-  );
-}
-
 function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
   const isThuong = adj.type === "thuong";
   const Icon = isThuong ? Gift : AlertTriangle;
@@ -510,17 +421,10 @@ function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
     <div
       className={
         "flex items-start gap-3 px-4 py-3.5" +
-        (last ? "" : " border-b border-np-surface-pressed")
+        (last ? "" : " np-divider")
       }
     >
-      <div
-        className={
-          "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-np-button " +
-          (isThuong ? "bg-np-brand-soft text-np-brand-ink" : "bg-np-danger-bg/40 text-np-danger")
-        }
-      >
-        <Icon size={16} strokeWidth={2.25} />
-      </div>
+      <Icon size={18} strokeWidth={2.25} className="mt-1 flex-shrink-0 text-np-text-muted" />
       <div className="min-w-0 flex-1">
         <span className="text-[13px] font-bold text-np-ink">
           {isThuong ? "Thưởng" : "Phạt"}
@@ -530,7 +434,7 @@ function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
       <div
         className={
           "flex-shrink-0 text-[14px] font-extrabold tabular-nums " +
-          (isThuong ? "text-np-success-ink" : "text-np-danger")
+          (isThuong ? "text-np-badge-success-fg" : "text-np-badge-critical-fg")
         }
       >
         {fmtSignedVND(adj.amount)}
@@ -544,12 +448,10 @@ function ClawbackRow({ clawback, last }: { clawback: Clawback; last?: boolean })
     <div
       className={
         "flex items-start gap-3 px-4 py-3.5" +
-        (last ? "" : " border-b border-np-surface-pressed")
+        (last ? "" : " np-divider")
       }
     >
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-np-button bg-np-danger-bg/40 text-np-danger">
-        <ArrowDownCircle size={16} strokeWidth={2.25} />
-      </div>
+      <ContentPasteSearch size={18} strokeWidth={2.25} className="mt-1 flex-shrink-0 text-np-text-muted" />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-bold text-np-ink">{clawback.sourceOrderCode}</div>
         <div className="mt-0.5 text-[12px] text-np-text-sub">{clawback.reason}</div>

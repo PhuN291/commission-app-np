@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { BadgePercent, Clock, Hash, Stethoscope, UserRound } from "lucide-react";
+import { BadgePercent, Clock, Hash, MedicalServices, UserRound } from "@/components/np/icon";
 import {
   Badge,
   Card,
@@ -64,7 +64,7 @@ export default function ServicesPage() {
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Dịch vụ" subtitle={`${filtered.length} dịch vụ có sẵn`} />
+      <PageHeader title="Dịch vụ" />
       <SearchField value={searchTerm} onChange={setSearchTerm} placeholder="Tìm dịch vụ..." />
       <Chips items={chipItems} active={categoryFilter} onChange={setCategoryFilter} />
 
@@ -82,12 +82,12 @@ export default function ServicesPage() {
             >
               <div className="mb-3 flex items-start gap-3">
                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-np-card bg-np-surface-sub">
-                  <Stethoscope size={20} strokeWidth={2.2} className="text-np-text-sub" />
+                  <MedicalServices size={20} strokeWidth={2.2} className="text-np-text-sub" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="truncate text-[15px] font-bold text-np-ink">{service.title}</h3>
-                    <span className="flex flex-shrink-0 items-center gap-1 rounded bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
+                    <span className="flex flex-shrink-0 items-center gap-1 rounded bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold text-np-text-muted">
                       <Hash size={10} /> {service.code}
                     </span>
                   </div>
@@ -103,7 +103,9 @@ export default function ServicesPage() {
                     <UserRound size={14} strokeWidth={2.25} className="text-np-text-muted" />
                     Chỉ định
                   </span>
-                  <Badge tone={service.requiresDoctor ? "attention" : "neutral"}>
+                  {/* Chỉ định là thuộc tính cố định của dịch vụ, không phải việc ai đó phải
+                      xử lý, nên để neutral cả hai nhánh. */}
+                  <Badge>
                     {service.requiresDoctor ? "Bác sĩ" : "Kỹ thuật viên"}
                   </Badge>
                 </div>
@@ -128,7 +130,6 @@ export default function ServicesPage() {
         </div>
       )}
 
-      <div className="h-5" />
     </Screen>
   );
 }

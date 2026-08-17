@@ -10,7 +10,7 @@ const Textarea = React.forwardRef<
     <textarea
       className={cn(
         // NP design system: bg gray, border-strong, rounded-np-button. Match Input.
-        "flex min-h-[64px] w-full rounded-np-button border border-np-border-strong bg-np-surface-sub px-3 py-2 text-[14px] text-np-ink placeholder:text-np-text-muted transition-colors focus-visible:bg-white focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
+        "flex min-h-[64px] w-full rounded-np-button border-0 bg-np-surface-sub px-3 py-2 text-[14px] text-np-ink placeholder:text-np-text-muted transition-colors focus-visible:bg-np-surface-pressed focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
         className
       )}
       ref={ref}

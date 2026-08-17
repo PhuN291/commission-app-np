@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phạm vi nghiệp vụ đã chốt - NP Chat Hub</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#16211c; --muted:#5c6b64; --line:#e2e8e5;
+    --teal:#0e7a64; --teal-soft:#e6f2ef;
+    --ok:#0f9d58; --ok-soft:#e7f6ec; --warn:#b26a00; --warn-soft:#fff4e0;
+    --bad:#c0392b; --bad-soft:#fdecea; --blue:#2557d6; --blue-soft:#eaf0ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.62;padding:30px 16px;}
+  .wrap{max-width:960px;margin:0 auto;}
+  header.doc{border-bottom:2px solid var(--teal);padding-bottom:15px;margin-bottom:20px;}
+  header.doc h1{font-size:23px;font-weight:800;letter-spacing:-.2px;}
+  header.doc .sub{color:var(--muted);font-size:14px;margin-top:4px;}
+  .meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;}
+  .meta span{font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:3px 11px;color:var(--muted);}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:19px 21px;margin-bottom:15px;}
+  h2{font-size:16px;font-weight:800;display:flex;align-items:center;gap:9px;margin-bottom:11px;}
+  h2 .n{width:24px;height:24px;border-radius:7px;background:var(--teal);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;}
+  h3{font-size:13.5px;font-weight:700;margin:15px 0 6px;}
+  p{font-size:14px;margin-bottom:8px;}
+  .muted{color:var(--muted);}
+  ul{margin:5px 0 5px 2px;list-style:none;}
+  li{font-size:14px;padding-left:17px;position:relative;margin-bottom:5px;}
+  li:before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--teal);}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:7px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding:8px 10px;background:#f8faf9;border-bottom:1px solid var(--line);}
+  td{padding:9px 10px;border-bottom:1px solid #eef2f0;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .tag{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap;display:inline-block;}
+  .t-keep{background:var(--ok-soft);color:#0b6b3c;}
+  .t-cut{background:var(--bad-soft);color:var(--bad);}
+  .t-add{background:var(--blue-soft);color:var(--blue);}
+  .t-later{background:var(--warn-soft);color:var(--warn);}
+  .lead{background:var(--teal-soft);border:1px solid #cbe5de;border-radius:12px;padding:15px 18px;margin-bottom:15px;}
+  .lead h2{color:#0b5e4d;}
+  .lead h2 .n{background:#0b5e4d;}
+  .note{font-size:12.5px;color:var(--muted);margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);}
+  .foot{text-align:center;font-size:11.5px;color:var(--muted);margin-top:16px;}
+  .box{background:#f8faf9;border-radius:10px;padding:12px 14px;margin-top:8px;}
+  @media(max-width:640px){table{font-size:12px;}th,td{padding:7px 6px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <h1>Phạm vi nghiệp vụ đã chốt: NP Chat Hub</h1>
+    <div class="sub">Bản chốt sau khi Phú quyết từng mục. Đây là đề bài để chỉnh thiết kế và giao dev.</div>
+    <div class="meta">
+      <span>Phiên bản 2.0, đã chốt</span>
+      <span>Nền: file NP Slack Style</span>
+      <span>Người quyết: Nguyễn Đức Phú</span>
+      <span>Còn 3 điểm treo, xem mục F</span>
+    </div>
+  </header>
+
+  <div class="lead">
+    <h2><span class="n">A</span>Điều quan trọng nhất sau khi chốt</h2>
+    <p>Phạm vi thu gọn mạnh. Toàn bộ nghiệp vụ y tế chuyên sâu được đẩy về HIS và app hoa hồng: bảo hiểm y tế, lấy mẫu tại nhà, chờ kết quả, trả kết quả, bác sĩ gọi tư vấn đều ra khỏi Chat Hub. Kết quả là <b>Chat Hub trở về đúng bản chất một hộp thư đa kênh</b>, cộng thêm hai thứ nối vào phòng khám là lịch hẹn và nhắc tái khám.</p>
+    <p>Điều này tốt cho dự án: ít việc hơn, ra nhanh hơn, dễ dạy nhân viên hơn, và ranh giới với các hệ thống khác rõ ràng. Đổi lại phải kỷ luật: mọi yêu cầu phát sinh kiểu thêm trường y tế, thêm quy trình khám đều phải trả lời được câu hỏi tại sao không để HIS làm.</p>
+    <p class="muted">Phát hiện mới trong lượt này: <b>màn Lịch hẹn đang thiếu trong thiết kế</b>. Đây là việc thật phải bổ sung, không phải đề xuất thêm cho đẹp.</p>
+  </div>
+
+  <section>
+    <h2><span class="n">B</span>Trong phạm vi, đã chốt làm</h2>
+    <table>
+      <tr><th>Nội dung</th><th>Trạng thái</th><th>Ghi chú</th></tr>
+      <tr><td>Hộp thư gom năm kênh: Livechat website, Zalo OA, Zalo cá nhân, Messenger, TikTok</td><td><span class="tag t-keep">Đã có</span></td><td>Lõi của sản phẩm</td></tr>
+      <tr><td>Hàng đợi kèm số đếm: Chưa trả lời, Của tôi, Chưa có người phụ trách, Tất cả</td><td><span class="tag t-keep">Đã có</span></td><td>Bỏ hàng đợi Chờ kết quả</td></tr>
+      <tr><td>Một loại trạng thái hội thoại duy nhất: chưa trả lời, đang xử lý, đã xong</td><td><span class="tag t-add">Sửa</span></td><td>Chat Hub tự quản, không đồng bộ trạng thái khám của HIS</td></tr>
+      <tr><td>Tag phân loại, gồm tag khách doanh nghiệp</td><td><span class="tag t-keep">Đã có</span></td><td>Khách doanh nghiệp chỉ cần tag, không cần luồng riêng, vì thực tế chỉ có HR nhắn</td></tr>
+      <tr><td>Gán và chuyển người phụ trách, có ghi log lịch sử</td><td><span class="tag t-add">Bổ sung</span></td><td>Tài khoản do công ty cấp nên không có chuyện mất khách. Chỉ cần chuyển người tư vấn tiếp và ghi lại ai chuyển, lúc nào</td></tr>
+      <tr><td>Hồ sơ khách: thông tin cơ bản, cảnh báo dị ứng thuốc, lịch sử dịch vụ đọc từ app hoa hồng</td><td><span class="tag t-keep">Đã có</span></td><td>Bỏ trường bảo hiểm y tế</td></tr>
+      <tr><td>Ghi chú nội bộ có tên người ghi và thời điểm</td><td><span class="tag t-add">Sửa nhẹ</span></td><td>Giữ dạng hiện tại, chỉ thêm ai ghi và mấy giờ ngày nào</td></tr>
+      <tr><td>Nút gọi điện trong hồ sơ khách</td><td><span class="tag t-keep">Giữ</span></td><td>Phú quyết giữ</td></tr>
+      <tr><td>Kho phương tiện</td><td><span class="tag t-keep">Giữ</span></td><td>Phú quyết giữ</td></tr>
+      <tr><td>Chế độ tối</td><td><span class="tag t-keep">Giữ</span></td><td>Phú quyết giữ</td></tr>
+      <tr><td>Màn Lịch hẹn</td><td><span class="tag t-add">Bổ sung, đang thiếu</span></td><td>Thiết kế hiện chưa có màn này dù nav đã có mục. Cần xem lịch theo ngày và tuần, tạo và sửa hẹn, hẹn lấy từ app hoa hồng</td></tr>
+      <tr><td>Nhắc tái khám theo y lệnh bác sĩ</td><td><span class="tag t-add">Bổ sung</span></td><td>App hoa hồng đã có dữ liệu y lệnh tái khám, Chat Hub đọc và biến thành danh sách khách cần gọi</td></tr>
+      <tr><td>Số liệu phục vụ giám sát</td><td><span class="tag t-keep">Giữ mức số liệu</span></td><td>Chỉ hiện số liệu như thời gian phản hồi và số hội thoại. Không làm cảnh báo tự động, trưởng ca tự đọc số rồi nói chuyện với nhân sự</td></tr>
+      <tr><td>Trả lời một tin nhắn cụ thể (reply)</td><td><span class="tag t-add">Thay cho thread</span></td><td>Các nền tảng nguồn chỉ có reply tin nhắn, không có thread lồng nhau, nên Chat Hub cũng vậy</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">C</span>Ngoài phạm vi, đã chốt cắt</h2>
+    <table>
+      <tr><th>Cắt gì</th><th>Lý do Phú quyết</th></tr>
+      <tr><td>Mọi tính năng về bảo hiểm y tế</td><td>Khách gửi ảnh thẻ vào chat là đủ. Việc xác thực thẻ để HIS xử lý sau, không phải việc của Chat Hub</td></tr>
+      <tr><td>Đặt lấy mẫu xét nghiệm tại nhà</td><td>Chưa triển khai dịch vụ này nên chưa cần</td></tr>
+      <tr><td>Luồng riêng cho khách doanh nghiệp</td><td>Chỉ có HR nhắn, số lượng ít, dùng tag là đủ</td></tr>
+      <tr><td>Hàng đợi và vòng đời chờ kết quả</td><td>Không thuộc phạm vi. Sau này nếu cần thì chỉ đồng bộ kết quả vào chat, không dựng quy trình</td></tr>
+      <tr><td>Ghi nhận bác sĩ gọi đọc kết quả và tư vấn</td><td>Bỏ khỏi app chat, đây là việc của HIS</td></tr>
+      <tr><td>Luồng phản hồi lồng nhau kiểu Slack</td><td>Các nền tảng nguồn không có thread, chỉ có reply, nên đồng bộ về cũng không có thread</td></tr>
+      <tr><td>Hạng khách và điểm khách</td><td>Thừa kế từ CRM bán hàng, không phục vụ phòng khám</td></tr>
+      <tr><td>Cảnh báo tự động khi chậm trả lời</td><td>Chỉ cần số liệu, trưởng ca tự đánh giá và trao đổi với nhân sự</td></tr>
+      <tr><td>Quy trình chuyển giao khi nhân viên nghỉ việc</td><td>Tài khoản do công ty cấp nên không mất tệp khách. Chỉ cần chuyển người phụ trách và ghi log</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">D</span>Ranh giới với các hệ thống khác</h2>
+    <p>Sau khi cắt gọn, ranh giới trở nên rất rõ. Đây là phần dev cần nắm để không build trùng.</p>
+    <table>
+      <tr><th>Việc</th><th>Ai làm</th></tr>
+      <tr><td>Hội thoại, tin nhắn, gán người phụ trách, tag, trạng thái hội thoại, kho phương tiện</td><td>Chat Hub sở hữu</td></tr>
+      <tr><td>Khách hàng, lịch hẹn, dịch vụ và giá, đơn, y lệnh tái khám, hoa hồng</td><td>App hoa hồng sở hữu, Chat Hub đọc và ghi qua API</td></tr>
+      <tr><td>Hồ sơ y tế, kết quả xét nghiệm, xác thực bảo hiểm, quy trình khám</td><td>HIS sở hữu, Chat Hub không đụng</td></tr>
+      <tr><td>Kết nối và giữ phiên các kênh</td><td>Gateway riêng cho Zalo cá nhân, adapter cho các kênh chính thức</td></tr>
+    </table>
+    <div class="box"><b>Quy tắc cho mọi yêu cầu phát sinh sau này:</b> nếu là dữ liệu y tế hoặc quy trình khám thì thuộc HIS. Nếu là khách, lịch, tiền thì thuộc app hoa hồng. Chat Hub chỉ giữ những gì sinh ra từ hội thoại.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">E</span>Việc cần làm với thiết kế</h2>
+    <h3>Bổ sung</h3>
+    <ul>
+      <li>Dựng màn Lịch hẹn: xem theo ngày và theo tuần, tạo và sửa hẹn, dữ liệu lấy từ app hoa hồng. Đây là màn đang thiếu hẳn.</li>
+      <li>Dựng danh sách nhắc tái khám: khách tới hạn tái khám theo y lệnh, kèm nút mở hội thoại để gọi hoặc nhắn.</li>
+      <li>Thêm chức năng gán và chuyển người phụ trách, kèm log lịch sử ai chuyển cho ai lúc nào.</li>
+      <li>Thêm tên người ghi và thời điểm vào từng dòng ghi chú nội bộ.</li>
+      <li>Thêm chức năng trả lời một tin nhắn cụ thể, thay cho thread.</li>
+    </ul>
+    <h3>Cắt khỏi thiết kế</h3>
+    <ul>
+      <li>Hàng đợi Chờ kết quả, tab Kết quả trong khung chat, mọi thứ liên quan trả kết quả.</li>
+      <li>Trường bảo hiểm y tế trong hồ sơ khách.</li>
+      <li>Hạng khách và điểm khách nếu còn sót.</li>
+      <li>Thread lồng nhau.</li>
+    </ul>
+    <h3>Giữ nguyên, không đụng</h3>
+    <ul>
+      <li>Nút gọi điện, kho phương tiện, chế độ tối, hàng đợi còn lại, tag, hồ sơ khách, cảnh báo dị ứng thuốc, số liệu giám sát.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="n">F</span>Ba điểm còn treo</h2>
+    <p>Ba mục này tôi đề xuất ở bản trước, Phú chưa quyết. Cần chốt để khép phạm vi.</p>
+    <table>
+      <tr><th>Nội dung</th><th>Đề xuất của tôi</th></tr>
+      <tr><td>Bộ câu trả lời mẫu cho câu hỏi lặp lại</td><td>Nên làm. Bốn câu hỏi hay gặp nhất là bảo hiểm nhận ngày nào, có cần nhịn ăn không, bao giờ có kết quả, giá gói khám. Chèn nhanh bằng phím tắt. Rẻ, và vừa nhanh vừa chuẩn hóa thông tin y tế cho nhân viên mới</td></tr>
+      <tr><td>Tin chào có thông báo lưu thông tin và link chính sách dữ liệu</td><td>Nên làm và tôi khuyên không cắt. Chat phòng khám chứa dữ liệu sức khỏe, thuộc nhóm dữ liệu nhạy cảm theo luật bảo vệ dữ liệu cá nhân hiệu lực từ đầu năm nay. Website Nguyên Phương đã có trang chính sách sẵn, chỉ cần dẫn link. Đây là phần tuân thủ, tôi không phải luật sư nên nên rà với người rành trước khi go-live</td></tr>
+      <tr><td>Bàn giao ca</td><td>Phòng khám mở cả tuần từ 8 giờ tới 19 giờ nên chắc chắn có ca. Có thể làm nhẹ: khi hết ca, nhân viên để lại ghi chú bàn giao trên các hội thoại còn treo. Không cần chức năng riêng</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">G</span>Việc tiếp theo</h2>
+    <ul>
+      <li>Chốt ba điểm treo ở mục F.</li>
+      <li>Chỉnh thiết kế theo mục E, ưu tiên dựng màn Lịch hẹn vì đang thiếu hẳn.</li>
+      <li>Cho hai ba nhân viên phòng khám bấm thử theo ba tình huống thật: nhận một khách mới, tra lại một khách cũ, chuyển một khách cho người khác.</li>
+      <li>Đường găng vẫn chờ và không nén được: nộp thủ tục ba kênh chính thức, giao dev ổn định app hoa hồng và audit ZCRM, chốt mốc khai trương.</li>
+    </ul>
+  </section>
+
+  <div class="foot">Tài liệu nội bộ 1PDM. Bản chốt phạm vi ngày 30/07/2026, dựa trên quyết định của Nguyễn Đức Phú.</div>
+
+</div>
+</body>
+</html>

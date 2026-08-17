@@ -9,7 +9,9 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       ref={ref}
       onClick={onClick}
       className={cn(
-        "mx-4 rounded-np-card bg-white",
+        // Khối trắng chạy sát hai mép khung, không bo góc. Nội dung bên trong tự
+        // giữ lề (Row có px-4) nên chữ không dính mép.
+        "bg-white",
         onClick && "cursor-pointer",
         className,
       )}

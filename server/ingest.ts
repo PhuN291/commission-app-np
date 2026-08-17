@@ -16,21 +16,57 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { computeCommissionForOrder } from "./commission-engine";
 
-export async function ingestOrderDerived(order: Order): Promise<void> {
+/** Chi tiết từng dịch vụ trên đơn, do màn tạo đơn gửi kèm. */
+export type ChiTietDichVu = {
+  serviceCode: string;
+  serviceName: string;
+  serviceCategory?: string | null;
+  quantity: number;
+  unitPrice: number;
+};
+
+export async function ingestOrderDerived(
+  order: Order,
+  chiTiet?: ChiTietDichVu[] | null,
+): Promise<void> {
   const now = new Date();
 
-  // ── (a) order_items: lookup service theo code, tạo MỘT item đại diện ─────
-  // Đơn hiện gộp nhiều dịch vụ vào một order → tạm tạo 1 item từ thông tin đơn.
-  // G3 (mở rộng màn nhập) sẽ gửi chi tiết từng dịch vụ → nhiều item; cổng giữ nguyên.
+  // ── (a) order_items: một dòng cho MỖI dịch vụ ────────────────────────────
+  // Bảng orders vẫn giữ kiểu gộp (serviceName nối bằng ", "), nên nếu chỉ đọc từ
+  // đó thì đơn hai dịch vụ chỉ đẻ ra một dòng mang cái tên đã nối, số lượng cộng
+  // dồn và đơn giá bị bình quân. Màn sửa dịch vụ đọc lại đúng chỗ đó, mở ra thấy
+  // một dịch vụ trong khi khách đặt hai, lưu lại là gộp thật thành một.
+  //
+  // Nơi gọi có chi tiết (màn tạo đơn) thì gửi kèm; nơi chưa có (webhook iHOS,
+  // dữ liệu mẫu) vẫn rơi về cách cũ để không hỏng đường nhận đơn sẵn có.
   const services = await storage.getAllServices();
-  const service = services.find((s) => s.code === order.serviceCode);
-  if (service) {
+  const dsGhi: ChiTietDichVu[] =
+    chiTiet && chiTiet.length > 0
+      ? chiTiet
+      : [
+          {
+            serviceCode: order.serviceCode,
+            serviceName: order.serviceName,
+            serviceCategory: order.serviceCategory,
+            quantity: order.quantity,
+            unitPrice: order.unitPrice,
+          },
+        ];
+
+  for (const x of dsGhi) {
+    const service = services.find((s) => s.code === x.serviceCode);
+    if (!service) {
+      console.warn(
+        `[ingest] order ${order.id}: không tìm thấy service code='${x.serviceCode}' → bỏ qua dòng này`,
+      );
+      continue;
+    }
     await db.insert(orderItems).values({
       orderId: order.id,
       serviceId: service.id,
-      serviceName: order.serviceName,
-      quantity: order.quantity,
-      unitPrice: order.unitPrice,
+      serviceName: x.serviceName,
+      quantity: x.quantity,
+      unitPrice: x.unitPrice,
       cost: service.defaultCost, // thường 0 cho tới khi CEO/KT nhập giá vốn thật
       status: "completed",
       skippedReason: null,
@@ -38,10 +74,6 @@ export async function ingestOrderDerived(order: Order): Promise<void> {
       recallDueDate: null,
       refundedAmount: 0,
     });
-  } else {
-    console.warn(
-      `[ingest] order ${order.id}: không tìm thấy service code='${order.serviceCode}' → bỏ qua tạo order_item`,
-    );
   }
 
   // ── (b) order_role_assignments: vai Sale (luôn) + vai TC (nếu có active) ──

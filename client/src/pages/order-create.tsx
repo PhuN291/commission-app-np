@@ -1,37 +1,43 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useSearch } from "wouter";
 import {
+  ArrowLeft,
   Building2,
   Calendar,
   Check,
-  ChevronDown,
-  Clock,
-  FileText,
-  Minus,
+  ContactsProduct,
+  MedicalServices,
   Plus,
+  PlusCircle,
   Receipt,
   Search,
-  Stethoscope,
+  StickyNote,
   Ticket,
-  User,
-  UserPlus,
+  Verified,
   X,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
+  Avatar,
   Card,
+  Chev,
+  DateTimeField,
+  DETAIL_HEADER_BTN,
   DetailHeader,
+  NoteSection,
   NPButton,
   Screen,
   SectionTitle,
+  ServiceLines,
+  ServicePickerSheet,
+  giaDong,
+  payloadDong,
+  tenDayDu,
+  type ServiceLine,
   useTabNav,
 } from "@/components/np";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -44,18 +50,6 @@ function fmtVND(n: number) {
   return new Intl.NumberFormat("vi-VN").format(n) + "₫";
 }
 
-const TIME_SLOTS = [
-  "08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30",
-  "13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00",
-];
-
-type SelectedService = {
-  service: Service;
-  quantity: number;
-  packageIdx?: number;
-  packageInfo?: { name: string; price: number; commission: number };
-};
-
 type SelectedCustomer = { id?: number; name: string; phone: string };
 
 type AppliedVoucher = {
@@ -65,13 +59,6 @@ type AppliedVoucher = {
   amount: number;
   description: string | null;
 };
-
-/** 'YYYY-MM-DD' → 'DD/MM/YYYY' cho thẻ ngày hẹn. */
-function fmtDatePill(s: string): string {
-  if (!s) return "";
-  const [y, m, d] = s.split("-");
-  return d && m && y ? `${d}/${m}/${y}` : s;
-}
 
 /** Nhãn giảm giá hiển thị ở thẻ voucher: '-5%' hoặc '-100k'. */
 function voucherBadge(v: VoucherRow): string {
@@ -147,22 +134,22 @@ function OrderCreatedView({
             <span className="absolute right-6 top-0 h-2.5 w-2.5 rotate-45 rounded-[3px] bg-np-brand" />
             <div className="flex h-28 w-28 items-center justify-center rounded-full bg-np-brand-soft">
               <div className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-np-brand">
-                <Check size={44} strokeWidth={3} className="text-white" />
+                <Verified size={40} className="text-white" />
               </div>
             </div>
           </div>
 
           <h1 className="text-center text-[24px] font-extrabold tracking-[-0.5px] text-np-ink">
-            Đã tạo đơn thành công!
+            Đã tạo đơn
           </h1>
           <p className="mx-auto mt-2 max-w-[310px] text-center text-[14px] leading-relaxed text-np-text-muted">
-            Đơn {order.code} đã được gửi tới lễ tân. Bạn sẽ nhận được thông báo khi khách check-in.
+            Đơn {order.code} đã gửi tới lễ tân. Sẽ báo khi khách đến.
           </p>
 
           {/* Thẻ tóm tắt */}
-          <div className="mt-6 overflow-hidden rounded-np-card border border-np-border bg-white">
+          <div className="mt-6 overflow-hidden border-y border-np-border bg-white">
             <div className="bg-np-ink px-4 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-white/55">
+              <div className="text-[11px] font-bold text-white/55">
                 Mã đơn
               </div>
               <div className="text-[18px] font-extrabold tracking-[0.5px] text-white">{order.code}</div>
@@ -224,27 +211,26 @@ function OrderCreatedView({
 export default function OrderCreate() {
   const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/orders");
   const searchString = useSearch();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [showCustomerResults, setShowCustomerResults] = useState(false);
+  const [customerSheetOpen, setCustomerSheetOpen] = useState(false);
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
 
-  const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
+  const [selectedServices, setSelectedServices] = useState<ServiceLine[]>([]);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
-  const [serviceSearch, setServiceSearch] = useState("");
-  const [expandedServiceId, setExpandedServiceId] = useState<number | null>(null);
   const [prefilledFromUrl, setPrefilledFromUrl] = useState(false);
+  const [prefilledCustomerFromUrl, setPrefilledCustomerFromUrl] = useState(false);
 
   const [notes, setNotes] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
-  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const [voucherInput, setVoucherInput] = useState("");
   const [voucherCode, setVoucherCode] = useState("");
@@ -260,8 +246,6 @@ export default function OrderCreate() {
 
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
 
-  const customerRef = useRef<HTMLDivElement>(null);
-
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers", customerSearch],
     queryFn: async () => {
@@ -271,11 +255,36 @@ export default function OrderCreate() {
       const res = await authFetch(url);
       return res.json();
     },
-    enabled: showCustomerResults,
+    enabled: customerSheetOpen,
   });
 
   const { data: allServices = [] } = useQuery<Service[]>({ queryKey: ["/api/services"] });
   const { data: vouchers = [] } = useQuery<VoucherRow[]>({ queryKey: ["/api/vouchers"] });
+
+  // ?customerId= (mở từ màn chi tiết khách) → tự chọn sẵn khách vào đơn.
+  // Tách hẳn khỏi phần prefill dịch vụ bên dưới: phần đó chờ tải xong danh sách dịch vụ
+  // rồi mới chạy, dùng chung cờ sẽ khoá lẫn nhau.
+  const prefillCustomerId = (() => {
+    const raw = new URLSearchParams(searchString).get("customerId");
+    if (!raw) return 0;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+
+  // Endpoint trả object bọc { customer, orders, stats, ... } nên đọc data.customer.
+  const { data: prefillCustomer } = useQuery<{ customer: Customer }>({
+    queryKey: [`/api/customers/${prefillCustomerId}`, getCurrentUserId()],
+    enabled: prefillCustomerId > 0 && !prefilledCustomerFromUrl,
+  });
+
+  useEffect(() => {
+    if (prefilledCustomerFromUrl) return;
+    const c = prefillCustomer?.customer;
+    // Gọi lỗi hoặc không có khách thì bỏ qua, người dùng tự chọn khách như cũ.
+    if (!c) return;
+    setSelectedCustomer({ id: c.id, name: c.name, phone: c.phone });
+    setPrefilledCustomerFromUrl(true);
+  }, [prefillCustomer, prefilledCustomerFromUrl]);
 
   useEffect(() => {
     if (prefilledFromUrl || allServices.length === 0) return;
@@ -306,24 +315,25 @@ export default function OrderCreate() {
     }
   }, [allServices, searchString, prefilledFromUrl]);
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
-        setShowCustomerResults(false);
-      }
+  // Dịch vụ khách này từng đặt, để chọn nhanh. Chỉ tải khi đã chọn khách và đang
+  // mở hộp chọn dịch vụ, tránh gọi thừa mỗi lần mở màn.
+  const { data: customerDetail } = useQuery<{ orders: { serviceCode: string | null }[] }>({
+    queryKey: [`/api/customers/${selectedCustomer?.id}`],
+    enabled: Boolean(selectedCustomer?.id) && serviceDialogOpen,
+  });
+  const recentServices = (() => {
+    if (!customerDetail?.orders?.length) return [];
+    const codes: string[] = [];
+    for (const o of customerDetail.orders) {
+      if (o.serviceCode && !codes.includes(o.serviceCode)) codes.push(o.serviceCode);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    return codes
+      .map((code) => allServices.find((sv) => sv.code === code))
+      .filter((sv): sv is Service => Boolean(sv))
+      .slice(0, 4);
+  })();
 
-  const filteredServices = allServices.filter(
-    (s) =>
-      s.title.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-      s.code.toLowerCase().includes(serviceSearch.toLowerCase()),
-  );
-
-  const getItemPrice = (item: SelectedService) =>
-    item.packageInfo ? item.packageInfo.price : item.service.price;
+  const getItemPrice = giaDong;
   const totalPrice = selectedServices.reduce(
     (sum, item) => sum + getItemPrice(item) * item.quantity,
     0,
@@ -457,16 +467,32 @@ export default function OrderCreate() {
         method: "POST",
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        // 409 = số điện thoại đã có hồ sơ. Máy chủ trả kèm tên khách đang giữ số
+        // đó nên in thẳng ra, người dùng biết ngay phải chọn ai.
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message ?? "Không tạo được khách hàng");
+      }
       return res.json();
     },
     onSuccess: (customer: Customer) => {
       setSelectedCustomer({ id: customer.id, name: customer.name, phone: customer.phone });
       setShowNewCustomerForm(false);
+      // Đóng luôn hộp chọn khách: khách vừa tạo đã được chọn sẵn, để hộp mở thì
+      // người dùng tưởng chưa xong và đi tìm lại đúng cái tên mình vừa nhập.
+      setCustomerSheetOpen(false);
+      setCustomerSearch("");
       setNewName("");
       setNewPhone("");
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      toast({ title: "Đã tạo khách hàng mới" });
+      toast({ title: `Đã tạo khách hàng ${customer.name}` });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Không tạo được khách hàng",
+        description: (err as { message?: string })?.message ?? "Kiểm tra mạng rồi thử lại.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -481,9 +507,7 @@ export default function OrderCreate() {
       const code = `#NP${year}${month}${day}${rand}`;
       const timeStr = `${day}/${month}/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       const mainService = selectedServices[0];
-      const serviceNames = selectedServices
-        .map((s) => (s.packageInfo ? `${s.service.title} - ${s.packageInfo.name}` : s.service.title))
-        .join(", ");
+      const serviceNames = selectedServices.map(tenDayDu).join(", ");
 
       const res = await authFetch("/api/orders", {
         method: "POST",
@@ -513,6 +537,9 @@ export default function OrderCreate() {
           vatEmail: wantVat && vatEmail ? vatEmail : null,
           createdAt: timeStr,
           userId: Number(getCurrentUserId()),
+          // Chi tiết từng dịch vụ: bảng orders chỉ lưu được bản gộp, gửi kèm cái này
+          // thì order_items mới có một dòng cho mỗi dịch vụ, sửa lại được về sau.
+          services: selectedServices.map(payloadDong),
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -528,7 +555,11 @@ export default function OrderCreate() {
     },
   });
 
-  const canSubmit = selectedCustomer && selectedServices.length > 0 && !createOrderMutation.isPending;
+  // Lịch hẹn là bắt buộc: đơn không có ngày giờ thì không lên được danh sách tái
+  // khám, cũng không ai biết khi nào cần gọi nhắc khách.
+  const coLichHen = Boolean(appointmentDate && appointmentTime);
+  const canSubmit =
+    selectedCustomer && selectedServices.length > 0 && coLichHen && !createOrderMutation.isPending;
 
   const ctaLabel = createOrderMutation.isPending
     ? "Đang tạo..."
@@ -536,22 +567,21 @@ export default function OrderCreate() {
       ? "Chọn khách hàng để tiếp tục"
       : selectedServices.length === 0
         ? "Thêm dịch vụ để tiếp tục"
-        : "Tạo đơn";
+        : !coLichHen
+          ? "Chọn lịch hẹn để tiếp tục"
+          : "Tạo đơn";
 
   const resetForm = () => {
     setSelectedCustomer(null);
     setCustomerSearch("");
-    setShowCustomerResults(false);
+    setCustomerSheetOpen(false);
     setShowNewCustomerForm(false);
     setNewName("");
     setNewPhone("");
     setSelectedServices([]);
-    setServiceSearch("");
-    setExpandedServiceId(null);
     setNotes("");
     setAppointmentDate("");
     setAppointmentTime("");
-    setShowTimePicker(false);
     setVoucherInput("");
     clearVoucher();
     setWantVat(false);
@@ -577,310 +607,88 @@ export default function OrderCreate() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title="Tạo đơn hàng" onBack={() => navigate("/orders")} />
+      <DetailHeader title="Tạo đơn hàng" onBack={quayLai} />
 
-      <div className="bg-np-surface-sub">
+      <div className="min-h-full flow-root bg-np-bg">
         {/* Khách hàng */}
-        <SectionTitle icon={User}>Khách hàng</SectionTitle>
-        <Card className="p-4">
+        <SectionTitle icon={ContactsProduct}>Khách hàng</SectionTitle>
+        <Card className="p-0">
           {selectedCustomer ? (
-            <div className="flex items-center justify-between rounded-np-card border border-np-border bg-np-surface-sub p-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-np-brand-soft text-np-brand-ink">
-                  <User size={18} strokeWidth={2.25} />
-                </div>
-                <div>
-                  <p className="text-[14px] font-bold text-np-ink">{selectedCustomer.name}</p>
-                  <p className="mt-0.5 text-[12px] text-np-text-muted">{selectedCustomer.phone}</p>
-                </div>
+            <div className="flex min-h-[60px] items-center gap-3 px-4 py-3">
+              <Avatar name={selectedCustomer.name} size={36} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold text-np-ink">
+                  {selectedCustomer.name}
+                </p>
+                <p className="mt-0.5 text-[13px] text-np-text-muted">{selectedCustomer.phone}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedCustomer(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-np-text-muted hover:bg-white hover:text-np-ink"
-                aria-label="Bỏ chọn"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-np-text-muted transition-colors active:bg-np-surface-pressed"
+                aria-label="Bỏ chọn khách hàng"
               >
-                <X size={16} strokeWidth={2.25} />
+                <X size={17} strokeWidth={2.25} />
               </button>
-            </div>
-          ) : showNewCustomerForm ? (
-            <div className="space-y-3">
-              <p className="text-[14px] font-bold text-np-ink">Thêm khách hàng mới</p>
-              <Input
-                placeholder="Họ và tên *"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-              <Input
-                placeholder="Số điện thoại *"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-              />
-              <div className="flex items-center gap-2">
-                <NPButton
-                  size="sm"
-                  tone="primary"
-                  disabled={!newName || !newPhone || createCustomerMutation.isPending}
-                  onClick={() => createCustomerMutation.mutate({ name: newName, phone: newPhone })}
-                >
-                  Lưu khách hàng
-                </NPButton>
-                <NPButton size="sm" tone="ghost" onClick={() => setShowNewCustomerForm(false)}>
-                  Hủy
-                </NPButton>
-              </div>
             </div>
           ) : (
-            <div className="space-y-2.5">
-              <div className="relative" ref={customerRef}>
-                <Search
-                  size={16}
-                  strokeWidth={2.25}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-np-text-muted"
-                />
-                <Input
-                  placeholder="Tìm tên hoặc số điện thoại..."
-                  className="pl-9 pr-9"
-                  value={customerSearch}
-                  onChange={(e) => {
-                    setCustomerSearch(e.target.value);
-                    setShowCustomerResults(true);
-                  }}
-                  onFocus={() => setShowCustomerResults(true)}
-                />
-                <ChevronDown
-                  size={16}
-                  strokeWidth={2.25}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-np-text-muted"
-                />
-                {showCustomerResults && (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-np-card border border-np-border bg-white shadow-lg">
-                    {customers.length > 0 ? (
-                      customers.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="flex w-full items-center gap-3 border-b border-np-surface-pressed px-4 py-3 text-left transition-colors last:border-0 hover:bg-np-surface-sub"
-                          onClick={() => {
-                            setSelectedCustomer({ id: c.id, name: c.name, phone: c.phone });
-                            setShowCustomerResults(false);
-                            setCustomerSearch("");
-                          }}
-                        >
-                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-np-surface-sub text-np-text-sub">
-                            <User size={16} strokeWidth={2.25} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-[14px] font-medium text-np-ink">{c.name}</p>
-                            <p className="text-[11px] text-np-text-muted">{c.phone}</p>
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center text-[13px] text-np-text-muted">
-                        {customerSearch ? "Không tìm thấy khách hàng" : "Chưa có khách hàng nào"}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewCustomerForm(true);
-                  setShowCustomerResults(false);
-                  setNewName(customerSearch);
-                  setCustomerSearch("");
-                }}
-                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-np-link hover:underline"
-              >
-                <UserPlus size={15} strokeWidth={2.25} />
-                Thêm khách hàng mới
-              </button>
-            </div>
-          )}
-        </Card>
-
-        {/* Lịch hẹn */}
-        <SectionTitle icon={Calendar}>Lịch hẹn</SectionTitle>
-        <Card className="p-4">
-          <div className="grid grid-cols-2 gap-3">
-            {/* NGÀY */}
-            <label className="relative flex cursor-pointer flex-col rounded-np-button border border-np-border-strong bg-np-surface-sub px-3.5 py-3 transition-colors hover:border-np-brand-ink">
-              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-                <Calendar size={13} strokeWidth={2.4} />
-                Ngày
-              </span>
-              <span
-                className={cn(
-                  "mt-1 text-[15px] font-bold tabular-nums",
-                  appointmentDate ? "text-np-ink" : "text-np-text-muted",
-                )}
-              >
-                {appointmentDate ? fmtDatePill(appointmentDate) : "Chọn ngày"}
-              </span>
-              <input
-                type="date"
-                value={appointmentDate}
-                onChange={(e) => {
-                  setAppointmentDate(e.target.value);
-                  setAppointmentTime("");
-                }}
-                onClick={(e) => {
-                  // input ẩn opacity-0 không tự mở lịch khi tap → gọi showPicker() trong user-gesture.
-                  const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
-                  try {
-                    el.showPicker?.();
-                  } catch {
-                    /* trình duyệt cũ: vẫn focus + gõ tay được */
-                  }
-                }}
-                min={new Date().toISOString().split("T")[0]}
-                className="absolute inset-0 cursor-pointer opacity-0"
-                aria-label="Chọn ngày hẹn"
-              />
-            </label>
-            {/* GIỜ */}
+            /* Chưa chọn thì chỉ một dòng, bấm mở hộp chọn. Ô tìm kiếm với danh sách
+               thả xuống trước đây chiếm chỗ ngay cả khi không dùng, và danh sách bị
+               kẹt trong khung hẹp nên khó lướt. */
             <button
               type="button"
-              onClick={() => setShowTimePicker((v) => !v)}
-              className={cn(
-                "flex flex-col rounded-np-button border px-3.5 py-3 text-left transition-colors",
-                showTimePicker
-                  ? "border-np-brand-ink bg-np-brand-soft text-np-brand-ink"
-                  : "border-np-border-strong bg-np-surface-sub hover:border-np-brand-ink",
-              )}
+              onClick={() => setCustomerSheetOpen(true)}
+              className="flex min-h-[56px] w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-np-surface-sub"
             >
-              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-                <Clock size={13} strokeWidth={2.4} />
-                Giờ
-              </span>
-              <span
-                className={cn(
-                  "mt-1 text-[15px] font-bold tabular-nums",
-                  appointmentTime ? "text-np-ink" : "text-np-text-muted",
-                )}
-              >
-                {appointmentTime || "Chọn giờ"}
-              </span>
+              <PlusCircle size={19} strokeWidth={2.25} className="flex-shrink-0 text-np-text-muted" />
+              <span className="flex-1 text-[15px] font-semibold text-np-ink">Chọn khách hàng</span>
+              <Chev />
             </button>
-          </div>
-          {showTimePicker && (
-            <div className="mt-3 grid grid-cols-4 gap-2 border-t border-np-border pt-3">
-              {TIME_SLOTS.map((time) => (
-                <button
-                  key={time}
-                  type="button"
-                  onClick={() => {
-                    setAppointmentTime(time);
-                    setShowTimePicker(false);
-                  }}
-                  className={cn(
-                    "h-8 rounded-np-button border text-[12px] font-medium transition-all",
-                    appointmentTime === time
-                      ? "border-np-brand-ink bg-np-brand-soft text-np-brand-ink"
-                      : "border-np-border bg-np-surface-sub text-np-ink hover:border-np-brand-ink hover:text-np-brand-ink",
-                  )}
-                >
-                  {time}
-                </button>
-              ))}
-            </div>
           )}
         </Card>
 
         {/* Dịch vụ */}
-        <SectionTitle icon={Stethoscope}>Dịch vụ</SectionTitle>
+        <SectionTitle icon={MedicalServices}>Dịch vụ</SectionTitle>
         <Card className="space-y-3 p-4">
-          {selectedServices.length > 0 && (
-            <div className="overflow-hidden rounded-np-card border border-np-border">
-              {selectedServices.map((item, idx) => {
-                const itemKey = `${item.service.id}-${item.packageIdx ?? "base"}`;
-                const price = getItemPrice(item);
-                return (
-                  <div
-                    key={itemKey}
-                    className={`p-3 ${idx > 0 ? "border-t border-np-surface-pressed" : ""}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-np-button bg-np-surface-sub text-np-text-sub">
-                        <Stethoscope size={20} strokeWidth={2.2} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[14px] font-medium text-np-ink">{item.service.title}</p>
-                        {item.packageInfo && (
-                          <p className="mt-0.5 text-[12px] text-np-brand-ink">{item.packageInfo.name}</p>
-                        )}
-                        <p className="mt-0.5 text-[12px] text-np-text-muted">{fmtVND(price)}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeService(item.service.id, item.packageIdx)}
-                        className="mt-0.5 flex-shrink-0 text-np-text-muted hover:text-np-ink"
-                        aria-label="Bỏ dịch vụ"
-                      >
-                        <X size={16} strokeWidth={2.25} />
-                      </button>
-                    </div>
-                    <div className="ml-[52px] mt-2 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.service.id, item.packageIdx, -1)}
-                          className="flex h-7 w-7 items-center justify-center rounded-np-button border border-np-border-strong text-np-text-sub hover:bg-np-surface-sub"
-                          aria-label="Giảm"
-                        >
-                          <Minus size={14} strokeWidth={2.25} />
-                        </button>
-                        <span className="w-6 text-center text-[14px] font-bold text-np-ink">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.service.id, item.packageIdx, 1)}
-                          className="flex h-7 w-7 items-center justify-center rounded-np-button border border-np-border-strong text-np-text-sub hover:bg-np-surface-sub"
-                          aria-label="Tăng"
-                        >
-                          <Plus size={14} strokeWidth={2.25} />
-                        </button>
-                      </div>
-                      <span className="text-[14px] font-bold text-np-ink tabular-nums">
-                        {fmtVND(price * item.quantity)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <ServiceLines
+            lines={selectedServices}
+            onChangeQuantity={(dong, delta) =>
+              updateQuantity(dong.service.id, dong.packageIdx, delta)
+            }
+            onRemove={(dong) => removeService(dong.service.id, dong.packageIdx)}
+          />
           <button
             type="button"
-            onClick={() => {
-              setServiceSearch("");
-              setExpandedServiceId(null);
-              setServiceDialogOpen(true);
-            }}
+            onClick={() => setServiceDialogOpen(true)}
             className="flex w-full items-center justify-center gap-2 rounded-np-button border border-dashed border-np-border-strong py-3 text-[14px] font-semibold text-np-ink transition-colors hover:border-np-brand-ink hover:text-np-brand-ink"
           >
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-np-ink text-white">
-              <Plus size={13} strokeWidth={2.75} />
-            </span>
+            <PlusCircle size={19} strokeWidth={2.25} className="text-np-text-muted" />
             Thêm dịch vụ
           </button>
         </Card>
 
-        {/* Ghi chú */}
-        <SectionTitle icon={FileText} action={<span className="text-[12px] font-medium text-np-text-muted">Tùy chọn</span>}>
-          Ghi chú
-        </SectionTitle>
+        {/* Lịch hẹn đặt SAU dịch vụ: ngoài quầy, sale chốt dịch vụ xong mới xếp
+            được lịch, vì giờ trống phụ thuộc dịch vụ nào và bác sĩ nào rảnh. Để
+            trước thì ép nhập ngày giờ lúc chưa biết khách lấy gì. */}
+        <SectionTitle icon={Calendar}>Lịch hẹn</SectionTitle>
         <Card className="p-4">
-          <textarea
-            placeholder="Thêm ghi chú cho đơn hàng..."
-            className="h-20 w-full resize-none rounded-np-button border border-np-border-strong bg-np-surface-sub p-3 text-[14px] text-np-ink transition-all focus:bg-white focus:outline-none"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+          <DateTimeField
+            date={appointmentDate}
+            onDateChange={setAppointmentDate}
+            time={appointmentTime}
+            onTimeChange={setAppointmentTime}
+            min={new Date().toISOString().split("T")[0]}
           />
         </Card>
+
+        {/* Ghi chú: mẫu chung của app. Chưa gửi lên máy chủ ở đây, chỉ giữ trong
+            bản nháp đơn rồi đi kèm khi bấm Tạo đơn. */}
+        <NoteSection
+          icon={StickyNote}
+          value={notes}
+          placeholder="Yêu cầu riêng của khách, dặn dò khi thực hiện dịch vụ"
+          onSave={(note) => setNotes(note)}
+        />
 
         {/* Giảm giá */}
         <SectionTitle icon={Ticket}>Giảm giá</SectionTitle>
@@ -909,7 +717,7 @@ export default function OrderCreate() {
 
           {vouchers.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.4px] text-np-text-muted">
+              <p className="text-[11px] font-bold text-np-text-muted">
                 Mã khả dụng
               </p>
               <div className="scrollbar-hide -mx-4 flex gap-2.5 overflow-x-auto px-4 pb-0.5">
@@ -928,8 +736,8 @@ export default function OrderCreate() {
                       )}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1 rounded-np-badge bg-np-ink px-2 py-0.5 text-[12px] font-extrabold tabular-nums text-white">
-                          <Ticket size={11} strokeWidth={2.5} className="text-white/70" />
+                        <span className="inline-flex items-center gap-1 rounded-np-badge bg-np-badge-neutral-bg px-2 py-[3px] text-[11px] font-semibold tabular-nums text-np-badge-neutral-fg">
+                          <Ticket size={11} strokeWidth={2.5} />
                           {voucherBadge(v)}
                         </span>
                         {selected ? (
@@ -991,11 +799,11 @@ export default function OrderCreate() {
         </Card>
 
         {/* Xuất hoá đơn công ty */}
-        <SectionTitle icon={Building2}>Xuất hoá đơn công ty</SectionTitle>
+        <SectionTitle icon={Building2}>Xuất hóa đơn công ty</SectionTitle>
         <Card className="p-4">
           <label className="flex cursor-pointer items-center justify-between gap-3">
             <span className="text-[14px] font-bold text-np-ink">
-              Khách hàng cần hoá đơn công ty
+              Khách cần hóa đơn công ty
             </span>
             <Switch checked={wantVat} onCheckedChange={setWantVat} />
           </label>
@@ -1035,124 +843,148 @@ export default function OrderCreate() {
         </div>
       </div>
 
-      <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
-        <DialogContent className="sm:max-w-lg overflow-hidden rounded-np-card p-0">
-          <DialogHeader className="px-5 pb-3 pt-5">
-            <DialogTitle className="text-[16px] font-semibold text-np-ink">
-              Chọn dịch vụ
-            </DialogTitle>
-          </DialogHeader>
-          <div className="px-5 pb-3">
-            <div className="relative">
-              <Search
-                size={16}
-                strokeWidth={2.25}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-np-text-muted"
-              />
-              <Input
-                placeholder="Tìm dịch vụ..."
-                className="pl-9"
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-              />
+      {/* Hộp chọn khách hàng: danh sách chiếm hết bề ngang và tự cuộn, dễ lướt hơn
+          ô thả xuống cũ. Nút cộng ở góc phải chuyển sang khai báo khách mới ngay
+          trong hộp, không phải rời màn. */}
+      <Sheet
+        open={customerSheetOpen}
+        onOpenChange={(open) => {
+          setCustomerSheetOpen(open);
+          if (!open) {
+            setShowNewCustomerForm(false);
+            setCustomerSearch("");
+          }
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          className="mx-auto flex h-[85vh] max-w-[390px] flex-col rounded-t-np-sheet border-0 p-0 [&>button]:hidden"
+        >
+          <div className="np-divider px-4 pb-3 pt-3">
+            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-np-surface-pressed" />
+            <div className="flex items-center justify-between gap-3">
+              {/* Đang khai khách mới thì nút trái là mũi tên quay lại danh sách, không
+                  phải dấu X, để hai nút đầu hộp không cùng một hình mà khác việc. */}
+              <button
+                type="button"
+                aria-label={showNewCustomerForm ? "Quay lại danh sách" : "Đóng"}
+                onClick={() =>
+                  showNewCustomerForm ? setShowNewCustomerForm(false) : setCustomerSheetOpen(false)
+                }
+                className={DETAIL_HEADER_BTN}
+              >
+                {showNewCustomerForm ? (
+                  <ArrowLeft size={17} strokeWidth={2.25} />
+                ) : (
+                  <X size={17} strokeWidth={2.25} />
+                )}
+              </button>
+              <SheetTitle className="text-[16px] font-bold text-np-ink">
+                {showNewCustomerForm ? "Khách hàng mới" : "Chọn khách hàng"}
+              </SheetTitle>
+              {showNewCustomerForm ? (
+                // Chỗ trống giữ cho tiêu đề vẫn nằm chính giữa.
+                <div className="h-9 w-9 flex-shrink-0" />
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Thêm khách hàng mới"
+                  onClick={() => {
+                    setShowNewCustomerForm(true);
+                    setNewName(customerSearch);
+                  }}
+                  className={cn(DETAIL_HEADER_BTN, "text-np-text-sub")}
+                >
+                  <Plus size={17} strokeWidth={2.25} />
+                </button>
+              )}
             </div>
           </div>
-          <div className="max-h-[60vh] overflow-y-auto border-t border-np-border">
-            {filteredServices.length > 0 ? (
-              filteredServices.map((s) => {
-                const pkgs = SERVICE_PACKAGES[s.code] || [];
-                const isExpanded = expandedServiceId === s.id;
-                const selectedCount = pkgs.filter((_, i) => isPackageSelected(s.id, i)).length;
-                return (
-                  <div key={s.id} className="border-b border-np-surface-pressed last:border-0">
-                    <button
-                      type="button"
-                      className={`flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-np-surface-sub ${
-                        isExpanded ? "bg-np-surface-sub" : ""
-                      }`}
-                      onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[13px] font-semibold text-np-ink">{s.title}</p>
-                          {selectedCount > 0 && (
-                            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-np-brand-ink px-1 text-[10px] font-bold text-white">
-                              {selectedCount}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-[11px] text-np-text-muted">
-                          {pkgs.length > 0 ? `${pkgs.length} gói khả dụng` : "Chưa có gói"}
-                        </p>
-                      </div>
-                      <ChevronDown
-                        size={16}
-                        strokeWidth={2.25}
-                        className={`flex-shrink-0 text-np-text-muted transition-transform duration-200 ${
-                          isExpanded ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-                    {isExpanded && pkgs.length > 0 && (
-                      <div className="px-3 pb-2">
-                        {pkgs.map((pkg, pkgIdx) => {
-                          const selected = isPackageSelected(s.id, pkgIdx);
-                          return (
-                            <button
-                              key={pkgIdx}
-                              type="button"
-                              onClick={() => selectPackage(s, pkgIdx)}
-                              className={`mb-1 flex w-full items-center gap-3 rounded-np-button px-3 py-2.5 text-left transition-all last:mb-0 ${
-                                selected
-                                  ? "border border-np-brand-ink bg-np-brand-soft text-np-brand-ink"
-                                  : "border border-np-border bg-white hover:bg-np-surface-sub"
-                              }`}
-                            >
-                              <div
-                                className={`flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded transition-colors ${
-                                  selected
-                                    ? "bg-np-brand-ink"
-                                    : "border border-np-border-strong bg-white"
-                                }`}
-                              >
-                                {selected && <Check size={12} strokeWidth={3} className="text-white" />}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p
-                                  className={`text-[13px] ${
-                                    selected
-                                      ? "font-semibold text-np-ink"
-                                      : "font-medium text-np-ink-sub"
-                                  }`}
-                                >
-                                  {pkg.name}
-                                </p>
-                                <div className="mt-0.5 flex items-center gap-2">
-                                  <span className="text-[11px] text-np-text-sub">
-                                    {fmtVND(pkg.price)}
-                                  </span>
-                                  <span className="text-[11px] text-np-text-muted">·</span>
-                                  <span className="text-[11px] font-medium text-np-brand-ink">
-                                    Hoa hồng {fmtVND(pkg.commission)}
-                                  </span>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            ) : (
-              <div className="p-8 text-center text-[14px] text-np-text-muted">
-                Không tìm thấy dịch vụ
+
+          {showNewCustomerForm ? (
+            <div className="space-y-3 p-4">
+              <Input
+                placeholder="Họ và tên *"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+              <Input
+                placeholder="Số điện thoại *"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+              />
+              <NPButton
+                size="md"
+                tone="primary"
+                className="w-full justify-center"
+                disabled={!newName || !newPhone || createCustomerMutation.isPending}
+                onClick={() => createCustomerMutation.mutate({ name: newName, phone: newPhone })}
+              >
+                Lưu khách hàng
+              </NPButton>
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-3">
+                <div className="relative">
+                  <Search
+                    size={16}
+                    strokeWidth={2.25}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-np-text-muted"
+                  />
+                  <Input
+                    autoFocus
+                    placeholder="Tìm tên hoặc số điện thoại..."
+                    className="pl-9"
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                  />
+                </div>
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+              <div className="scrollbar-hide flex-1 overflow-y-auto border-t border-np-surface-pressed pb-4">
+                {customers.length > 0 ? (
+                  customers.map((c, i) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCustomer({ id: c.id, name: c.name, phone: c.phone });
+                        setCustomerSheetOpen(false);
+                        setCustomerSearch("");
+                      }}
+                      className={cn(
+                        "flex min-h-[60px] w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-np-surface-sub",
+                        i !== customers.length - 1 && "np-divider",
+                      )}
+                    >
+                      <Avatar name={c.name} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[15px] font-semibold text-np-ink">{c.name}</p>
+                        <p className="mt-0.5 text-[13px] text-np-text-muted">{c.phone}</p>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-4 py-8 text-center text-[13px] text-np-text-muted">
+                    {customerSearch ? "Không tìm thấy khách hàng" : "Chưa có khách hàng"}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Hộp chọn dịch vụ      {/* Hộp chọn dịch vụ: đổi từ hộp thoại sang hộp trượt cho khớp hộp chọn khách,
+          và để không tràn khỏi khung 390px như trước. */}
+      <ServicePickerSheet
+        open={serviceDialogOpen}
+        onOpenChange={setServiceDialogOpen}
+        services={allServices}
+        recentServices={recentServices}
+        isPackageSelected={isPackageSelected}
+        onSelectPackage={selectPackage}
+      />
     </Screen>
   );
 }

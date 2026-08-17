@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import { Home, Menu, ShoppingBag, Users, Wallet } from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
+import { ContactsProduct, HomeHealth, Menu, Redeem, ShoppingBag } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 import { MoreMenuSheet } from "./more-menu-sheet";
 import type { UserRole } from "@shared/types";
@@ -11,11 +11,11 @@ export type TabKey = "dashboard" | "orders" | "commission" | "customers" | "more
 type TabDef = { key: TabKey; label: string; icon: LucideIcon; roles?: UserRole[] };
 
 const TABS: TabDef[] = [
-  { key: "dashboard", label: "Trang chủ", icon: Home },
+  { key: "dashboard", label: "Trang chủ", icon: HomeHealth },
   { key: "orders", label: "Đơn hàng", icon: ShoppingBag },
   // Hoa hồng (/income) chỉ cho sale/doctor/tc. KT/CEO dùng /admin/commission-approval.
-  { key: "commission", label: "Hoa hồng", icon: Wallet, roles: ["sale", "doctor", "tc"] },
-  { key: "customers", label: "Khách hàng", icon: Users },
+  { key: "commission", label: "Hoa hồng", icon: Redeem, roles: ["sale", "doctor", "tc"] },
+  { key: "customers", label: "Khách hàng", icon: ContactsProduct },
   { key: "more", label: "Thêm", icon: Menu },
 ];
 

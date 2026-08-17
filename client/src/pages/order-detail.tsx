@@ -1,47 +1,64 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, authFetch, getCurrentUserId } from "@/lib/queryClient";
+import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useRoute } from "wouter";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
 import {
-  Bell,
+  AssignmentInd,
   Calendar,
+  CalendarCheck,
   CalendarDays,
-  Check,
-  CheckCircle,
+  CancelScheduleSend,
   ChevronLeft,
   ChevronRight,
   Clock,
+  ContactsProduct,
+  EditSquare,
   EyeOff,
   FileText,
   History,
   LogIn,
-  Mail,
   MapPin,
+  MedicalServices,
   MoreHorizontal,
-  Phone,
   Play,
-  Plus,
+  PlusCircle,
   Receipt,
-  RefreshCw,
   Stethoscope,
   StickyNote,
-  User,
+  SupportAgent,
   UserCog,
   UserX,
+  Verified,
   X,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
+  ActivityLog,
   Avatar,
   Card,
+  CommissionRow,
+  ComplaintSheet,
+  loiKhieuNai,
   Chev,
+  ContactActions,
+  DateTimeField,
   DetailHeader,
+  DETAIL_HEADER_BTN,
+  NoteSection,
   NPButton,
   OrderStatusBadges,
+  PersonPicker,
+  type PickablePerson,
+  ServiceLines,
+  ServicePickerSheet,
+  dungLaiDong,
+  giaDong,
+  payloadDong,
+  type ServiceLine,
   Row,
   Screen,
   SectionTitle,
-  getStatusTone,
   useTabNav,
 } from "@/components/np";
 import { Badge as NPBadge } from "@/components/np/badge";
@@ -68,7 +85,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { eventView, type ActivityEvent } from "@/lib/activity-text";
 import { useToast } from "@/hooks/use-toast";
 import {
   APPOINTMENT_BUTTONS,
@@ -79,19 +97,17 @@ import {
   type StatusButton,
   type VisitStatusCode,
 } from "@shared/status";
-import type { Customer, Order, StatusLog } from "@shared/schema";
+import type { Customer, Order, Service } from "@shared/schema";
 import {
-  CR_STATUS_LABEL,
   ROLE_LABEL,
   SKIPPED_REASON_LABEL,
-  canKhieuNai,
-  hoursRemainingKhieuNai,
   type CRStatus,
   type OrderItemStatus,
   type SkippedReason,
   type UserRole,
 } from "@shared/types";
 import { Textarea } from "@/components/ui/textarea";
+import { SERVICE_PACKAGES } from "@/pages/service-detail";
 
 // ─────────────────────────────────────────────────────────────────
 // Extended types from /api/orders/:id
@@ -100,7 +116,11 @@ import { Textarea } from "@/components/ui/textarea";
 type APIOrderItem = {
   id: string;
   orderId: number;
+  serviceId: number;
   serviceName: string;
+  quantity: number;
+  unitPrice: number;
+  /** Thành tiền cả dòng (đơn giá nhân số lượng). */
   price: number;
   cost: number;
   status: OrderItemStatus;
@@ -118,6 +138,8 @@ type APICommissionRecord = {
   createdAt: number;
   rejectedAt: number | null;
   rejectedReason: string | null;
+  /** Khiếu nại đã gửi cho khoản này, null nếu chưa gửi. */
+  complaint: { id: string; content: string; createdAt: number } | null;
 };
 
 type OrderWithDetails = Order & {
@@ -125,32 +147,85 @@ type OrderWithDetails = Order & {
   crs: APICommissionRecord[];
 };
 
+/** Nhân viên trả về từ GET /api/users, đủ dùng cho mục Phụ trách. */
+type StaffOption = {
+  id: number;
+  name: string;
+  role: UserRole;
+  status: string;
+};
+
+/**
+ * Ba chỗ phụ trách trên đơn, đúng thứ tự đọc: ai chỉ định, ai làm, ai tư vấn.
+ *
+ * `cot` là tên cột trong bảng orders. Chỗ Tư vấn dùng lại cột saleUserId có sẵn
+ * chứ không đẻ cột mới, vì nó vốn đã mang đúng nghĩa đó.
+ *
+ * `uuTien` là vai được xếp lên đầu hộp chọn, chỉ để đỡ phải cuộn, KHÔNG chặn:
+ * phòng khám nhỏ hay kiêm nhiệm, khoá cứng theo vai là có ngày không chọn được ai.
+ */
+const PHU_TRACH = [
+  { cot: "indicatedByUserId", nhan: "Chỉ định", icon: AssignmentInd, uuTien: "doctor" },
+  { cot: "performedByUserId", nhan: "Thực hiện", icon: Stethoscope, uuTien: "doctor" },
+  { cot: "saleUserId", nhan: "Tư vấn", icon: SupportAgent, uuTien: "sale" },
+] as const;
+
+type PhuTrachCot = (typeof PHU_TRACH)[number]["cot"];
+
+
+/** Ngày trên đơn ('DD/MM/YYYY' hoặc 'YYYY-MM-DD') → 'YYYY-MM-DD' cho ô chọn ngày. */
+function toInputDate(v: string | null): string {
+  const s = (v ?? "").trim();
+  if (!s) return "";
+  if (s.includes("-")) return s.slice(0, 10);
+  const [dd, mm, yyyy] = s.split("/");
+  return dd && mm && yyyy ? `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}` : "";
+}
 
 function fmtVND(n: number) {
   return new Intl.NumberFormat("vi-VN").format(n) + "₫";
 }
 
+/**
+ * Moi câu lỗi của server ra khỏi Error do apiRequest ném.
+ *
+ * apiRequest gói lại thành chuỗi "400: {json}", nên đọc thẳng e.message là ra một
+ * câu lộn xộn có cả mã số lẫn dấu ngoặc. Không moi được thì trả null để chỗ gọi
+ * dùng câu dự phòng của nó.
+ */
+function docLoi(e: unknown): string | null {
+  const raw = (e as { message?: string })?.message ?? "";
+  const than = raw.slice(raw.indexOf(":") + 1).trim();
+  try {
+    const j = JSON.parse(than);
+    return typeof j?.message === "string" ? j.message : null;
+  } catch {
+    // Không phải JSON của server thì đây là lỗi tầng mạng ("Failed to fetch").
+    // In nguyên văn ra toast chỉ làm người dùng hoang mang, để chỗ gọi tự chọn câu.
+    return null;
+  }
+}
+
+/** Số dòng nhật ký hé sẵn, phần còn lại nằm sau nút "Xem thêm". */
+const LOG_PREVIEW = 5;
+
 const BUTTON_ICONS: Record<StatusButton["icon"], LucideIcon> = {
-  check: Check,
-  bell: Bell,
+  check: Verified,
+  "calendar-check": CalendarCheck,
   "log-in": LogIn,
-  x: X,
+  "cancel-schedule": CancelScheduleSend,
   calendar: Calendar,
   "eye-off": EyeOff,
   play: Play,
-  "check-circle": CheckCircle,
+  "check-circle": Verified,
   "user-x": UserX,
 };
-
-const TIME_SLOTS = [
-  "08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30",
-  "13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00",
-];
 
 export default function OrderDetail() {
   const { active, onTab } = useTabNav();
   const [, params] = useRoute("/orders/:id");
   const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/orders");
   const orderId = params?.id ? parseInt(params.id, 10) : 0;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -163,11 +238,12 @@ export default function OrderDetail() {
   }>({ open: false, title: "", description: "", action: () => {} });
 
   const [rescheduleDialog, setRescheduleDialog] = useState(false);
+  const [suaLichOpen, setSuaLichOpen] = useState(false);
+  const [ngayMoi, setNgayMoi] = useState("");
+  const [gioMoi, setGioMoi] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
   const [actionsSheetOpen, setActionsSheetOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteDraft, setNoteDraft] = useState("");
 
   // Permission + identity (B5-3 Section 2 + R-9-1)
   const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
@@ -202,20 +278,139 @@ export default function OrderDetail() {
   });
   const { data: allOrders = [] } = useQuery<Order[]>({ queryKey: ["/api/orders", uid] });
   const { data: allCustomers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers", uid] });
-  const { data: statusLogs = [] } = useQuery<StatusLog[]>({
-    queryKey: [`/api/orders/${orderId}/status-logs`, uid],
+  const { data: nhatKy = [] } = useQuery<ActivityEvent[]>({
+    queryKey: [`/api/orders/${orderId}/history`, uid],
     enabled: orderId > 0,
   });
-  const { data: assignee } = useQuery<{ id: number; name: string; avatar: string | null; role: string }>({
-    queryKey: [`/api/users/${order?.userId}`, uid],
-    enabled: !!order?.userId,
-  });
+  // Lấy nguyên danh sách nhân viên thay vì gọi lẻ từng người: mục Phụ trách có
+  // ba chỗ, và bấm vào chỗ nào cũng cần đủ danh sách để chọn.
+  const { data: nhanSu = [] } = useQuery<StaffOption[]>({ queryKey: ["/api/users", uid] });
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`, uid] });
     queryClient.invalidateQueries({ queryKey: ["/api/orders", uid] });
-    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/status-logs`, uid] });
+    queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/history`, uid] });
   };
+
+  // Người đã nghỉ vẫn còn trong danh sách để hiện đúng tên trên đơn cũ, nhưng
+  // không cho gán mới, nên lọc riêng cho hộp chọn.
+  const nhanSuTheoId = useMemo(() => new Map(nhanSu.map((n) => [n.id, n])), [nhanSu]);
+  const nhanSuChonDuoc = useMemo(
+    () => nhanSu.filter((n) => n.status !== "offboarded"),
+    [nhanSu],
+  );
+
+  /** Đang mở hộp chọn cho chỗ nào. null = không mở. */
+  const [dangChonPhuTrach, setDangChonPhuTrach] = useState<PhuTrachCot | null>(null);
+
+  // ── Sửa dịch vụ ─────────────────────────────────────────────────
+  const { data: dsDichVu = [] } = useQuery<Service[]>({ queryKey: ["/api/services", uid] });
+  const [suaDvOpen, setSuaDvOpen] = useState(false);
+  const [chonDvOpen, setChonDvOpen] = useState(false);
+  /** Bản nháp, chỉ ghi xuống máy chủ khi bấm Lưu. */
+  const [dongNhap, setDongNhap] = useState<ServiceLine[]>([]);
+
+  const moSuaDichVu = () => {
+    setDongNhap(dungLaiDong(order?.items ?? [], dsDichVu));
+    setSuaDvOpen(true);
+  };
+
+  const chonGoi = (service: Service, pkgIdx: number) => {
+    setDongNhap((truoc) => {
+      const co = truoc.find((x) => x.service.id === service.id && x.packageIdx === pkgIdx);
+      if (co) return truoc.filter((x) => !(x.service.id === service.id && x.packageIdx === pkgIdx));
+      const pkg = SERVICE_PACKAGES[service.code]?.[pkgIdx];
+      if (!pkg) return truoc;
+      return [
+        ...truoc,
+        {
+          service,
+          quantity: 1,
+          packageIdx: pkgIdx,
+          packageInfo: { name: pkg.name, price: pkg.price, commission: pkg.commission },
+        },
+      ];
+    });
+    setChonDvOpen(false);
+  };
+
+  const tongNhap = dongNhap.reduce((s, x) => s + giaDong(x) * x.quantity, 0);
+
+  const suaDichVu = useMutation({
+    mutationFn: async (lines: ServiceLine[]) => {
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/services`, {
+        services: lines.map(payloadDong),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateAll();
+      setSuaDvOpen(false);
+      // Hoa hồng được sinh lại ở trạng thái chờ duyệt nên phải nói rõ, không thì
+      // người dùng tưởng chỉ đổi mỗi tên dịch vụ.
+      toast({
+        title: "Đã cập nhật dịch vụ",
+        description: "Bảng kê hoa hồng của đơn đã được tính lại và chờ duyệt.",
+      });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Lỗi",
+        description: docLoi(e) ?? "Không cập nhật được dịch vụ",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Đúng luật của server (routes.ts, layDonTheoQuyen): chủ đơn, trưởng ca, CEO.
+  // Kế toán mở được đơn nhưng không sửa được, nên phải khoá ngay ở giao diện chứ
+  // không để bấm thoải mái rồi mới nhận về một câu từ chối.
+  const suaPhuTrachDuoc =
+    order?.userId === currentUserId || role === "tc" || role === "ceo";
+
+  /**
+   * Id đang hiển thị ở một chỗ phụ trách.
+   *
+   * Lúc còn đang gửi thì lấy theo giá trị vừa bấm chứ không đợi máy chủ trả lời:
+   * hộp chọn đóng ngay khi bấm, nếu dòng vẫn in tên cũ thêm một hai giây thì người
+   * dùng tưởng bấm hụt và bấm lại, thành ra bắn hai lượt cập nhật.
+   */
+  const idPhuTrach = (cot: PhuTrachCot): number | null => {
+    const dangGui = suaPhuTrach.isPending ? suaPhuTrach.variables : null;
+    if (dangGui && cot in dangGui) return dangGui[cot] ?? null;
+    return order?.[cot] ?? null;
+  };
+
+  /** Tên in trên dòng phụ trách. null = chưa gán ai, in ô trống có dấu cộng. */
+  const tenPhuTrach = (id: number | null): string | null => {
+    if (id == null) return null;
+    const nguoi = nhanSuTheoId.get(id);
+    if (nguoi) return nguoi.name;
+    // Có id mà chưa tra ra tên: hoặc danh sách nhân viên chưa về, hoặc người đó
+    // đã bị gỡ khỏi hệ thống. Cả hai đều KHÔNG được in "Chọn người", vì như vậy
+    // là nói dối rằng ô này còn trống.
+    return nhanSu.length === 0 ? "Đang tải" : `Nhân viên ${id}`;
+  };
+
+  const suaPhuTrach = useMutation({
+    mutationFn: async (patch: Partial<Record<PhuTrachCot, number | null>>) => {
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/assignees`, patch);
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Đã cập nhật người phụ trách" });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Lỗi",
+        // Server nói rõ lý do (đã nghỉ việc, không có quyền), in thẳng ra thay vì
+        // nuốt đi rồi hiện một câu chung chung.
+        description: docLoi(e) ?? "Không cập nhật được người phụ trách",
+        variant: "destructive",
+      });
+    },
+  });
 
   const updateAppointmentStatus = useMutation({
     mutationFn: async ({ status, note }: { status: string; note?: string }) => {
@@ -245,18 +440,55 @@ export default function OrderDetail() {
     },
   });
 
+  /**
+   * Sửa ngày giờ hẹn ngay trên đơn. Khác nút "Dời lịch": chỗ đó hủy đơn này rồi
+   * tạo đơn mới, dùng khi khách xin đổi sau lúc đã xác nhận. Còn đây là sửa lại
+   * thông tin mình vừa nhập sai hoặc bổ sung lịch cho đơn chưa có.
+   */
+  /**
+   * Khách đã bước vào phòng khám là ca đã chạy: sửa lịch hay đổi dịch vụ lúc đó
+   * không còn khớp với việc thật ở quầy. Máy chủ cũng chặn y hệt, đây chỉ là lớp
+   * giao diện cho người dùng biết trước.
+   */
+  const suaDuoc = ["pending", "confirmed", "reminded"].includes(
+    order?.appointmentStatus ?? "",
+  );
+
+  const suaLichHen = useMutation({
+    mutationFn: async (v: { appointmentDate: string; appointmentTime: string }) => {
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/appointment`, v);
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateAll();
+      setSuaLichOpen(false);
+      toast({ title: "Đã cập nhật lịch hẹn" });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Không cập nhật được lịch hẹn",
+        description: (err as { message?: string })?.message ?? "Kiểm tra mạng rồi thử lại.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const updateNotes = useMutation({
     mutationFn: async (notes: string) => {
       const res = await apiRequest("PATCH", `/api/orders/${orderId}/notes`, { notes });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, notes) => {
       invalidateAll();
-      setEditingNote(false);
-      toast({ title: "Đã lưu ghi chú" });
+      // Gõ rỗng rồi Lưu là xóa ghi chú, báo "đã lưu" thì người dùng tưởng còn nguyên.
+      toast({ title: notes.trim() ? "Đã lưu ghi chú" : "Đã xóa ghi chú" });
     },
     onError: () => {
-      toast({ title: "Lỗi", description: "Không lưu được ghi chú", variant: "destructive" });
+      toast({
+        title: "Không lưu được ghi chú",
+        description: "Kiểm tra mạng rồi bấm Lưu lần nữa.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -311,16 +543,8 @@ export default function OrderDetail() {
       invalidateAll();
       setComplaintDialog({ open: false, cr: null, content: "" });
     },
-    onError: (err: any) => {
-      const msg =
-        err?.error === "ownership"
-          ? "Chỉ có thể khiếu nại hoa hồng của mình"
-          : err?.error === "window_expired"
-            ? "Đã quá hạn khiếu nại (3 ngày)"
-            : err?.error === "invalid_state"
-              ? "Khoản hoa hồng không ở trạng thái cho phép"
-              : "Không thể gửi khiếu nại";
-      toast({ title: "Lỗi", description: msg, variant: "destructive" });
+    onError: (err: unknown) => {
+      toast({ title: "Lỗi", description: loiKhieuNai(err), variant: "destructive" });
     },
   });
 
@@ -336,7 +560,7 @@ export default function OrderDetail() {
       setConfirmDialog({
         open: true,
         title: `Xác nhận: ${info?.label || btn.label}`,
-        description: `Bạn có chắc muốn chuyển trạng thái lịch hẹn sang "${info?.label}"? Thao tác này không thể hoàn tác.`,
+        description: `Chuyển trạng thái lịch hẹn sang "${info?.label}"? Không thể hoàn tác.`,
         action: () => {
           updateAppointmentStatus.mutate({ status: btn.targetStatus });
           setConfirmDialog((p) => ({ ...p, open: false }));
@@ -353,7 +577,7 @@ export default function OrderDetail() {
       setConfirmDialog({
         open: true,
         title: `Xác nhận: ${info?.label || btn.label}`,
-        description: `Bạn có chắc muốn chuyển trạng thái khám sang "${info?.label}"? Thao tác này không thể hoàn tác.`,
+        description: `Chuyển trạng thái khám sang "${info?.label}"? Không thể hoàn tác.`,
         action: () => {
           updateVisitStatus.mutate({ status: btn.targetStatus });
           setConfirmDialog((p) => ({ ...p, open: false }));
@@ -367,7 +591,7 @@ export default function OrderDetail() {
   if (isLoading || !order) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Đơn hàng" onBack={() => navigate("/orders")} />
+        <DetailHeader title="Đơn hàng" onBack={quayLai} />
         <div className="flex flex-1 items-center justify-center py-20">
           {isLoading ? (
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
@@ -383,6 +607,8 @@ export default function OrderDetail() {
   const visitStatus = order.visitStatus as VisitStatusCode | null;
   const appointmentButtons = APPOINTMENT_BUTTONS[appointmentStatus] || [];
   const visitButtons = visitStatus ? VISIT_BUTTONS[visitStatus] || [] : [];
+  // Nhóm khám bệnh có dòng nào không, để biết dòng nào là dòng cuối của cả hộp.
+  const soDongKhamBenh = visitStatus ? visitButtons.length : 0;
 
   const currentIndex = allOrders.findIndex((o) => o.id === orderId);
   const prevOrder = currentIndex > 0 ? allOrders[currentIndex - 1] : null;
@@ -390,19 +616,26 @@ export default function OrderDetail() {
   const matchedCustomer = allCustomers.find((c) => c.phone === order.phone);
   const ratePct = order.totalPrice > 0 ? ((order.commission / order.totalPrice) * 100).toFixed(1) : "0";
 
-  // Mock team — TODO: replace với API thực khi backend hỗ trợ multi-assignee
-  const orderTeam: { id: number; name: string; role: string }[] = [
-    ...(assignee ? [{ id: assignee.id, name: assignee.name, role: "Sale - Điều dưỡng" }] : []),
-    { id: -101, name: "Lê Thị Tuyết", role: "Điều dưỡng trưởng" },
-    { id: -102, name: "Nguyễn Đức Trần", role: "Bác sĩ" },
-  ];
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
       <DetailHeader
-        title={order.code}
+        // Nhãn trạng thái đứng cạnh mã đơn: liếc thanh đầu là biết đơn đang ở đâu,
+        // không phải cuộn xuống. Mã đơn co lại nhường chỗ chứ nhãn không bị bóp.
+        title={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 truncate">{order.code}</span>
+            <span className="flex-shrink-0">
+              <OrderStatusBadges
+                appointmentStatus={order.appointmentStatus}
+                visitStatus={order.visitStatus}
+                refundType={order.refundType}
+              />
+            </span>
+          </span>
+        }
         subtitle={`Tạo ${order.createdAt}`}
-        onBack={() => navigate("/orders")}
+        onBack={quayLai}
         trailing={
           <div className="flex items-center gap-1">
             <button
@@ -410,102 +643,88 @@ export default function OrderDetail() {
               onClick={() => prevOrder && navigate(`/orders/${prevOrder.id}`)}
               disabled={!prevOrder}
               aria-label="Đơn trước"
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-np-button bg-transparent hover:bg-np-surface-sub disabled:opacity-40"
+              className={DETAIL_HEADER_BTN}
             >
-              <ChevronLeft size={20} strokeWidth={2.25} className="text-np-ink" />
+              <ChevronLeft size={18} strokeWidth={2.25} className="text-np-ink" />
             </button>
             <button
               type="button"
               onClick={() => nextOrder && navigate(`/orders/${nextOrder.id}`)}
               disabled={!nextOrder}
               aria-label="Đơn sau"
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-np-button bg-transparent hover:bg-np-surface-sub disabled:opacity-40"
+              className={DETAIL_HEADER_BTN}
             >
-              <ChevronRight size={20} strokeWidth={2.25} className="text-np-ink" />
+              <ChevronRight size={18} strokeWidth={2.25} className="text-np-ink" />
             </button>
           </div>
         }
       />
 
-      <div className="bg-np-surface-sub">
-        {/* Status summary */}
-        <div className="px-4 py-4">
-          <div className="mb-2.5 flex items-baseline justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-                Tổng đơn
-              </div>
-              <div
-                className={
-                  "mt-0.5 text-[28px] font-extrabold leading-none tracking-[-0.8px] tabular-nums " +
-                  (order.refundType === "full"
-                    ? "text-np-text-muted line-through"
-                    : "text-np-ink")
-                }
-              >
-                {fmtVND(order.totalPrice)}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-np-text-muted">
-                Hoa hồng
-              </div>
-              <div className="mt-0.5 text-[18px] font-extrabold text-np-brand-ink tabular-nums">
-                +{fmtVND(order.commission)}
-              </div>
-            </div>
-          </div>
-          <OrderStatusBadges
-            appointmentStatus={order.appointmentStatus}
-            visitStatus={order.visitStatus}
-          />
-          {/* %cap intentionally hidden per task spec (B5-3 Section 2). */}
-        </div>
+      <div className="min-h-full flow-root bg-np-bg">
 
-        {/* Refund banner (B5-3 Section 2.10) */}
-        {order.refundType !== "none" && (
-          <div className="mx-4 mb-3 mt-1 rounded-np-card border border-np-danger-bg bg-np-danger-bg/30 p-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-extrabold uppercase tracking-[0.4px] text-np-danger">
-                {order.refundType === "full"
-                  ? "ĐÃ HOÀN TIỀN TOÀN PHẦN"
-                  : `Đã hoàn tiền ${fmtVND(order.refundAmount)}`}
-              </span>
-            </div>
-            {order.refundReason && (
-              <div className="mt-1 text-[12px] font-medium text-np-text-sub">
-                Lý do: {order.refundReason}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Phụ trách */}
-        {orderTeam.length > 0 && (
-          <>
-            <SectionTitle icon={UserCog}>Phụ trách</SectionTitle>
-            <Card className="overflow-hidden p-0">
-              {orderTeam.map((m, i) => (
-                <div
-                  key={m.id}
-                  className={
-                    "flex items-center gap-3 px-4 py-3" +
-                    (i === orderTeam.length - 1 ? "" : " border-b border-np-surface-pressed")
+        {/* Phụ trách: ba chỗ cố định, mỗi chỗ đúng một người, bấm vào để đổi.
+            Không in chức danh cạnh tên vì nhãn bên trái đã nói rõ vai trò trên ca
+            này rồi, thêm chức danh nữa là hai thông tin gần giống nhau chen chỗ. */}
+        <SectionTitle icon={UserCog}>Phụ trách</SectionTitle>
+        {/* Không overflow-hidden: bảng chọn là thẻ nổi thò ra ngoài đáy thẻ này. */}
+        <Card className="p-0">
+          {PHU_TRACH.map((o, i) => {
+            const id = idPhuTrach(o.cot);
+            const nguoi = id != null ? nhanSuTheoId.get(id) : undefined;
+            const dangMo = dangChonPhuTrach === o.cot;
+            return (
+              <div key={o.cot} className="relative">
+                <PhuTrachRow
+                  icon={o.icon}
+                  label={o.nhan}
+                  name={tenPhuTrach(id)}
+                  onOpen={
+                    suaPhuTrachDuoc
+                      ? () => setDangChonPhuTrach(dangMo ? null : o.cot)
+                      : undefined
                   }
-                >
-                  <Avatar name={m.name} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[14px] font-semibold text-np-ink">{m.name}</span>
-                    <span className="ml-1.5 text-[12px] text-np-text-muted">· {m.role}</span>
-                  </div>
-                </div>
-              ))}
-            </Card>
-          </>
-        )}
+                  onClear={
+                    suaPhuTrachDuoc && id != null
+                      ? () => suaPhuTrach.mutate({ [o.cot]: null })
+                      : undefined
+                  }
+                  last={i === PHU_TRACH.length - 1}
+                />
+                {/* Thẻ nổi mở ngay dưới đúng dòng vừa bấm, đè lên nội dung phía
+                    dưới thay vì đẩy trang dài ra: chọn một cái tên là việc nhỏ,
+                    không đáng để cả trang nhảy chỗ. */}
+                {dangMo && (
+                  <>
+                    {/* Bấm ra ngoài là đóng. Nền trong suốt nên không tối màn hình. */}
+                    <button
+                      type="button"
+                      aria-label="Đóng bảng chọn"
+                      onClick={() => setDangChonPhuTrach(null)}
+                      className="fixed inset-0 z-10 cursor-default"
+                    />
+                    <PersonPicker
+                      value={id}
+                      current={
+                        nguoi
+                          ? { id: nguoi.id, name: nguoi.name, roleLabel: ROLE_LABEL[nguoi.role] }
+                          : null
+                      }
+                      people={sapXepTheoVai(nhanSuChonDuoc, o.uuTien)}
+                      onSelect={(idMoi) => {
+                        suaPhuTrach.mutate({ [o.cot]: idMoi });
+                        setDangChonPhuTrach(null);
+                      }}
+                      className="absolute left-4 right-4 top-full z-20 -mt-1"
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </Card>
 
         {/* Khách hàng */}
-        <SectionTitle icon={User}>Khách hàng</SectionTitle>
+        <SectionTitle icon={ContactsProduct}>Khách hàng</SectionTitle>
         <Card className="overflow-hidden p-0">
           <Row
             leading={<Avatar name={order.patientName} size={44} />}
@@ -514,13 +733,36 @@ export default function OrderDetail() {
             trailing={matchedCustomer ? <Chev /> : undefined}
             onClick={matchedCustomer ? () => navigate(`/customers/${matchedCustomer.id}`) : undefined}
           />
-          <InfoRow icon={Phone} label="Số điện thoại" value={order.phone} />
-          {order.email && <InfoRow icon={Mail} label="Email" value={order.email} />}
           {order.examType && <InfoRow icon={MapPin} label="Hình thức" value={order.examType} last />}
+          {/* Gọi và nhắn ngay từ màn đơn, không phải nhảy sang màn khách. Số điện
+              thoại và email nằm trong hộp chi tiết nên không cần hai dòng riêng. */}
+          <div className="border-t border-np-surface-pressed px-4 py-3.5">
+            <ContactActions
+              phone={order.phone}
+              email={order.email}
+              customerId={matchedCustomer?.id}
+            />
+          </div>
         </Card>
 
         {/* Dịch vụ — multi-item với mark UI cho BS/KT/CEO */}
-        <SectionTitle icon={Stethoscope}>Dịch vụ ({order.items?.length ?? 1})</SectionTitle>
+        <SectionTitle
+          icon={MedicalServices}
+          action={
+            suaDuoc && suaPhuTrachDuoc ? (
+              <button
+                type="button"
+                aria-label="Sửa dịch vụ"
+                onClick={moSuaDichVu}
+                className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
+              >
+                <EditSquare size={18} fill="none" />
+              </button>
+            ) : undefined
+          }
+        >
+          Dịch vụ ({order.items?.length ?? 1})
+        </SectionTitle>
         <Card className="overflow-hidden p-0">
           {(order.items ?? []).map((item, i) => (
             <ItemRow
@@ -564,13 +806,24 @@ export default function OrderDetail() {
             <SectionTitle icon={Receipt}>Bảng kê hoa hồng</SectionTitle>
             <Card className="overflow-hidden p-0">
               {order.crs.map((cr, i) => (
-                <CRRow
+                <CommissionRow
                   key={cr.id}
-                  cr={cr}
+                  cr={{ ...cr, daKhieuNai: !!cr.complaint }}
                   currentUserId={currentUserId}
-                  canReject={canRejectCR}
-                  onReject={() => setRejectDialog({ open: true, cr, reason: "" })}
+                  showRole
+                  complaint={cr.complaint}
                   onComplaint={() => setComplaintDialog({ open: true, cr, content: "" })}
+                  actions={
+                    canRejectCR && cr.status === "CHO_DUYET" ? (
+                      <NPButton
+                        tone="dark"
+                        size="sm"
+                        onClick={() => setRejectDialog({ open: true, cr, reason: "" })}
+                      >
+                        Từ chối hoa hồng
+                      </NPButton>
+                    ) : undefined
+                  }
                   last={i === order.crs.length - 1}
                 />
               ))}
@@ -578,158 +831,102 @@ export default function OrderDetail() {
           </>
         )}
 
-        {/* Lịch hẹn — chỉ hiện khi có ngày hoặc giờ hẹn */}
-        {(order.appointmentDate || order.appointmentTime) && (
-          <>
-            <SectionTitle icon={Calendar}>Lịch hẹn</SectionTitle>
-            <Card className="overflow-hidden p-0">
-              {order.appointmentDate && (
-                <InfoRow
-                  icon={CalendarDays}
-                  label="Ngày hẹn"
-                  value={order.appointmentDate}
-                  last={!order.appointmentTime}
-                />
-              )}
-              {order.appointmentTime && (
-                <InfoRow icon={Clock} label="Giờ hẹn" value={order.appointmentTime} last />
-              )}
-            </Card>
-          </>
-        )}
-
-        {/* Lịch sử trạng thái */}
-        {statusLogs.length > 0 && (
-          <>
-            <SectionTitle icon={History}>Lịch sử trạng thái</SectionTitle>
-            <Card className="p-4">
-              <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[17px] before:top-2 before:w-px before:bg-np-border">
-                {statusLogs.map((log) => {
-                  const isAppt = log.tier === "appointment";
-                  const fromInfo = isAppt
-                    ? APPOINTMENT_STATUSES[log.fromStatus as AppointmentStatusCode]
-                    : VISIT_STATUSES[log.fromStatus as VisitStatusCode];
-                  const toInfo = isAppt
-                    ? APPOINTMENT_STATUSES[log.toStatus as AppointmentStatusCode]
-                    : VISIT_STATUSES[log.toStatus as VisitStatusCode];
-                  return (
-                    <div key={log.id} className="relative min-h-[36px] pl-10">
-                      <div className="absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-np-border bg-white text-np-text-sub">
-                        <RefreshCw size={14} strokeWidth={2.25} />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[12px] font-bold text-np-ink">
-                            {isAppt ? "Cập nhật lịch hẹn" : "Cập nhật khám"}
-                          </span>
-                          <span className="text-[11px] text-np-text-muted">{log.timestamp}</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {fromInfo && (
-                            <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.fromStatus)}>
-                              {fromInfo.label}
-                            </NPBadge>
-                          )}
-                          <span className="text-[10px] text-np-text-muted">→</span>
-                          {toInfo && (
-                            <NPBadge tone={getStatusTone(log.tier as "appointment" | "visit", log.toStatus)}>
-                              {toInfo.label}
-                            </NPBadge>
-                          )}
-                        </div>
-                        {log.note && (
-                          <p className="text-[13px] leading-relaxed text-np-text-sub">{log.note}</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          </>
-        )}
-
-        {/* Hóa đơn VAT */}
-        {(order.vatCompanyName || order.vatTaxCode) && (
-          <>
-            <SectionTitle icon={FileText}>Hóa đơn VAT</SectionTitle>
-            <Card className="space-y-2.5 p-4">
-              {order.vatCompanyName && <KeyVal label="Tên công ty" value={order.vatCompanyName} />}
-              {order.vatTaxCode && <KeyVal label="Mã số thuế" value={order.vatTaxCode} />}
-              {order.vatCompanyAddress && <KeyVal label="Địa chỉ" value={order.vatCompanyAddress} />}
-              {order.vatEmail && <KeyVal label="Email" value={order.vatEmail} valueClass="text-np-link" />}
-            </Card>
-          </>
-        )}
-
-        {/* Ghi chú — đọc + sửa + lưu */}
+        {/* Lịch hẹn: luôn hiện, kể cả đơn chưa có lịch. Trước đây khối này ẩn khi
+            trống nên đơn thiếu lịch không có chỗ nào để bổ sung. */}
         <SectionTitle
-          icon={StickyNote}
+          icon={Calendar}
           action={
-            !editingNote && order.notes ? (
+            suaDuoc ? (
               <button
                 type="button"
+                aria-label="Sửa lịch hẹn"
                 onClick={() => {
-                  setNoteDraft(order.notes ?? "");
-                  setEditingNote(true);
+                  setNgayMoi(toInputDate(order.appointmentDate));
+                  setGioMoi(order.appointmentTime ?? "");
+                  setSuaLichOpen(true);
                 }}
-                className="text-[12px] font-semibold text-np-link hover:underline"
+                className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
               >
-                Sửa
+                <EditSquare size={18} fill="none" />
               </button>
             ) : undefined
           }
         >
-          Ghi chú
+          Lịch hẹn
         </SectionTitle>
-        <Card className="p-4">
-          {editingNote ? (
-            <div className="space-y-3">
-              <Textarea
-                autoFocus
-                value={noteDraft}
-                onChange={(e) => setNoteDraft(e.target.value)}
-                placeholder="Nhập ghi chú cho đơn..."
-                className="h-24 resize-none"
+        <Card className="overflow-hidden p-0">
+          {order.appointmentDate || order.appointmentTime ? (
+            <>
+              <InfoRow
+                icon={CalendarDays}
+                label="Ngày hẹn"
+                value={order.appointmentDate || "Chưa có"}
+                last={false}
               />
-              <div className="flex items-center gap-2">
-                <NPButton
-                  size="sm"
-                  tone="primary"
-                  disabled={updateNotes.isPending || noteDraft.trim() === (order.notes ?? "").trim()}
-                  onClick={() => updateNotes.mutate(noteDraft.trim())}
-                >
-                  {updateNotes.isPending ? "Đang lưu..." : "Lưu"}
-                </NPButton>
-                <NPButton size="sm" tone="ghost" onClick={() => setEditingNote(false)}>
-                  Hủy
-                </NPButton>
-              </div>
-            </div>
-          ) : order.notes ? (
-            <p className="flex items-start gap-2 text-[13px] text-np-text-sub">
-              <FileText size={14} strokeWidth={2.25} className="mt-0.5 flex-shrink-0 text-np-text-muted" />
-              {order.notes}
-            </p>
-          ) : (
+              <InfoRow
+                icon={Clock}
+                label="Giờ hẹn"
+                value={order.appointmentTime || "Chưa có"}
+                last
+              />
+            </>
+          ) : suaDuoc ? (
             <button
               type="button"
               onClick={() => {
-                setNoteDraft("");
-                setEditingNote(true);
+                setNgayMoi("");
+                setGioMoi("");
+                setSuaLichOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-np-link hover:underline"
+              className="flex min-h-[52px] w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-np-surface-sub"
             >
-              <Plus size={15} strokeWidth={2.25} />
-              Thêm ghi chú
+              <PlusCircle size={19} strokeWidth={2.25} className="flex-shrink-0 text-np-text-muted" />
+              <span className="flex-1 text-[15px] font-semibold text-np-ink">Thêm lịch hẹn</span>
+              <Chev />
             </button>
+          ) : (
+            <div className="px-4 py-6 text-center text-[13px] text-np-text-muted">
+              Đơn này không có lịch hẹn
+            </div>
           )}
         </Card>
+
+        {/* Lịch sử đơn: gộp chuyển trạng thái với các thay đổi khác (lịch hẹn,
+            dịch vụ, người phụ trách, ghi chú). Máy chủ đã trộn, khử trùng và xếp
+            mới nhất trước, ở đây chỉ dịch sang câu tiếng Việt. */}
+        {nhatKy.length > 0 && (
+          <>
+            <SectionTitle icon={History}>Lịch sử đơn</SectionTitle>
+            <ActivityLog
+              entries={nhatKy.map((e) => {
+                const v = eventView(e, { trongDon: true });
+                return {
+                  id: e.id,
+                  at: e.createdAt,
+                  actor: e.actorName,
+                  action: v.action,
+                  detail: v.detail,
+                };
+              })}
+              preview={LOG_PREVIEW}
+              unitLabel="hoạt động"
+              moreTitle="Lịch sử đơn"
+            />
+          </>
+        )}
+
+        {/* Ghi chú đơn: dùng mẫu chung của app, xem tại chỗ và sửa trong hộp riêng. */}
+        <NoteSection
+          icon={StickyNote}
+          value={order.notes ?? ""}
+          placeholder="Yêu cầu riêng của khách, dặn dò khi thực hiện dịch vụ"
+          saving={updateNotes.isPending}
+          onSave={(note) => updateNotes.mutateAsync(note.trim())}
+        />
 
         {/* Spacer để content cuối không bị che bởi action bar absolute */}
         {(appointmentButtons.length > 0 || visitButtons.length > 0) && <div className="h-[88px]" />}
 
-        <div className="h-5" />
       </div>
 
       {/* Compact action bar — absolute pin trên TabBar, luôn visible */}
@@ -794,6 +991,150 @@ export default function OrderDetail() {
       </AlertDialog>
 
       {/* Reschedule dialog */}
+      {/* Sửa lịch hẹn tại chỗ. Bọc nút trong div vì SheetContent giấu mọi <button>
+          là con trực tiếp (luật dành cho nút đóng mặc định). */}
+      <Sheet open={suaLichOpen} onOpenChange={setSuaLichOpen}>
+        <SheetContent
+          side="bottom"
+          className="mx-auto max-w-[390px] rounded-t-np-sheet border-0 p-5 pt-3 [&>button]:hidden"
+        >
+          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-np-surface-pressed" />
+          <SheetTitle className="mb-4 text-[16px] font-bold text-np-ink">
+            {order.appointmentDate || order.appointmentTime ? "Sửa lịch hẹn" : "Thêm lịch hẹn"}
+          </SheetTitle>
+
+          <DateTimeField
+            date={ngayMoi}
+            onDateChange={setNgayMoi}
+            time={gioMoi}
+            onTimeChange={setGioMoi}
+            timeAs="inline"
+            min={new Date().toISOString().split("T")[0]}
+          />
+
+          <div className="mt-5">
+            <NPButton
+              tone="primary"
+              size="lg"
+              disabled={!ngayMoi || !gioMoi || suaLichHen.isPending}
+              onClick={() =>
+                suaLichHen.mutate({
+                  appointmentDate: ngayMoi.split("-").reverse().join("/"),
+                  appointmentTime: gioMoi,
+                })
+              }
+              className="w-full justify-center"
+            >
+              {suaLichHen.isPending ? "Đang lưu..." : "Lưu lịch hẹn"}
+            </NPButton>
+            <button
+              type="button"
+              onClick={() => setSuaLichOpen(false)}
+              className="mt-2 h-10 w-full text-[14px] font-bold text-np-text-sub"
+            >
+              Hủy
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Sửa dịch vụ. Hộp cao cố định 85% màn hình vì danh sách dài ngắn tùy đơn,
+          để hộp co giãn theo nội dung thì nút Lưu nhảy chỗ mỗi lần thêm bớt. */}
+      <Sheet open={suaDvOpen} onOpenChange={setSuaDvOpen}>
+        <SheetContent
+          side="bottom"
+          className="mx-auto flex h-[85vh] max-w-[390px] flex-col gap-0 rounded-t-np-sheet border-0 p-0 [&>button]:hidden"
+        >
+          <div className="np-divider px-4 pb-3 pt-3">
+            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-np-surface-pressed" />
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                aria-label="Đóng"
+                onClick={() => setSuaDvOpen(false)}
+                className={DETAIL_HEADER_BTN}
+              >
+                <X size={17} strokeWidth={2.25} />
+              </button>
+              <SheetTitle className="text-[16px] font-bold text-np-ink">Sửa dịch vụ</SheetTitle>
+              <div className="h-9 w-9 flex-shrink-0" />
+            </div>
+          </div>
+
+          <div className="scrollbar-hide flex-1 space-y-3 overflow-y-auto p-4">
+            <ServiceLines
+              lines={dongNhap}
+              onChangeQuantity={(dong, delta) =>
+                setDongNhap((truoc) =>
+                  truoc.map((x) =>
+                    x.service.id === dong.service.id && x.packageIdx === dong.packageIdx
+                      ? { ...x, quantity: Math.max(1, x.quantity + delta) }
+                      : x,
+                  ),
+                )
+              }
+              onRemove={(dong) =>
+                setDongNhap((truoc) =>
+                  truoc.filter(
+                    (x) => !(x.service.id === dong.service.id && x.packageIdx === dong.packageIdx),
+                  ),
+                )
+              }
+            />
+
+            <button
+              type="button"
+              onClick={() => setChonDvOpen(true)}
+              className="flex min-h-[52px] w-full items-center gap-3 rounded-np-card border border-dashed border-np-border-strong px-4 py-3 text-left transition-colors active:bg-np-surface-sub"
+            >
+              <PlusCircle size={19} strokeWidth={2.25} className="flex-shrink-0 text-np-text-muted" />
+              <span className="flex-1 text-[15px] font-semibold text-np-ink">Thêm dịch vụ</span>
+              <Chev />
+            </button>
+
+            {dongNhap.length === 0 && (
+              <p className="px-1 text-[13px] text-np-text-muted">
+                Đơn phải có ít nhất một dịch vụ.
+              </p>
+            )}
+
+            {/* Nói trước hậu quả ngay trong hộp, không đợi lưu xong mới báo: đổi
+                dịch vụ là đổi tiền, hoa hồng đã duyệt của đơn sẽ bị tính lại. */}
+            <p className="px-1 text-[13px] leading-[1.5] text-np-text-muted">
+              Lưu thay đổi sẽ tính lại bảng kê hoa hồng của đơn và đưa về chờ duyệt.
+            </p>
+          </div>
+
+          <div className="np-divider-top flex-shrink-0 border-t border-np-border bg-white p-4">
+            <div className="mb-3 flex items-baseline justify-between">
+              <span className="text-[14px] font-medium text-np-text-sub">Tạm tính</span>
+              <span className="text-[17px] font-extrabold tabular-nums text-np-ink">
+                {fmtVND(tongNhap)}
+              </span>
+            </div>
+            <NPButton
+              tone="primary"
+              size="lg"
+              disabled={dongNhap.length === 0 || suaDichVu.isPending}
+              onClick={() => suaDichVu.mutate(dongNhap)}
+              className="w-full justify-center"
+            >
+              {suaDichVu.isPending ? "Đang lưu..." : "Lưu dịch vụ"}
+            </NPButton>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <ServicePickerSheet
+        open={chonDvOpen}
+        onOpenChange={setChonDvOpen}
+        services={dsDichVu}
+        isPackageSelected={(serviceId, pkgIdx) =>
+          dongNhap.some((x) => x.service.id === serviceId && x.packageIdx === pkgIdx)
+        }
+        onSelectPackage={chonGoi}
+      />
+
       <Dialog open={rescheduleDialog} onOpenChange={setRescheduleDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -801,41 +1142,16 @@ export default function OrderDetail() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-[13px] text-np-text-sub">
-              Chọn ngày và giờ mới. Đơn hiện tại sẽ được đánh dấu "Dời lịch" và một đơn mới sẽ được tạo với trạng thái "Đã xác nhận".
+              Chọn ngày giờ mới. Đơn hiện tại chuyển "Dời lịch", tạo đơn mới ở trạng thái "Đã xác nhận".
             </p>
-            <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">Ngày hẹn mới</label>
-              <Input
-                type="date"
-                value={newDate}
-                onChange={(e) => {
-                  setNewDate(e.target.value);
-                  setNewTime("");
-                }}
-                min={new Date().toISOString().split("T")[0]}
-              />
-            </div>
-            {newDate && (
-              <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">Giờ hẹn mới</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {TIME_SLOTS.map((time) => (
-                    <button
-                      key={time}
-                      type="button"
-                      onClick={() => setNewTime(time)}
-                      className={`h-8 rounded-np-button border text-[12px] font-medium transition-all ${
-                        newTime === time
-                          ? "border-np-brand-ink bg-np-brand-ink text-white"
-                          : "border-np-border-strong bg-np-surface-sub text-np-ink hover:border-np-brand-ink hover:text-np-brand-ink"
-                      }`}
-                    >
-                      {time}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <DateTimeField
+              date={newDate}
+              onDateChange={setNewDate}
+              time={newTime}
+              onTimeChange={setNewTime}
+              timeAs="inline"
+              min={new Date().toISOString().split("T")[0]}
+            />
           </div>
           <DialogFooter>
             <NPButton tone="ghost" onClick={() => setRescheduleDialog(false)}>
@@ -869,71 +1185,66 @@ export default function OrderDetail() {
               Hành động
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-2 px-4 pb-6">
-            {appointmentButtons.length > 0 && (
-              <>
-                <div className="px-1 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
-                  Lịch hẹn
-                </div>
-                {appointmentButtons.map((btn) => {
-                  const Icon = BUTTON_ICONS[btn.icon];
-                  return (
-                    <NPButton
-                      key={`sheet-appt-${btn.targetStatus}`}
-                      size="md"
-                      tone={
-                        btn.variant === "destructive"
-                          ? "dark"
-                          : btn.variant === "outline"
-                          ? "ghost"
-                          : "primary"
-                      }
-                      icon={Icon}
-                      className="w-full justify-start"
-                      onClick={() => {
-                        setActionsSheetOpen(false);
-                        handleAppointmentAction(btn);
-                      }}
-                      disabled={updateAppointmentStatus.isPending}
-                    >
-                      {btn.label}
-                    </NPButton>
-                  );
-                })}
-              </>
-            )}
-            {visitStatus && visitButtons.length > 0 && (
-              <>
-                <div className="px-1 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
-                  Khám bệnh
-                </div>
-                {visitButtons.map((btn) => {
-                  const Icon = BUTTON_ICONS[btn.icon];
-                  return (
-                    <NPButton
-                      key={`sheet-visit-${btn.targetStatus}`}
-                      size="md"
-                      tone={
-                        btn.variant === "destructive"
-                          ? "dark"
-                          : btn.variant === "outline"
-                          ? "ghost"
-                          : "primary"
-                      }
-                      icon={Icon}
-                      className="w-full justify-start"
-                      onClick={() => {
-                        setActionsSheetOpen(false);
-                        handleVisitAction(btn);
-                      }}
-                      disabled={updateVisitStatus.isPending}
-                    >
-                      {btn.label}
-                    </NPButton>
-                  );
-                })}
-              </>
-            )}
+          {/* Chỉ chữ và icon, không khối màu: hộp này là danh sách việc chọn một,
+              tô nền cho từng dòng thành ra mỗi dòng đều đòi được bấm trước.
+              Việc không lùi lại được thì để chữ đỏ thay vì nền đen. */}
+          <div className="pb-6">
+            {appointmentButtons.map((btn, i) => {
+              const Icon = BUTTON_ICONS[btn.icon];
+              const nangNe = btn.variant === "destructive";
+              return (
+                <button
+                  key={`sheet-appt-${btn.targetStatus}`}
+                  type="button"
+                  onClick={() => {
+                    setActionsSheetOpen(false);
+                    handleAppointmentAction(btn);
+                  }}
+                  disabled={updateAppointmentStatus.isPending}
+                  className={cn(
+                    "flex min-h-[54px] w-full items-center gap-3 px-5 text-[15px] font-semibold transition-colors active:bg-np-surface-sub disabled:opacity-50",
+                    // Không kẻ vạch dưới dòng cuối cùng của cả hộp.
+                    !(i === appointmentButtons.length - 1 && !soDongKhamBenh) && "np-divider",
+                    nangNe ? "text-np-danger" : "text-np-ink",
+                  )}
+                >
+                  <Icon
+                    size={20}
+                    strokeWidth={2.25}
+                    className={cn("flex-shrink-0", nangNe ? "text-np-danger" : "text-np-text-sub")}
+                  />
+                  {btn.label}
+                </button>
+              );
+            })}
+            {visitStatus &&
+              visitButtons.map((btn, i) => {
+                const Icon = BUTTON_ICONS[btn.icon];
+                const nangNe = btn.variant === "destructive";
+                return (
+                  <button
+                    key={`sheet-visit-${btn.targetStatus}`}
+                    type="button"
+                    onClick={() => {
+                      setActionsSheetOpen(false);
+                      handleVisitAction(btn);
+                    }}
+                    disabled={updateVisitStatus.isPending}
+                    className={cn(
+                      "flex min-h-[54px] w-full items-center gap-3 px-5 text-[15px] font-semibold transition-colors active:bg-np-surface-sub disabled:opacity-50",
+                      i !== visitButtons.length - 1 && "np-divider",
+                      nangNe ? "text-np-danger" : "text-np-ink",
+                    )}
+                  >
+                    <Icon
+                      size={20}
+                      strokeWidth={2.25}
+                      className={cn("flex-shrink-0", nangNe ? "text-np-danger" : "text-np-text-sub")}
+                    />
+                    {btn.label}
+                  </button>
+                );
+              })}
           </div>
         </SheetContent>
       </Sheet>
@@ -960,13 +1271,13 @@ export default function OrderDetail() {
                 Lý do từ chối
               </label>
               <Textarea
-                placeholder="VD: Số đơn không khớp với số liệu hệ thống..."
+                placeholder="Ví dụ: Số đơn không khớp với số liệu hệ thống..."
                 value={rejectDialog.reason}
                 onChange={(e) => setRejectDialog((p) => ({ ...p, reason: e.target.value }))}
               />
             </div>
             <p className="text-[11px] leading-relaxed text-np-text-muted">
-              Nhân viên sẽ được phép khiếu nại trong vòng 3 ngày sau khi bị từ chối.
+              Nhân viên có thể khiếu nại trong 3 ngày sau khi bị từ chối.
             </p>
           </div>
           <DialogFooter>
@@ -987,56 +1298,21 @@ export default function OrderDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Khiếu nại dialog (NV/BS owner only, 3-day window) */}
-      <Dialog
+      <ComplaintSheet
         open={complaintDialog.open}
         onOpenChange={(open) => setComplaintDialog((p) => ({ ...p, open }))}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Khiếu nại hoa hồng</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {complaintDialog.cr && complaintDialog.cr.rejectedReason && (
-              <div className="rounded-np-button border border-np-border bg-np-surface-sub p-3 text-[12px] text-np-text-sub">
-                <div className="font-bold text-np-text-sub">Lý do từ chối:</div>
-                <div className="mt-0.5 text-np-ink">{complaintDialog.cr.rejectedReason}</div>
-              </div>
-            )}
-            <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-np-text-sub">
-                Nội dung khiếu nại
-              </label>
-              <Textarea
-                placeholder="Trình bày lý do khiếu nại để kế toán xem lại..."
-                value={complaintDialog.content}
-                onChange={(e) => setComplaintDialog((p) => ({ ...p, content: e.target.value }))}
-              />
-            </div>
-            <p className="text-[11px] leading-relaxed text-np-text-muted">
-              Khiếu nại trong vòng 3 ngày sau khi hoa hồng bị từ chối. Kế toán sẽ xem lại trong 1-2 ngày.
-            </p>
-          </div>
-          <DialogFooter>
-            <NPButton tone="ghost" onClick={() => setComplaintDialog({ open: false, cr: null, content: "" })}>
-              Hủy
-            </NPButton>
-            <NPButton
-              tone="primary"
-              disabled={!complaintDialog.content || complaintDialog.content.length < 2 || complaintMutation.isPending}
-              onClick={() =>
-                complaintDialog.cr &&
-                complaintMutation.mutate({
-                  crId: complaintDialog.cr.id,
-                  content: complaintDialog.content,
-                })
-              }
-            >
-              {complaintMutation.isPending ? "Đang gửi..." : "Gửi khiếu nại"}
-            </NPButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        cr={complaintDialog.cr}
+        content={complaintDialog.content}
+        onContentChange={(v) => setComplaintDialog((p) => ({ ...p, content: v }))}
+        saving={complaintMutation.isPending}
+        onSubmit={() =>
+          complaintDialog.cr &&
+          complaintMutation.mutate({
+            crId: complaintDialog.cr.id,
+            content: complaintDialog.content,
+          })
+        }
+      />
     </Screen>
   );
 }
@@ -1056,7 +1332,7 @@ function ItemRow({
   return (
     <div
       className={
-        "px-4 py-3.5" + (last ? "" : " border-b border-np-surface-pressed")
+        "px-4 py-3.5" + (last ? "" : " np-divider")
       }
     >
       <div className="flex items-start justify-between gap-2.5">
@@ -1082,81 +1358,106 @@ function ItemRow({
   );
 }
 
-function CRRow({
-  cr,
-  currentUserId,
-  canReject,
-  onReject,
-  onComplaint,
+
+/**
+ * Một dòng phụ trách: nhãn vai bên trái, người được gán bên phải.
+ *
+ * Bố cục nhãn-trái/người-phải chứ không phải danh sách người xếp dọc: ba chỗ này
+ * là ba câu hỏi cố định (ai chỉ định, ai làm, ai tư vấn), nhìn cột nhãn bên trái
+ * là biết ngay chỗ nào còn trống, thứ mà một danh sách tên thuần không nói được.
+ */
+/**
+ * Một dòng phụ trách: nhãn vai bên trái, người được gán bên phải.
+ *
+ * Bố cục nhãn-trái/người-phải chứ không phải danh sách người xếp dọc: ba chỗ này
+ * là ba câu hỏi cố định (ai chỉ định, ai làm, ai tư vấn), nhìn cột nhãn bên trái
+ * là biết ngay chỗ nào còn trống, thứ mà một danh sách tên thuần không nói được.
+ *
+ * Người đã gán hiện thành CHIP xám có dấu X: bỏ ra là việc một chạm ngay tại dòng,
+ * không phải mở bảng chọn rồi mới tìm chỗ gỡ.
+ */
+function PhuTrachRow({
+  icon: Icon,
+  label,
+  name,
+  onOpen,
+  onClear,
   last,
 }: {
-  cr: APICommissionRecord;
-  currentUserId: number;
-  canReject: boolean;
-  onReject: () => void;
-  onComplaint: () => void;
+  icon: LucideIcon;
+  label: string;
+  name: string | null;
+  /** Bỏ trống thì dòng chỉ để xem, dùng cho vai không có quyền sửa đơn. */
+  onOpen?: () => void;
+  onClear?: () => void;
   last?: boolean;
 }) {
-  const isOwner = cr.userId === currentUserId;
-  const showKhieuNai = isOwner && cr.status === "TU_CHOI";
-  const eligible = canKhieuNai({ status: cr.status, rejectedAt: cr.rejectedAt });
-  const hoursLeft = hoursRemainingKhieuNai(cr.rejectedAt);
-  const showReject = canReject && cr.status === "CHO_DUYET";
-
-  const statusTone =
-    cr.status === "DUOC_DUYET"
-      ? "success"
-      : cr.status === "TU_CHOI"
-        ? "critical"
-        : cr.status === "KHIEU_NAI"
-          ? "attention"
-          : "neutral";
-
   return (
     <div
-      className={
-        "px-4 py-3.5" + (last ? "" : " border-b border-np-surface-pressed")
-      }
+      className={cn(
+        "flex min-h-[56px] w-full items-center gap-3 px-4 py-2",
+        !last && "np-divider",
+      )}
     >
-      <div className="flex items-start justify-between gap-2.5">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[14px] font-bold text-np-ink">
-              {ROLE_LABEL[cr.role as UserRole]}
-            </span>
-            <NPBadge tone={statusTone as any}>{CR_STATUS_LABEL[cr.status]}</NPBadge>
-          </div>
-          {cr.status === "TU_CHOI" && cr.rejectedReason && (
-            <div className="mt-1 text-[11px] text-np-text-sub">
-              Lý do: {cr.rejectedReason}
-            </div>
-          )}
-        </div>
-        <div className="flex-shrink-0 text-[14px] font-extrabold text-np-brand-ink tabular-nums">
-          {fmtVND(cr.amount)}
-        </div>
-      </div>
+      <Icon size={18} fill="none" className="flex-shrink-0 text-np-text-muted" />
+      {/* Nhãn không co: tên dài mà bóp nhãn xuống hai dòng thì dòng phình cao,
+          ba dòng lệch nhịp nhau. Phần bị cắt bớt phải là tên, không phải nhãn. */}
+      <span className="flex-shrink-0 text-[14px] text-np-text-sub">{label}</span>
 
-      {/* Actions */}
-      <div className="mt-2 flex flex-wrap gap-2">
-        {showReject && (
-          <NPButton tone="dark" size="sm" onClick={onReject}>
-            Từ chối hoa hồng
-          </NPButton>
-        )}
-        {showKhieuNai &&
-          (eligible ? (
-            <NPButton tone="primary" size="sm" onClick={onComplaint}>
-              Khiếu nại hoa hồng (Còn {hoursLeft}h)
-            </NPButton>
-          ) : (
-            <NPButton tone="ghost" size="sm" disabled>
-              Quá hạn khiếu nại (3 ngày)
-            </NPButton>
-          ))}
-      </div>
+      {name ? (
+        <div className="flex min-w-0 flex-1 justify-end">
+          <div className="flex min-w-0 items-center gap-1 rounded-np-button bg-np-surface-sub py-1 pl-1 pr-1">
+            <button
+              type="button"
+              onClick={onOpen}
+              disabled={!onOpen}
+              className="flex min-w-0 items-center gap-2 pr-1 text-left"
+            >
+              <Avatar name={name} size={24} className="flex-shrink-0" />
+              <span className="truncate text-[14px] font-semibold text-np-ink">{name}</span>
+            </button>
+            {onClear && (
+              <button
+                type="button"
+                aria-label={`Bỏ ${name}`}
+                onClick={onClear}
+                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-np-text-muted transition-colors active:bg-np-surface-pressed"
+              >
+                <X size={14} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpen}
+          disabled={!onOpen}
+          // Vòng tròn nét đứt: chỗ trống trông ra "còn thiếu người" chứ không phải
+          // "mục này không có nội dung".
+          className="flex flex-1 items-center justify-end gap-2"
+        >
+          <span className="flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full border border-dashed border-np-border-strong">
+            <PlusCircle size={13} className="text-np-text-muted" />
+          </span>
+          <span className="text-[14px] text-np-text-muted">Chọn người</span>
+        </button>
+      )}
     </div>
   );
+}
+
+/**
+ * Xếp người hợp vai lên đầu hộp chọn, phần còn lại giữ nguyên thứ tự.
+ *
+ * Chỉ sắp lại chứ không lọc bỏ: chọn bác sĩ thì thấy bác sĩ trước, nhưng ca nào
+ * điều dưỡng làm thay thì vẫn chọn được, không phải đi sửa code.
+ */
+function sapXepTheoVai(ds: StaffOption[], uuTien: UserRole): PickablePerson[] {
+  const diem = (n: StaffOption) => (n.role === uuTien ? 0 : 1);
+  return [...ds]
+    .sort((a, b) => diem(a) - diem(b))
+    .map((n) => ({ id: n.id, name: n.name, roleLabel: ROLE_LABEL[n.role] ?? n.role }));
 }
 
 function InfoRow({
@@ -1173,14 +1474,14 @@ function InfoRow({
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 ${
-        last ? "" : "border-b border-np-surface-pressed"
+        last ? "" : "np-divider"
       }`}
     >
       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-np-surface-sub">
         <Icon size={15} strokeWidth={2.25} className="text-np-text-sub" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-np-text-muted">
+        <div className="text-[11px] font-semibold text-np-text-muted">
           {label}
         </div>
         <div className="mt-0.5 truncate text-[14px] font-semibold text-np-ink">{value || "-"}</div>

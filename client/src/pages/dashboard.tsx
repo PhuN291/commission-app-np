@@ -8,6 +8,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import monogram from "@assets/np-monogram.png";
 import { useLocation } from "wouter";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
@@ -15,16 +16,18 @@ import {
   Calendar,
   ClipboardList,
   Clock,
+  EditorChoice,
   Gift,
   Info,
   Medal,
   TrendingDown,
+  ChevronRight,
   TrendingUp,
-  Trophy,
   Users,
-} from "lucide-react";
+} from "@/components/np/icon";
 import {
   Badge,
+  type BadgeTone,
   Card,
   Chev,
   IconTile,
@@ -40,6 +43,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ROLE_LABEL, type UserRole } from "@shared/types";
 import metricRevenueIcon from "@/assets/icons/metric-revenue.svg";
 import metricCustomersClosedIcon from "@/assets/icons/metric-customers-closed.svg";
 
@@ -128,8 +132,8 @@ function getRank(revenue: number) {
 
 function fmtShort(n: number) {
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + " tỷ";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + " tr";
-  if (n >= 1_000) return Math.round(n / 1_000) + "k";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + " triệu";
+  if (n >= 1_000) return Math.round(n / 1_000) + " nghìn";
   return String(n);
 }
 
@@ -167,7 +171,7 @@ export default function Dashboard() {
         <div className="flex h-full items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
-            <p className="text-np-sub text-np-text-muted">Đang tải dữ liệu...</p>
+            <p className="text-np-sub text-np-text-muted">Đang tải...</p>
           </div>
         </div>
       </Screen>
@@ -215,11 +219,12 @@ function PersonalView({
           amount={hero.commission}
           showInfoPopover
           trendPct={hero.commissionTrendPct}
+          onXemChiTiet={() => navigate("/income")}
         />
       </div>
 
       {/* Quick metrics */}
-      <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
+      <div className="grid grid-cols-2 gap-2.5 pt-3">
         <MetricCard
           label="Doanh số"
           value={fmtShort(kpis.revenue)}
@@ -232,8 +237,8 @@ function PersonalView({
           icon={metricRevenueIcon}
         />
         <MetricCard
-          label="Đơn chốt"
-          value={`${kpis.closedDeals} đơn`}
+          label="Đã chốt"
+          value={`${kpis.closedDeals}`}
           delta={null}
           icon={metricCustomersClosedIcon}
         />
@@ -263,7 +268,7 @@ function PersonalView({
             className="flex flex-shrink-0 items-center justify-center rounded-[14px]"
             style={{ width: 52, height: 52, background: rank.bg }}
           >
-            <Trophy size={26} strokeWidth={2.2} style={{ color: rank.color }} />
+            <EditorChoice size={26} strokeWidth={2.2} style={{ color: rank.color }} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex items-baseline gap-2">
@@ -292,7 +297,6 @@ function PersonalView({
         </div>
       </Card>
 
-      <div className="h-5" />
     </Screen>
   );
 }
@@ -315,26 +319,24 @@ function AdminView({
   const { user, hero, kpis, pendingTasks, leaderboard } = data;
   const firstName = user.name.split(" ").slice(-1)[0];
   const top3 = [...leaderboard].sort((a, b) => a.rank - b.rank).slice(0, 3);
-  const roleLabel = user.role === "ceo" ? "CEO" : "Kế toán";
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName} · ${roleLabel}`} />
+      <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName}`} />
 
       {/* Hero — Tổng HH chi PK tháng */}
       <div className="px-4 pb-2">
         <HeroCard
           label={hero.label}
           amount={hero.clinicCommission}
-          subtitle={`${kpis.activeStaffCount} nhân viên đang làm · Doanh thu ${fmtShort(hero.clinicRevenue)}₫`}
           variant="admin"
         />
       </div>
 
       {/* Quick metrics — PK aggregate */}
-      <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
+      <div className="grid grid-cols-2 gap-2.5 pt-3">
         <MetricCard
-          label="Doanh số PK"
+          label="Doanh số"
           value={fmtShort(kpis.totalRevenue)}
           delta={`${kpis.activeStaffCount} nhân viên`}
           tone="success"
@@ -343,7 +345,7 @@ function AdminView({
         <MetricCard
           label="Đơn"
           value={`${kpis.closedDeals}/${kpis.totalDeals}`}
-          delta="Đã chốt trên tổng đơn"
+          delta="Đã chốt"
           icon={metricCustomersClosedIcon}
         />
       </div>
@@ -360,7 +362,7 @@ function AdminView({
           </button>
         }
       >
-        Cần xử lý PK ({pendingTasks.total})
+        Cần xử lý phòng khám ({pendingTasks.total})
       </SectionTitle>
       <PendingTasksCard tasks={pendingTasks} role={data.user.role} navigate={navigate} />
 
@@ -383,7 +385,7 @@ function AdminView({
           <div className="px-5 py-8 text-center">
             <Users size={28} className="mx-auto text-np-border-strong" />
             <div className="mt-2 text-[12px] font-medium text-np-text-muted">
-              Chưa có dữ liệu xếp hạng
+              Chưa có xếp hạng
             </div>
           </div>
         ) : (
@@ -392,7 +394,7 @@ function AdminView({
               key={p.id}
               className={
                 "flex items-center gap-3 px-4 py-3" +
-                (i === top3.length - 1 ? "" : " border-b border-np-surface-pressed")
+                (i === top3.length - 1 ? "" : " np-divider")
               }
             >
               <Medal
@@ -410,7 +412,9 @@ function AdminView({
               />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] font-bold text-np-ink">{p.name}</div>
-                <div className="truncate text-[11px] text-np-text-muted">{p.role}</div>
+                <div className="truncate text-[11px] text-np-text-muted">
+                  {ROLE_LABEL[p.role as UserRole] ?? p.role}
+                </div>
               </div>
               <div className="flex-shrink-0 text-right">
                 <div className="text-[13px] font-bold text-np-ink tabular-nums">
@@ -425,7 +429,6 @@ function AdminView({
         )}
       </Card>
 
-      <div className="h-5" />
     </Screen>
   );
 }
@@ -441,6 +444,7 @@ function HeroCard({
   showInfoPopover = false,
   variant = "personal",
   trendPct = null,
+  onXemChiTiet,
 }: {
   label: string;
   amount: number;
@@ -448,6 +452,8 @@ function HeroCard({
   showInfoPopover?: boolean;
   variant?: "personal" | "admin";
   trendPct?: number | null;
+  /** Mở nơi liệt kê từng khoản. Con số ở đây là tổng nên không thao tác được gì. */
+  onXemChiTiet?: () => void;
 }) {
   return (
     <div
@@ -459,10 +465,18 @@ function HeroCard({
             : "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)",
       }}
     >
-      <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
+      {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
+          mép phải và mép trên nên chỉ thấy một phần, đủ nhận ra mà không giành chỗ
+          của con số. aria-hidden vì đây là hoa văn, không phải thông tin. */}
+      <img
+        src={monogram}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-2 top-2 h-[104px] w-auto select-none opacity-[0.24]"
+      />
       <div className="relative flex items-start justify-between">
         <div className="flex items-center gap-1.5">
-          <div className="text-[11px] font-bold uppercase tracking-[1.2px] text-white/85">
+          <div className="text-[11px] font-bold text-white/85">
             {label}
           </div>
           {showInfoPopover && (
@@ -481,24 +495,15 @@ function HeroCard({
                 sideOffset={8}
                 className="w-[280px] rounded-np-card border border-np-border p-0 text-np-ink"
               >
-                <div className="border-b border-np-surface-pressed px-4 pb-3 pt-4">
+                <div className="np-divider px-4 pb-3 pt-4">
                   <p className="text-[14px] font-bold text-np-ink">Cách tính hoa hồng</p>
                   <p className="mt-0.5 text-[12px] text-np-text-muted">
-                    Hoa hồng tạm tính theo doanh thu trong kỳ
+                    Hoa hồng dự tính của tháng này
                   </p>
                 </div>
-                <div className="space-y-3 px-4 py-3">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-                      Công thức
-                    </p>
-                    <p className="mt-1 text-[13px] font-semibold text-np-ink">
-                      Doanh thu × Tỉ lệ hoa hồng
-                    </p>
-                  </div>
-                  <div className="border-t border-np-surface-pressed pt-3 text-[11px] leading-relaxed text-np-text-muted">
-                    Hoa hồng hiển thị là <span className="font-bold text-np-ink">tạm tính</span>
-                    , sẽ chốt khi đơn chuyển trạng thái "Hoàn tất" và được duyệt chi trả cuối kỳ.
+                <div className="px-4 py-3">
+                  <div className="text-[11px] leading-relaxed text-np-text-muted">
+                    Tạm tính theo doanh số và tỷ lệ hoa hồng. Chốt sau khi hoàn tất và được duyệt.
                   </div>
                 </div>
               </PopoverContent>
@@ -526,6 +531,18 @@ function HeroCard({
       {subtitle && (
         <div className="mt-2.5 text-[12px] font-medium text-white/75">{subtitle}</div>
       )}
+      {/* Con số này là TỔNG của nhiều khoản nên không khiếu nại hay thao tác gì
+          tại chỗ được. Dẫn sang nơi liệt kê từng khoản, ở đó mới có nút. */}
+      {onXemChiTiet && (
+        <button
+          type="button"
+          onClick={onXemChiTiet}
+          className="relative mt-3 inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-bold text-white transition-colors active:bg-white/25"
+        >
+          Xem từng khoản
+          <ChevronRight size={14} strokeWidth={2.5} />
+        </button>
+      )}
     </div>
   );
 }
@@ -546,8 +563,6 @@ function PendingTasksCard({
     count: number;
     icon: typeof ClipboardList;
     onClick: () => void;
-    phase2: string | null;
-    urgent?: boolean;
   };
   const items: Item[] = [
     {
@@ -557,7 +572,6 @@ function PendingTasksCard({
       count: tasks.pendingOrders,
       icon: ClipboardList,
       onClick: () => navigate("/orders?status=pending"),
-      phase2: null,
     },
   ];
   // Late 15 chỉ task vận hành — Sale + TC (R-9-1). BS/KT/CEO không cần.
@@ -569,17 +583,15 @@ function PendingTasksCard({
       count: tasks.customersLate15min,
       icon: Clock,
       onClick: () => navigate("/orders?filter=late"),
-      phase2: null,
     });
   }
   items.push({
     key: "recall",
-    label: "Khách đến ngày tái khám",
+    label: "Đến hạn tái khám",
     subtitle: "Trong 7 ngày tới",
     count: tasks.customersRecallDue,
     icon: Calendar,
     onClick: () => navigate("/recalls"),
-    phase2: null,
   });
 
   return (
@@ -593,16 +605,6 @@ function PendingTasksCard({
               <span>
                 <span className="font-bold text-np-ink">{it.count}</span> {it.label.toLowerCase()}
               </span>
-              {it.phase2 && (
-                <span className="rounded-np-badge bg-np-surface-pressed px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.4px] text-np-text-muted">
-                  {it.phase2}
-                </span>
-              )}
-              {("urgent" in it && it.urgent && it.count > 0) ? (
-                <span className="rounded-np-badge bg-np-danger-bg px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.4px] text-np-danger">
-                  Gấp
-                </span>
-              ) : null}
             </span>
           }
           subtitle={it.subtitle}
@@ -613,6 +615,19 @@ function PendingTasksCard({
       ))}
     </Card>
   );
+}
+
+/**
+ * Tông cho dòng chênh lệch dưới ô chỉ số.
+ *
+ * Chỉ tô màu khi nội dung THẬT SỰ là mức tăng giảm (bắt đầu bằng + hoặc -).
+ * Chuỗi khác, ví dụ "5 nhân viên", là nhãn đếm chứ không phải kết quả tốt xấu
+ * nên để trung tính.
+ */
+function toneDelta(delta: string, tone?: "neutral" | "success"): BadgeTone {
+  if (delta.startsWith("-")) return "critical";
+  if (delta.startsWith("+")) return tone === "success" ? "success" : "info";
+  return "neutral";
 }
 
 function MetricCard({
@@ -629,7 +644,7 @@ function MetricCard({
   icon?: string;
 }) {
   return (
-    <div className="rounded-np-card bg-white px-3.5 py-3">
+    <div className="bg-white px-3.5 py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <span className="text-[12px] font-medium text-np-text-sub">{label}</span>
@@ -648,8 +663,11 @@ function MetricCard({
           />
         )}
       </div>
+      {/* Tông đọc từ chính con số, không đọc từ prop `tone`: thẻ Doanh số truyền
+          cứng tone="success" nên trước đây mức giảm "-8%" vẫn hiện xanh lá, tức
+          màu nói ngược hẳn nội dung. */}
       {delta != null && (
-        <Badge tone={tone === "success" ? "success" : "neutral"} className="mt-1.5">
+        <Badge tone={toneDelta(delta, tone)} className="mt-1.5">
           {delta}
         </Badge>
       )}

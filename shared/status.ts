@@ -8,20 +8,26 @@ export type AppointmentStatusCode =
   | "cancelled"
   | "rescheduled";
 
+/**
+ * Chỉ còn nhãn chữ. Màu badge KHÔNG nằm ở đây nữa: nó thuộc về tầng giao diện,
+ * quyết định bởi bảng APPT_TONE / VISIT_TONE trong np/order-status-badges.tsx,
+ * đọc token màu trong index.css.
+ *
+ * Trước đây mỗi trạng thái mang sẵn một cặp badgeColor / badgeText, tổng 11 cặp,
+ * mà không dòng code nào đọc tới. Ai mở file này ra đều tưởng đó là màu thật.
+ */
 export interface StatusInfo {
   label: string;
-  badgeColor: string; // Tailwind bg class
-  badgeText: string;  // Tailwind text class
 }
 
 export const APPOINTMENT_STATUSES: Record<AppointmentStatusCode, StatusInfo> = {
-  pending:     { label: "Chờ xác nhận",  badgeColor: "bg-[#fff4bd]", badgeText: "text-[#8a6116]" },
-  confirmed:   { label: "Đã xác nhận",   badgeColor: "bg-[#dbeafe]", badgeText: "text-[#1e40af]" },
-  reminded:    { label: "Đã nhắc",       badgeColor: "bg-[#e0e7ff]", badgeText: "text-[#4338ca]" },
-  arrived:     { label: "Đã đến",        badgeColor: "bg-[#bbe5b3]", badgeText: "text-[#008060]" },
-  no_show:     { label: "Không đến",     badgeColor: "bg-[#fead9a]", badgeText: "text-[#8a1c1c]" },
-  cancelled:   { label: "Đã hủy",        badgeColor: "bg-[#f1f1f2]", badgeText: "text-[#616161]" },
-  rescheduled: { label: "Dời lịch",      badgeColor: "bg-[#fce4bd]", badgeText: "text-[#92400e]" },
+  pending:     { label: "Chờ xác nhận" },
+  confirmed:   { label: "Đã xác nhận" },
+  reminded:    { label: "Đã nhắc" },
+  arrived:     { label: "Đã đến" },
+  no_show:     { label: "Không đến" },
+  cancelled:   { label: "Đã hủy" },
+  rescheduled: { label: "Dời lịch" },
 };
 
 // ===== Visit Status (Tầng 2) =====
@@ -32,10 +38,10 @@ export type VisitStatusCode =
   | "cancelled";
 
 export const VISIT_STATUSES: Record<VisitStatusCode, StatusInfo> = {
-  arrived:     { label: "Chờ khám",      badgeColor: "bg-[#fff4bd]", badgeText: "text-[#8a6116]" },
-  in_progress: { label: "Đang khám",     badgeColor: "bg-[#dbeafe]", badgeText: "text-[#1e40af]" },
-  completed:   { label: "Hoàn thành",    badgeColor: "bg-[#bbe5b3]", badgeText: "text-[#008060]" },
-  cancelled:   { label: "BN bỏ về",      badgeColor: "bg-[#fead9a]", badgeText: "text-[#8a1c1c]" },
+  arrived:     { label: "Chờ khám" },
+  in_progress: { label: "Đang khám" },
+  completed:   { label: "Hoàn thành" },
+  cancelled:   { label: "Khách bỏ về" },
 };
 
 // ===== Transition Maps (forward-only) =====
@@ -60,7 +66,7 @@ export const VISIT_TRANSITIONS: Record<VisitStatusCode, VisitStatusCode[]> = {
 export interface StatusButton {
   targetStatus: string;
   label: string;
-  icon: "check" | "bell" | "log-in" | "x" | "calendar" | "eye-off" | "play" | "check-circle" | "user-x";
+  icon: "check" | "calendar-check" | "log-in" | "cancel-schedule" | "calendar" | "eye-off" | "play" | "check-circle" | "user-x";
   variant: "default" | "destructive" | "outline";
   needsConfirmation: boolean;
 }
@@ -68,17 +74,17 @@ export interface StatusButton {
 export const APPOINTMENT_BUTTONS: Record<AppointmentStatusCode, StatusButton[]> = {
   pending: [
     { targetStatus: "confirmed", label: "Xác nhận", icon: "check", variant: "default", needsConfirmation: false },
-    { targetStatus: "cancelled", label: "Hủy lịch", icon: "x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "cancelled", label: "Hủy lịch", icon: "cancel-schedule", variant: "destructive", needsConfirmation: true },
   ],
   confirmed: [
-    { targetStatus: "reminded", label: "Đã nhắc lịch", icon: "bell", variant: "default", needsConfirmation: false },
-    { targetStatus: "cancelled", label: "Hủy lịch", icon: "x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "reminded", label: "Đã nhắc lịch", icon: "calendar-check", variant: "default", needsConfirmation: false },
+    { targetStatus: "cancelled", label: "Hủy lịch", icon: "cancel-schedule", variant: "destructive", needsConfirmation: true },
   ],
   reminded: [
-    { targetStatus: "arrived", label: "Check-in", icon: "log-in", variant: "default", needsConfirmation: false },
+    { targetStatus: "arrived", label: "Đón khách", icon: "log-in", variant: "default", needsConfirmation: false },
     { targetStatus: "no_show", label: "Không đến", icon: "eye-off", variant: "destructive", needsConfirmation: true },
     { targetStatus: "rescheduled", label: "Dời lịch", icon: "calendar", variant: "outline", needsConfirmation: true },
-    { targetStatus: "cancelled", label: "Hủy lịch", icon: "x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "cancelled", label: "Hủy lịch", icon: "cancel-schedule", variant: "destructive", needsConfirmation: true },
   ],
   arrived: [],
   no_show: [],
@@ -89,11 +95,11 @@ export const APPOINTMENT_BUTTONS: Record<AppointmentStatusCode, StatusButton[]> 
 export const VISIT_BUTTONS: Record<VisitStatusCode, StatusButton[]> = {
   arrived: [
     { targetStatus: "in_progress", label: "Bắt đầu khám", icon: "play", variant: "default", needsConfirmation: false },
-    { targetStatus: "cancelled", label: "BN bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "cancelled", label: "Khách bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
   ],
   in_progress: [
     { targetStatus: "completed", label: "Hoàn thành khám", icon: "check-circle", variant: "default", needsConfirmation: false },
-    { targetStatus: "cancelled", label: "BN bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
+    { targetStatus: "cancelled", label: "Khách bỏ về", icon: "user-x", variant: "destructive", needsConfirmation: true },
   ],
   completed: [],
   cancelled: [],
@@ -171,7 +177,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatusCode, string> = {
   CANCELLED: "Đã hủy",
   NO_SHOW: "Không đến",
   REFUND_FULL: "Hoàn tiền toàn phần",
-  REFUND_PARTIAL: "Hoàn tiền 1 phần",
+  REFUND_PARTIAL: "Hoàn tiền một phần",
 };
 
 /**

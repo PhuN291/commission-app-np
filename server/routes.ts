@@ -1,7 +1,7 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertServiceSchema, insertOrderSchema, insertCustomerSchema, insertVoucherSchema } from "@shared/schema";
+import { insertServiceSchema, insertOrderSchema, insertCustomerSchema, insertVoucherSchema, type User } from "@shared/schema";
 import { computeVoucherDiscount } from "./vouchers";
 import { seedDatabase } from "./seed";
 import { APPOINTMENT_TRANSITIONS, VISIT_TRANSITIONS, type AppointmentStatusCode, type VisitStatusCode } from "@shared/status";
@@ -43,8 +43,10 @@ import {
   updatePayCycleSchema,
   AUTO_RULE_KEYS,
   COMMISSION_RANKINGS,
+  CUSTOMER_STATS_MONTHS,
   ROLE_LABEL,
   isGrossCommission,
+  isWithinLastMonths,
   type AutoRuleKey,
   type CommissionableRole,
   type UserRole,
@@ -602,13 +604,26 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Phần hồ sơ nhân sự mà MỌI vai đăng nhập được xem: vừa đủ để hiện tên người
+   * trên đơn và để chọn người phụ trách.
+   *
+   * Trước đây hai endpoint dưới trả nguyên bản ghi users (chỉ bỏ mỗi password),
+   * tức số điện thoại, bậc, chỉ tiêu tháng, ngày nghỉ việc của tất cả đồng nghiệp
+   * lộ cho một tài khoản vai thấp nhất. Cùng tập dữ liệu đó ở /api/admin/staff
+   * lại khoá CEO với trưởng ca, nên đây là cửa sau của chính nó. Nặng nhất là số
+   * điện thoại: nó là tên đăng nhập, có số là bắt đầu xin mã đăng nhập được.
+   */
+  function hoSoRutGon(u: User) {
+    return { id: u.id, name: u.name, role: u.role, status: u.status, avatar: u.avatar };
+  }
+
   app.get("/api/users", async (_req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
-      const safeUsers = allUsers.map(({ password, ...u }) => u);
-      res.json(safeUsers);
+      res.json(allUsers.map(hoSoRutGon));
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch users" });
+      res.status(500).json({ message: "Không lấy được danh sách nhân viên" });
     }
   });
 
@@ -617,12 +632,11 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       const user = await storage.getUser(id);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ message: "Không tìm thấy nhân viên" });
       }
-      const { password, ...safeUser } = user;
-      res.json(safeUser);
+      res.json(hoSoRutGon(user));
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(500).json({ message: "Không lấy được thông tin nhân viên" });
     }
   });
 
@@ -690,7 +704,13 @@ export async function registerRoutes(
         const items = itemRows.map((it) => ({
           id: String(it.id),
           orderId: it.orderId,
+          serviceId: it.serviceId,
           serviceName: it.serviceName,
+          // `price` là thành tiền cả dòng (mọi màn đang đọc kiểu này, giữ nguyên).
+          // Thêm quantity với unitPrice để màn sửa dịch vụ dựng lại được đúng dòng
+          // cũ; suy ngược từ thành tiền thì không ra nổi số lượng.
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
           price: it.unitPrice * it.quantity,
           cost: it.cost * it.quantity,
           status: it.status,
@@ -707,7 +727,17 @@ export async function registerRoutes(
         );
 
         // CR visibility (R-9-1): NV chỉ thấy hoa hồng của mình, quản lý thấy hết.
-        const crs = seesAll ? allCrs : allCrs.filter((cr) => cr.userId === user.id);
+        const crsLoc = seesAll ? allCrs : allCrs.filter((cr) => cr.userId === user.id);
+
+        // Gắn khiếu nại đã gửi vào từng khoản. Hai việc cần tới nó: ẩn nút khiếu
+        // nại của khoản đã gửi rồi (mỗi khoản chỉ một lần), và cho người gửi đọc
+        // lại nội dung mình đã viết, thứ trước đây gửi xong là mất hút.
+        const crs = await Promise.all(
+          crsLoc.map(async (cr) => {
+            const ds = await storage.getCommissionComplaints(Number(cr.id));
+            return { ...cr, complaint: ds[0] ?? null };
+          }),
+        );
 
         res.json({ ...order, items, crs });
       } catch (error) {
@@ -774,10 +804,21 @@ export async function registerRoutes(
       const data =
         u.role === "tc" || u.role === "ceo" ? parsed.data : { ...parsed.data, userId: u.id };
       const order = await storage.createOrder(data);
+      // Chi tiết từng dịch vụ nằm NGOÀI insertOrderSchema (bảng orders lưu kiểu gộp),
+      // nên đọc thẳng từ body. Thiếu thì ingest tự rơi về cách cũ.
+      const chiTietDv = Array.isArray(req.body?.services)
+        ? req.body.services.map((x: Record<string, unknown>) => ({
+            serviceCode: String(x.serviceCode ?? ""),
+            serviceName: String(x.serviceName ?? ""),
+            serviceCategory: x.serviceCategory ? String(x.serviceCategory) : null,
+            quantity: Math.max(1, Number(x.quantity ?? 1)),
+            unitPrice: Math.max(0, Number(x.unitPrice ?? 0)),
+          }))
+        : null;
       // G1b: sinh dữ liệu phái sinh (order_items + role_assignments). KHÔNG được làm
       // hỏng tạo đơn nếu lỗi → bọc try/catch, log, vẫn trả đơn đã tạo. Response giữ nguyên.
       try {
-        await ingestOrderDerived(order);
+        await ingestOrderDerived(order, chiTietDv);
       } catch (ingestErr) {
         console.error(`[ingest] lỗi sinh dữ liệu phái sinh cho order ${order.id}:`, ingestErr);
       }
@@ -882,7 +923,7 @@ export async function registerRoutes(
       // IDOR: chỉ chủ đơn hoặc trưởng ca/CEO mới được thao tác.
       const u = req.currentUser!;
       if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
-        return res.status(403).json({ message: "Không có quyền với đơn này" });
+        return res.status(403).json({ message: "Bạn không có quyền sửa đơn này" });
       }
       const currentStatus = order.appointmentStatus as AppointmentStatusCode;
       const validTransitions = APPOINTMENT_TRANSITIONS[currentStatus] || [];
@@ -957,14 +998,186 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Không có quyền với đơn này" });
       }
       const raw = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+      const cu = order.notes ?? "";
       const updated = await storage.updateOrderNotes(id, raw ? raw : null);
       if (!updated) return res.status(404).json({ message: "Order not found" });
+      // Chỉ ghi nhật ký khi chữ THẬT SỰ đổi: mở hộp ghi chú rồi bấm lưu mà không
+      // sửa gì là chuyện thường ngày, ghi hết thì nhật ký đầy dòng rác.
+      if (raw !== cu) {
+        await logCustomerEvent({
+          phone: order.phone,
+          type: raw ? "note_updated" : "note_cleared",
+          actorUserId: req.currentUser?.id ?? null,
+          orderId: id,
+          meta: { code: order.code },
+        });
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Failed to update notes" });
     }
   });
 
+  /**
+   * Các trạng thái lịch hẹn cho phép sửa đơn. Khách đã bước vào phòng khám
+   * (arrived) là ca đã chạy: đổi lịch hay đổi dịch vụ lúc đó không còn khớp với
+   * việc thật ở quầy nữa. no_show / cancelled / rescheduled là điểm cuối.
+   */
+  const CHO_SUA_DON = new Set(["pending", "confirmed", "reminded"]);
+
+  /** Đơn có tồn tại và người gọi có được đụng vào không. Chưa xét trạng thái. */
+  async function layDonTheoQuyen(req: Request, res: Response) {
+    const id = parseInt(String(req.params.id));
+    const order = await storage.getOrder(id);
+    if (!order) {
+      res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      return null;
+    }
+    const u = req.currentUser!;
+    if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
+      res.status(403).json({ message: "Không có quyền với đơn này" });
+      return null;
+    }
+    return order;
+  }
+
+  /** Kiểm tra chung cho hai endpoint sửa đơn: tồn tại, đúng quyền, chưa đến khám. */
+  async function layDonChoSua(req: Request, res: Response) {
+    const order = await layDonTheoQuyen(req, res);
+    if (!order) return null;
+    if (!CHO_SUA_DON.has(order.appointmentStatus)) {
+      res.status(409).json({
+        message: "Đơn đã đến khám nên không sửa được nữa",
+      });
+      return null;
+    }
+    return order;
+  }
+
+  /** Ba chỗ phụ trách của đơn, khớp tên cột trong bảng orders. */
+  const O_PHU_TRACH = ["indicatedByUserId", "performedByUserId", "saleUserId"] as const;
+
+  // PATCH /api/orders/:id/assignees — đổi người chỉ định / thực hiện / tư vấn.
+  //
+  // KHÔNG khoá theo trạng thái như lịch hẹn với dịch vụ: người thực hiện chỉ biết
+  // được SAU khi khách đến khám, khoá lúc "Đã đến" thì vĩnh viễn không điền được.
+  // Đổi ở đây cũng không đụng vào bảng kê hoa hồng (bảng order_role_assignments
+  // mới là thứ quyết định ai hưởng), nên không có rủi ro dịch chuyển tiền đã chốt.
+  app.patch("/api/orders/:id/assignees", async (req, res) => {
+    try {
+      const order = await layDonTheoQuyen(req, res);
+      if (!order) return;
+
+      const thayDoi: Partial<Record<(typeof O_PHU_TRACH)[number], number | null>> = {};
+      for (const cot of O_PHU_TRACH) {
+        if (!(cot in (req.body ?? {}))) continue;
+        const v = req.body[cot];
+        if (v === null || v === "") {
+          thayDoi[cot] = null;
+          continue;
+        }
+        // Chỉ nhận số hoặc chuỗi số. Number(true) ra 1 và Number([1]) cũng ra 1,
+        // nên nhận bừa là gán trúng nhân viên id 1 rồi vẫn trả về thành công.
+        const uid = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+        if (!Number.isInteger(uid) || uid <= 0) {
+          return res.status(400).json({ message: "Không nhận ra nhân viên được chọn" });
+        }
+        const nv = await storage.getUser(uid);
+        if (!nv) return res.status(400).json({ message: "Không tìm thấy nhân viên" });
+        if (nv.status === "offboarded") {
+          return res.status(400).json({ message: `${nv.name} đã nghỉ việc` });
+        }
+        thayDoi[cot] = uid;
+      }
+      if (Object.keys(thayDoi).length === 0) {
+        return res.status(400).json({ message: "Chưa chọn chỗ nào để cập nhật" });
+      }
+
+      const updated = await storage.updateOrderAssignees(order.id, thayDoi);
+      if (!updated) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      await logCustomerEvent({
+        phone: order.phone,
+        type: "order_updated",
+        actorUserId: req.currentUser?.id ?? null,
+        orderId: order.id,
+        meta: { code: order.code, assignees: thayDoi },
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Không cập nhật được người phụ trách" });
+    }
+  });
+
+  // PATCH /api/orders/:id/appointment — sửa ngày giờ hẹn TẠI CHỖ.
+  // Khác /reschedule: chỗ đó hủy đơn cũ rồi đẻ đơn mới (dùng khi khách dời lịch
+  // sau khi đã xác nhận), còn đây chỉ sửa lại thông tin trên chính đơn này.
+  app.patch("/api/orders/:id/appointment", async (req, res) => {
+    try {
+      const order = await layDonChoSua(req, res);
+      if (!order) return;
+      const ngay = String(req.body?.appointmentDate ?? "").trim();
+      const gio = String(req.body?.appointmentTime ?? "").trim();
+      if (!ngay || !gio) {
+        return res.status(400).json({ message: "Thiếu ngày hoặc giờ hẹn" });
+      }
+      const doiThat = ngay !== order.appointmentDate || gio !== order.appointmentTime;
+      const updated = await storage.updateOrderAppointment(order.id, ngay, gio);
+      if (!updated) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      // Chỉ ghi nhật ký khi ngày giờ THẬT SỰ đổi, giống cách làm với ghi chú đơn:
+      // mở hộp sửa lịch rồi bấm lưu mà không đổi gì là chuyện thường, ghi hết thì
+      // nhật ký đầy dòng lặp lại y một mốc thời gian.
+      if (doiThat) {
+        await logCustomerEvent({
+          phone: order.phone,
+          type: "order_updated",
+          actorUserId: req.currentUser?.id ?? null,
+          orderId: order.id,
+          meta: { code: order.code, appointmentDate: ngay, appointmentTime: gio },
+        });
+      }
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Không cập nhật được lịch hẹn" });
+    }
+  });
+
+  // PATCH /api/orders/:id/services — đổi danh sách dịch vụ của đơn.
+  // Đổi dịch vụ là đổi tiền, nên sinh lại luôn order_items và bảng hoa hồng.
+  app.patch("/api/orders/:id/services", async (req, res) => {
+    try {
+      const order = await layDonChoSua(req, res);
+      if (!order) return;
+      const dsRaw = Array.isArray(req.body?.services) ? req.body.services : null;
+      if (!dsRaw || dsRaw.length === 0) {
+        return res.status(400).json({ message: "Đơn phải có ít nhất một dịch vụ" });
+      }
+      const ds = dsRaw.map((x: Record<string, unknown>) => ({
+        serviceCode: String(x.serviceCode ?? ""),
+        serviceName: String(x.serviceName ?? ""),
+        serviceCategory: x.serviceCategory ? String(x.serviceCategory) : null,
+        quantity: Math.max(1, Number(x.quantity ?? 1)),
+        unitPrice: Math.max(0, Number(x.unitPrice ?? 0)),
+      }));
+      if (ds.some((x: { serviceCode: string; serviceName: string }) => !x.serviceCode || !x.serviceName)) {
+        return res.status(400).json({ message: "Dịch vụ không hợp lệ" });
+      }
+      const updated = await storage.replaceOrderServices(order.id, ds);
+      if (!updated) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      await logCustomerEvent({
+        phone: order.phone,
+        type: "order_updated",
+        actorUserId: req.currentUser?.id ?? null,
+        orderId: order.id,
+        meta: { code: order.code, serviceName: updated.serviceName },
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("[orders] đổi dịch vụ lỗi:", error);
+      res.status(500).json({ message: "Không cập nhật được dịch vụ" });
+    }
+  });
+
+  // Reschedule: set current order to rescheduled, create new order
   // Reschedule: set current order to rescheduled, create new order
   app.post("/api/orders/:id/reschedule", async (req, res) => {
     try {
@@ -1019,6 +1232,11 @@ export async function registerRoutes(
         vatEmail: order.vatEmail,
         createdAt: timeStr,
         userId: order.userId,
+        // Dời lịch đẻ ra đơn mới thay cho đơn cũ, người phụ trách phải theo sang,
+        // không thì mỗi lần khách dời hẹn là ba ô này trắng lại từ đầu.
+        saleUserId: order.saleUserId,
+        indicatedByUserId: order.indicatedByUserId,
+        performedByUserId: order.performedByUserId,
       });
       // G2: đơn dời lịch cũng phải có nguyên liệu + hoa hồng. Bọc try/catch giống
       // POST /api/orders để ingest lỗi không làm hỏng dời lịch.
@@ -1027,6 +1245,21 @@ export async function registerRoutes(
       } catch (ingestErr) {
         console.error(`[reschedule] ingest lỗi cho đơn mới ${newOrder.id}:`, ingestErr);
       }
+      // Ghi cho ĐƠN CŨ nữa. Màn đơn đã có dòng này qua status_logs, cái thêm được
+      // là màn khách kể đủ trình tự: dời lịch đơn cũ rồi mới tới tạo đơn mới.
+      // Không sinh dòng trùng ở màn đơn vì nhật ký đơn bỏ hết type status_change.
+      await logCustomerEvent({
+        phone: order.phone,
+        type: "status_change",
+        actorUserId: req.currentUser?.id ?? order.userId,
+        orderId: id,
+        meta: {
+          tier: "appointment",
+          fromStatus: order.appointmentStatus,
+          toStatus: "rescheduled",
+          code: order.code,
+        },
+      });
       await logCustomerEvent({
         phone: newOrder.phone,
         type: "order_created",
@@ -1041,21 +1274,92 @@ export async function registerRoutes(
   });
 
   // Get status logs for an order
-  app.get("/api/orders/:id/status-logs", async (req, res) => {
+/**
+ * "DD/MM/YYYY HH:mm" của status_logs → chuỗi ISO, để so sánh được với createdAt
+ * của customer_events khi trộn hai nguồn.
+ *
+ * Đây là phép nghịch đảo của vnTimestamp trong storage.db.ts: nó ghi bằng giờ
+ * máy chủ nên đọc lại bằng giờ máy chủ là khớp. Chuỗi lạ thì trả về nguyên xi,
+ * để dòng đó xếp xuống cuối chứ không bị vứt mất.
+ */
+function isoTuGioVN(s: string): string {
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if (!m) return s;
+  const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] ?? 0), +(m[5] ?? 0));
+  return Number.isNaN(d.getTime()) ? s : d.toISOString();
+}
+
+  /**
+   * Nhật ký đầy đủ của một đơn, gộp từ HAI bảng.
+   *
+   * status_logs giữ các lần chuyển trạng thái (kèm ghi chú, kèm dòng dời lịch của
+   * đơn cũ, và là nơi duy nhất có dữ liệu của đơn tạo trước khi có customer_events).
+   * customer_events giữ những việc không đổi trạng thái: sửa lịch hẹn, đổi dịch vụ,
+   * đổi người phụ trách, sửa ghi chú.
+   *
+   * KHỬ TRÙNG: một lần đổi trạng thái ghi vào CẢ HAI bảng, nên sự kiện
+   * customer_events type "status_change" bị bỏ hẳn ở đây, dòng trạng thái chỉ lấy
+   * từ status_logs. Cố ý không ghép chéo để mượn tên người thao tác cho dòng trạng
+   * thái: ghép theo thời gian gần đúng là có ngày gán nhầm tên, mà gán nhầm còn tệ
+   * hơn để trống.
+   *
+   * Trả về MỚI NHẤT TRƯỚC vì giao diện cắt bớt bằng cách giữ N phần tử đầu; xếp
+   * tăng dần thì mục sẽ hé toàn dòng cũ và giấu mất việc vừa làm.
+   */
+  app.get("/api/orders/:id/history", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const order = await storage.getOrder(id);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      // Cùng quy tắc chủ đơn: NV chỉ xem log đơn của mình; quản lý xem hết.
+      if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      // Cùng quy tắc chủ đơn: NV chỉ xem nhật ký đơn của mình; quản lý xem hết.
       const user = req.currentUser!;
       const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
       if (!seesAll && order.userId !== user.id) {
         return res.status(403).json({ error: "forbidden", message: "Không có quyền xem đơn này" });
       }
-      const logs = await storage.getStatusLogs(id);
-      res.json(logs);
+
+      const [logs, events] = await Promise.all([
+        storage.getStatusLogs(id),
+        storage.getOrderEvents(id),
+      ]);
+
+      const tuStatusLog = logs.map((l) => ({
+        // Tiền tố nguồn vì id hai bảng đụng nhau mà giao diện dùng nó làm khóa.
+        id: `sl:${l.id}`,
+        createdAt: isoTuGioVN(l.timestamp),
+        type: "status_change" as const,
+        // status_logs không lưu người thao tác, để trống chứ không bịa "Hệ thống".
+        actorName: null as string | null,
+        meta: {
+          tier: l.tier,
+          fromStatus: l.fromStatus,
+          toStatus: l.toStatus,
+          note: l.note,
+        },
+      }));
+
+      const tuSuKien = await Promise.all(
+        events
+          .filter((e) => e.type !== "status_change")
+          .map(async (e) => {
+            const actor = e.actorUserId ? await storage.getUser(e.actorUserId) : null;
+            return {
+              id: `ev:${e.id}`,
+              createdAt: e.createdAt.toISOString(),
+              type: e.type,
+              actorName: actor?.name ?? null,
+              meta: (e.meta ?? {}) as Record<string, unknown>,
+            };
+          }),
+      );
+
+      const gop = [...tuStatusLog, ...tuSuKien].sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      );
+      res.json(gop);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch status logs" });
+      console.error("[orders] đọc nhật ký đơn lỗi:", error);
+      res.status(500).json({ message: "Không đọc được nhật ký đơn" });
     }
   });
 
@@ -1085,7 +1389,7 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       const customer = await storage.getCustomer(id);
       if (!customer) {
-        return res.status(404).json({ message: "Customer not found" });
+        return res.status(404).json({ error: "not_found", message: "Không tìm thấy khách hàng" });
       }
       // Mọi role đều xem được chi tiết khách (không lọc theo người chăm).
       // Chủ ý: hiện TOÀN BỘ lịch sử đơn của khách
@@ -1099,10 +1403,13 @@ export async function registerRoutes(
       const derivedRecallDue = await storage.getNextRecallDueForCustomer(id);
       const customerWithRecall = { ...customer, nextRecallDueAt: derivedRecallDue };
 
-      const totalSpent = customerOrders
-        .filter(o => o.appointmentStatus !== "cancelled")
-        .reduce((sum, o) => sum + o.totalPrice, 0);
-      const orderCount = customerOrders.filter(o => o.appointmentStatus !== "cancelled").length;
+      // Chi tiêu và số đơn tính trong 12 tháng gần nhất (không cộng dồn toàn bộ lịch sử).
+      // Dùng helper shared để màn danh sách khách ra đúng cùng con số.
+      const recentOrders = customerOrders.filter(
+        (o) => o.appointmentStatus !== "cancelled" && isWithinLastMonths(o.createdAt),
+      );
+      const totalSpent = recentOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+      const orderCount = recentOrders.length;
       const lastOrder = customerOrders.length > 0 ? customerOrders[0] : null;
 
       // Tái khám lấy từ database (hệ mới): các lượt order_item của khách (mọi trạng thái)
@@ -1119,12 +1426,19 @@ export async function registerRoutes(
         }),
       );
 
+      // Tên người ghi chú gần nhất, để màn chi tiết hiện "Cập nhật bởi ...".
+      const noteAuthor = customer.medicalNoteBy
+        ? await storage.getUser(customer.medicalNoteBy)
+        : null;
+
       res.json({
         customer: customerWithRecall,
+        medicalNoteByName: noteAuthor?.name ?? null,
         orders: customerOrders,
         stats: {
           totalSpent,
           orderCount,
+          statsMonths: CUSTOMER_STATS_MONTHS,
           customerSince: customer.createdAt,
         },
         lastOrder,
@@ -1136,6 +1450,56 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to fetch customer" });
     }
   });
+
+  // PATCH /api/customers/:id/vip — bật tắt nhãn khách VIP (gán tay, không tự suy theo chi tiêu).
+  // Quyền: mọi vai xem được khách thì bật tắt được, khớp luật xem khách hiện tại.
+  app.patch(
+    "/api/customers/:id/vip",
+    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    async (req, res) => {
+      const id = parseInt(String(req.params.id), 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+      const isVip = req.body?.isVip;
+      if (typeof isVip !== "boolean") {
+        return res.status(400).json({ error: "invalid_value", message: "Thiếu trạng thái VIP" });
+      }
+      const updated = await storage.updateCustomer(id, { isVip });
+      if (!updated) return res.status(404).json({ error: "not_found" });
+      res.json(updated);
+    },
+  );
+
+  // PATCH /api/customers/:id/medical-note — ghi chú bệnh nhân (dị ứng, tiền sử, lưu ý).
+  // Dữ liệu y tế nhân viên tự nhập, lưu kèm người nhập và thời điểm để truy vết.
+  app.patch(
+    "/api/customers/:id/medical-note",
+    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    async (req, res) => {
+      const id = parseInt(String(req.params.id), 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+      const raw = req.body?.note;
+      if (typeof raw !== "string") {
+        return res.status(400).json({ error: "invalid_value", message: "Thiếu nội dung ghi chú" });
+      }
+      const note = raw.trim();
+      const updated = await storage.updateCustomer(id, {
+        medicalNote: note.length > 0 ? note : null,
+        medicalNoteBy: req.currentUser!.id,
+        medicalNoteAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ error: "not_found" });
+      // Ai sửa ghi chú lúc nào ghi vào nhật ký tương tác, thay vì in một dòng
+      // "Cập nhật bởi ..." ngay dưới ô ghi chú.
+      await logCustomerEvent({
+        phone: updated.phone,
+        type: note.length > 0 ? "note_updated" : "note_cleared",
+        actorUserId: req.currentUser!.id,
+        orderId: null,
+        meta: null,
+      });
+      res.json({ ...updated, medicalNoteByName: req.currentUser!.name });
+    },
+  );
 
   // (Đã bỏ POST /api/customers/:id/recall-log + /recall-skip — hệ tái khám cũ in-memory.
   //  Ghi kết quả gọi nay qua POST /api/recalls/item/:orderItemId/log theo từng lượt order_item.)
@@ -1186,7 +1550,7 @@ export async function registerRoutes(
       if (!RECALL_CALL_OUTCOMES.includes(outcome)) {
         return res
           .status(400)
-          .json({ error: "validation", message: "outcome phải thuộc: " + RECALL_CALL_OUTCOMES.join(", ") });
+          .json({ error: "validation", message: "Kết quả gọi không hợp lệ, chọn lại rồi lưu" });
       }
       const note = typeof req.body?.note === "string" ? req.body.note : null;
       // Quyền ghi: NV (sale/doctor) chỉ ghi cho khách mình chăm; tc/kt/ceo ghi mọi lượt.
@@ -1235,7 +1599,36 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid customer data", errors: parsed.error.errors });
       }
-      const customer = await storage.createCustomer(parsed.data);
+      // Số điện thoại là mã nhận diện khách: đơn nối với khách qua cột phone, nên
+      // hai hồ sơ trùng số sẽ cùng ăn chung một tập đơn, mở ai cũng thấy đơn của
+      // người kia. Tên thì cho trùng, người Việt trùng tên là chuyện thường.
+      const soDienThoai = parsed.data.phone.trim();
+      const daCo = await storage.findCustomerByPhone(soDienThoai);
+      if (daCo) {
+        return res.status(409).json({
+          message: `Số điện thoại này đã có hồ sơ khách "${daCo.name}"`,
+          customerId: daCo.id,
+        });
+      }
+
+      // Khai ghi chú ngay lúc tạo khách thì vẫn phải biết ai ghi và ghi lúc nào,
+      // giống khi sửa ghi chú sau này.
+      const note = parsed.data.medicalNote?.trim() || null;
+      const customer = await storage.createCustomer({
+        ...parsed.data,
+        medicalNote: note,
+        medicalNoteBy: note ? (req.currentUser?.id ?? null) : null,
+        medicalNoteAt: note ? new Date() : null,
+      });
+      if (note) {
+        await logCustomerEvent({
+          customerId: customer.id,
+          type: "note_updated",
+          actorUserId: req.currentUser?.id ?? null,
+          orderId: null,
+          meta: null,
+        });
+      }
       res.status(201).json(customer);
     } catch (error) {
       res.status(500).json({ message: "Failed to create customer" });

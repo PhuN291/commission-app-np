@@ -127,9 +127,15 @@ export interface IStorage {
 
   getAllCustomers(): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
+  findCustomerByPhone(phone: string): Promise<Customer | undefined>;
   getCustomerOrders(phone: string): Promise<Order[]>;
   searchCustomers(query: string): Promise<Customer[]>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
+  /** Cập nhật một phần hồ sơ khách (VIP, ghi chú bệnh nhân). Trả undefined nếu không có khách. */
+  updateCustomer(
+    id: number,
+    patch: Partial<Pick<Customer, "isVip" | "medicalNote" | "medicalNoteBy" | "medicalNoteAt">>,
+  ): Promise<Customer | undefined>;
 
   getAllOrders(): Promise<Order[]>;
   getOrder(id: number): Promise<Order | undefined>;
@@ -426,6 +432,11 @@ export class MemoryStorage implements IStorage {
     return [...this.customers];
   }
 
+  async findCustomerByPhone(phone: string): Promise<Customer | undefined> {
+    const p = phone.trim();
+    return Array.from(this.customers.values()).find((c) => c.phone === p);
+  }
+
   async getCustomer(id: number): Promise<Customer | undefined> {
     return this.customers.find(c => c.id === id);
   }
@@ -454,8 +465,22 @@ export class MemoryStorage implements IStorage {
       createdAt: insertCustomer.createdAt ?? "",
       nextRecallDueAt: insertCustomer.nextRecallDueAt ?? null,
       primaryAssignedUserId: insertCustomer.primaryAssignedUserId ?? null,
+      isVip: insertCustomer.isVip ?? false,
+      medicalNote: insertCustomer.medicalNote ?? null,
+      medicalNoteBy: insertCustomer.medicalNoteBy ?? null,
+      medicalNoteAt: insertCustomer.medicalNoteAt ?? null,
     };
     this.customers.push(customer);
+    return customer;
+  }
+
+  async updateCustomer(
+    id: number,
+    patch: Partial<Pick<Customer, "isVip" | "medicalNote" | "medicalNoteBy" | "medicalNoteAt">>,
+  ): Promise<Customer | undefined> {
+    const customer = this.customers.find((c) => c.id === id);
+    if (!customer) return undefined;
+    Object.assign(customer, patch);
     return customer;
   }
 
@@ -509,6 +534,8 @@ export class MemoryStorage implements IStorage {
       source: insertOrder.source ?? "manual",
       idempotencyKey: insertOrder.idempotencyKey ?? null,
       saleUserId: insertOrder.saleUserId ?? null,
+      indicatedByUserId: insertOrder.indicatedByUserId ?? null,
+      performedByUserId: insertOrder.performedByUserId ?? null,
       insuranceAmount: insertOrder.insuranceAmount ?? 0,
       voucherAmount: insertOrder.voucherAmount ?? 0,
       voucherCode: insertOrder.voucherCode ?? null,

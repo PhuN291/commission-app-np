@@ -1,19 +1,8 @@
-import { Redirect, useLocation } from "wouter";
+import { useQuayLai } from "@/lib/use-back";
+import { Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import type { LucideIcon } from "lucide-react";
-import {
-  Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  CheckCircle2,
-  Coins,
-  DollarSign,
-  Layers,
-  Percent,
-  Repeat,
-  RotateCcw,
-  UserPlus,
-} from "lucide-react";
+import type { LucideIcon } from "@/components/np/icon";
+import { ArrowDownRight, ArrowUpRight, Layers } from "@/components/np/icon";
 import {
   CartesianGrid,
   Line,
@@ -93,7 +82,7 @@ function cycleLabel(cycle: string) {
 
 export default function AnalyticsOverview() {
   const { active, onTab } = useTabNav();
-  const [, navigate] = useLocation();
+  const quayLai = useQuayLai("/");
 
   // Chặn vai: chỉ quản lý (ceo/tc/kt) xem; vai khác về trang chủ (như admin-settings).
   const role = (typeof window !== "undefined"
@@ -117,7 +106,7 @@ export default function AnalyticsOverview() {
   if (isLoading || !data) {
     return (
       <Screen activeTab={active} onTab={onTab} noHeader>
-        <DetailHeader title="Phân tích tổng quan" onBack={() => navigate("/")} trailing={<div />} />
+        <DetailHeader title="Phân tích tổng quan" onBack={quayLai} trailing={<div />} />
         <div className="flex flex-1 items-center justify-center py-20">
           {isLoading ? (
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-np-brand-ink border-t-transparent" />
@@ -140,9 +129,9 @@ export default function AnalyticsOverview() {
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
-      <DetailHeader title="Phân tích tổng quan" onBack={() => navigate("/")} trailing={<div />} />
+      <DetailHeader title="Phân tích tổng quan" onBack={quayLai} trailing={<div />} />
 
-      <div className="bg-np-surface-sub pb-5">
+      <div className="min-h-full flow-root bg-np-bg">
         <PageHeader
           title="Tổng quan"
           subtitle="Doanh thu và chỉ số chính"
@@ -150,30 +139,26 @@ export default function AnalyticsOverview() {
         />
 
         {/* KPI cards — số thật theo kỳ */}
-        <div className="grid grid-cols-2 gap-2.5 px-4">
+        <div className="np-divide bg-white">
           <KpiCard
             title="Doanh thu thực thu"
             display={fmtVND(kpis.doanhThuThucThu.value)}
             changePct={kpis.doanhThuThucThu.changePct}
-            icon={DollarSign}
           />
           <KpiCard
             title="Số đơn hoàn thành"
             display={kpis.soDonHoanThanh.value.toLocaleString("vi-VN")}
             changePct={kpis.soDonHoanThanh.changePct}
-            icon={CheckCircle2}
           />
           <KpiCard
-            title="Giá trị TB / đơn"
+            title="Giá trị trung bình mỗi đơn"
             display={fmtVND(kpis.giaTriTbDon.value)}
             changePct={kpis.giaTriTbDon.changePct}
-            icon={Activity}
           />
           <KpiCard
             title="Tỷ lệ chốt"
             display={`${kpis.tyLeChot.value}%`}
             changePct={kpis.tyLeChot.changePct}
-            icon={Percent}
             note="Đơn khám xong / tổng đơn tạo trong kỳ"
           />
         </div>
@@ -263,7 +248,7 @@ export default function AnalyticsOverview() {
                 key={s.serviceName + i}
                 className={
                   "flex items-center gap-3 px-4 py-3" +
-                  (i === dichVuBanChay.length - 1 ? "" : " border-b border-np-surface-pressed")
+                  (i === dichVuBanChay.length - 1 ? "" : " np-divider")
                 }
               >
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-np-surface-sub text-[13px] font-bold text-np-text-sub">
@@ -311,7 +296,7 @@ export default function AnalyticsOverview() {
                 key={nv.userId}
                 className={
                   "flex items-center gap-3 px-4 py-3" +
-                  (i === doanhThuTheoNhanVien.length - 1 ? "" : " border-b border-np-surface-pressed")
+                  (i === doanhThuTheoNhanVien.length - 1 ? "" : " np-divider")
                 }
               >
                 <div className="min-w-0 flex-1">
@@ -338,28 +323,23 @@ export default function AnalyticsOverview() {
 
         {/* Khách */}
         <SectionTitle>Khách trong kỳ</SectionTitle>
-        <div className="grid grid-cols-2 gap-2.5 px-4">
-          <StatCard icon={UserPlus} label="Khách mới" value={khach.moi.toLocaleString("vi-VN")} />
-          <StatCard icon={Repeat} label="Khách quay lại" value={khach.quayLai.toLocaleString("vi-VN")} />
+        <div className="np-divide bg-white">
+          <StatCard label="Khách mới" value={khach.moi.toLocaleString("vi-VN")} />
+          <StatCard label="Khách quay lại" value={khach.quayLai.toLocaleString("vi-VN")} />
         </div>
 
         {/* Hoàn tiền */}
         <SectionTitle>Hoàn tiền</SectionTitle>
         <Card className="p-4">
-          <div className="mb-1 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-np-danger-bg">
-              <RotateCcw size={18} strokeWidth={2} className="text-np-danger" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">
-                Tổng tiền hoàn trong kỳ
-              </p>
-              <p className="text-[18px] font-extrabold text-np-ink tabular-nums">{fmtVND(hoanTien.tong)}</p>
-            </div>
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <p className="text-[11px] font-bold text-np-text-muted">
+              Tổng tiền hoàn trong kỳ
+            </p>
+            <p className="text-[20px] font-extrabold text-np-ink tabular-nums">{fmtVND(hoanTien.tong)}</p>
           </div>
           {hoanTien.dichVu.length === 0 ? (
             <p className="mt-2 text-center text-[12px] italic text-np-text-muted">
-              Không có hoàn tiền trong kỳ
+              Chưa có hoàn tiền trong kỳ
             </p>
           ) : (
             <div className="mt-3 space-y-2 border-t border-np-surface-pressed pt-3">
@@ -377,12 +357,11 @@ export default function AnalyticsOverview() {
 
         {/* Hoa hồng */}
         <SectionTitle>Hoa hồng</SectionTitle>
-        <div className="grid grid-cols-2 gap-2.5 px-4">
-          <StatCard icon={Coins} label="Tổng hoa hồng" value={fmtShort(hoaHong.tong) + "đ"} />
-          <StatCard icon={Percent} label="Tỷ lệ trên doanh thu" value={`${hoaHong.tyLeTrenDoanhThu}%`} />
+        <div className="np-divide bg-white">
+          <StatCard label="Tổng hoa hồng" value={fmtShort(hoaHong.tong) + "đ"} />
+          <StatCard label="Tỷ lệ trên doanh thu" value={`${hoaHong.tyLeTrenDoanhThu}%`} />
         </div>
 
-        <div className="h-5" />
       </div>
     </Screen>
   );
@@ -396,7 +375,7 @@ function ChangePill({ pct }: { pct: number | null }) {
   if (pct === null) {
     return (
       <span className="rounded-full bg-np-surface-sub px-1.5 py-0.5 text-[10px] font-bold text-np-text-muted">
-        —
+        -
       </span>
     );
   }
@@ -405,7 +384,11 @@ function ChangePill({ pct }: { pct: number | null }) {
     <div
       className={cn(
         "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-        isPositive ? "bg-np-brand-soft text-np-brand-ink" : "bg-np-danger-bg text-np-danger",
+        // Đọc token badge cho khớp bộ màu chung, thay vì cặp brand và danger
+        // riêng của pill này.
+        isPositive
+          ? "bg-np-badge-success-bg text-np-badge-success-fg"
+          : "bg-np-badge-critical-bg text-np-badge-critical-fg",
       )}
     >
       {isPositive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
@@ -419,40 +402,32 @@ function KpiCard({
   title,
   display,
   changePct,
-  icon: Icon,
   note,
 }: {
   title: string;
   display: string;
   changePct: number | null;
-  icon: LucideIcon;
   note?: string;
 }) {
   return (
-    <div className="rounded-np-card bg-white p-3.5">
-      <div className="mb-2 flex items-start justify-between">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-np-brand-soft">
-          <Icon size={18} strokeWidth={2} className="text-np-brand-ink" />
-        </div>
-        <ChangePill pct={changePct} />
+    <div className="flex items-start justify-between gap-3 bg-white px-4 py-3.5">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold text-np-text-muted">{title}</p>
+        <h3 className="mt-0.5 text-[22px] font-extrabold tracking-[-0.4px] text-np-ink tabular-nums">
+          {display}
+        </h3>
+        {note && <p className="mt-1 text-[11px] leading-tight text-np-text-muted">{note}</p>}
       </div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">{title}</p>
-      <h3 className="mt-0.5 text-[20px] font-extrabold tracking-[-0.4px] text-np-ink tabular-nums">
-        {display}
-      </h3>
-      {note && <p className="mt-1 text-[10px] leading-tight text-np-text-muted">{note}</p>}
+      <ChangePill pct={changePct} />
     </div>
   );
 }
 
-function StatCard({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-np-card bg-white p-3.5">
-      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-np-brand-soft">
-        <Icon size={18} strokeWidth={2} className="text-np-brand-ink" />
-      </div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.6px] text-np-text-muted">{label}</p>
-      <h3 className="mt-0.5 text-[20px] font-extrabold tracking-[-0.4px] text-np-ink tabular-nums">
+    <div className="flex items-center justify-between gap-3 bg-white px-4 py-3.5">
+      <p className="text-[11px] font-bold text-np-text-muted">{label}</p>
+      <h3 className="text-[20px] font-extrabold tracking-[-0.4px] text-np-ink tabular-nums">
         {value}
       </h3>
     </div>
@@ -491,7 +466,7 @@ function ListedNote() {
   return (
     <p className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-np-text-muted">
       <Layers size={13} className="mt-0.5 flex-shrink-0" />
-      Theo giá niêm yết của từng dịch vụ. Tổng có thể khác ô Doanh thu thực thu (đã trừ bảo hiểm và voucher).
+      Theo giá niêm yết từng dịch vụ. Tổng có thể khác mục Doanh thu thực thu, đã trừ bảo hiểm và phiếu giảm giá.
     </p>
   );
 }

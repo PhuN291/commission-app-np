@@ -120,7 +120,7 @@ export const AUDIT_ACTION_LABEL = {
   "adjustment.edit": "Sửa điều chỉnh (tạo truy thu)",
   // Settings (B5-2 Section 3 — admin-settings)
   "setting.auto_rule_update": "Cập nhật Auto Rule",
-  "setting.pay_cycle_update": "Cập nhật kì lương",
+  "setting.pay_cycle_update": "Cập nhật kỳ lương",
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABEL;
@@ -131,7 +131,7 @@ export type AuditAction = keyof typeof AUDIT_ACTION_LABEL;
 
 const baseStaffFields = {
   name: z.string().min(2, "Tên phải có ít nhất 2 ký tự"),
-  phone: z.string().min(9, "SĐT không hợp lệ"),
+  phone: z.string().min(9, "Số điện thoại không hợp lệ"),
   role: z.enum(USER_ROLES),
   ranking: z.enum(RANKINGS).nullable().optional(),
   ihosUserId: z.string().nullable().optional(),
@@ -216,9 +216,9 @@ export type SkippedReason = (typeof SKIPPED_REASONS)[number];
 
 export const SKIPPED_REASON_LABEL: Record<SkippedReason, string> = {
   customer_left: "Khách bỏ về",
-  insurance_rejected: "BH từ chối",
-  patient_changed_mind: "BN đổi ý",
-  service_not_executable: "DV không thực hiện được",
+  insurance_rejected: "Bảo hiểm từ chối",
+  patient_changed_mind: "Khách đổi ý",
+  service_not_executable: "Dịch vụ không thực hiện được",
   medical_contraindication: "Chống chỉ định y khoa",
   consent_refused: "Khách từ chối",
   other: "Khác",
@@ -340,7 +340,7 @@ export const RECALL_OUTCOMES = [
 export type RecallOutcome = (typeof RECALL_OUTCOMES)[number];
 
 export const RECALL_OUTCOME_LABEL: Record<RecallOutcome, string> = {
-  scheduled: "Đã đặt lịch tái khám",
+  scheduled: "Đã đặt lịch",
   no_answer: "Chưa bắt máy",
   refused: "Khách từ chối",
   other: "Khác",
@@ -466,3 +466,41 @@ export const NOTIFICATION_LABEL: Record<NotificationType, string> = {
   "order.created": "Đơn hàng mới",
   "cr.pending_approval": "Hoa hồng chờ duyệt",
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Thống kê chi tiêu của khách theo kỳ gần đây.
+// Đặt ở shared để máy chủ (chi tiết khách) và giao diện (danh sách khách) dùng
+// CHUNG một phép tính, tránh hai màn hiện hai số khác nhau cho cùng một khách.
+// ─────────────────────────────────────────────────────────────────
+
+/** Số tháng gần nhất dùng cho ô "Chi tiêu 12 tháng" và "Đơn 12 tháng". */
+export const CUSTOMER_STATS_MONTHS = 12;
+
+/** order.createdAt là text 'DD/MM/YYYY HH:mm' → Date đầu ngày; null nếu định dạng lạ. */
+export function parseOrderDate(createdAt: string | null | undefined): Date | null {
+  const datePart = (createdAt ?? "").trim().split(" ")[0]; // 'DD/MM/YYYY'
+  const [dd, mm, yyyy] = datePart.split("/");
+  const d = Number(dd);
+  const m = Number(mm);
+  const y = Number(yyyy);
+  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) return null;
+  if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const date = new Date(y, m - 1, d);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Đơn có nằm trong N tháng gần nhất tính từ hôm nay không.
+ * Ngày sai định dạng trả false để không cộng nhầm vào thống kê.
+ */
+export function isWithinLastMonths(
+  createdAt: string | null | undefined,
+  months: number = CUSTOMER_STATS_MONTHS,
+): boolean {
+  const date = parseOrderDate(createdAt);
+  if (!date) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  cutoff.setHours(0, 0, 0, 0);
+  return date.getTime() >= cutoff.getTime();
+}

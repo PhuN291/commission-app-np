@@ -12,13 +12,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowLeft,
+  ContactsProduct,
   Loader2,
+  MedicalServices,
   Package,
   Search,
-  Stethoscope,
-  User,
   X,
-} from "lucide-react";
+} from "@/components/np/icon";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { authFetch } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -162,7 +162,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
         <SheetTitle className="sr-only">Tìm kiếm</SheetTitle>
 
         {/* Header với input + close */}
-        <div className="border-b border-np-surface-pressed bg-white px-3 py-2">
+        <div className="np-divider bg-white px-3 py-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -184,7 +184,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Tìm đơn hàng, khách hàng, dịch vụ..."
-                className="h-9 w-full rounded-np-button bg-np-surface-sub pl-9 pr-9 text-[14px] font-medium text-np-ink placeholder:text-np-text-muted focus:outline-none focus:ring-2 focus:ring-np-brand-ink/30"
+                className="h-9 w-full rounded-np-button bg-np-surface-sub pl-9 pr-9 text-[14px] font-medium text-np-ink placeholder:text-np-text-muted focus:outline-none focus:ring-1 focus:ring-np-border-strong"
               />
               {q && (
                 <button
@@ -244,7 +244,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
           ) : visibleCount === 0 ? (
             <NoResults q={debouncedQ} tab={tab} />
           ) : (
-            <div className="divide-y divide-np-surface-pressed">
+            <div className="np-divide">
               {showOrders && results.orders.length > 0 && (
                 <Section
                   title="Đơn hàng"
@@ -267,7 +267,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
                 <Section
                   title="Khách hàng"
                   count={results.customers.length}
-                  icon={User}
+                  icon={ContactsProduct}
                   hideHeader={tab === "customers"}
                 >
                   {results.customers.map((c) => (
@@ -284,7 +284,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
                 <Section
                   title="Dịch vụ"
                   count={results.services.length}
-                  icon={Stethoscope}
+                  icon={MedicalServices}
                   hideHeader={tab === "services"}
                 >
                   {results.services.map((s) => (
@@ -326,7 +326,7 @@ function Section({
   return (
     <div>
       {!hideHeader && (
-        <div className="flex items-center gap-1.5 bg-np-surface-sub px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.5px] text-np-text-muted">
+        <div className="flex items-center gap-1.5 bg-np-surface-sub px-4 py-1.5 text-[11px] font-bold text-np-text-muted">
           <Icon size={12} strokeWidth={2.25} />
           <span>{title}</span>
           <span className="ml-auto tabular-nums">{count}</span>
@@ -353,7 +353,7 @@ function ResultRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 border-b border-np-surface-pressed px-4 py-3 text-left transition-colors active:bg-np-surface-pressed",
+        "flex w-full items-center gap-3 np-divider px-4 py-3 text-left transition-colors active:bg-np-surface-pressed",
         "last:border-b-0",
       )}
     >
