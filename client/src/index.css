@@ -36,10 +36,19 @@
   --color-np-brand-ink: #008060;
   --color-np-link: #005BD3;
 
-  /* Nền thẻ số liệu lớn (Hoa hồng tạm tính ở Trang chủ, Thực nhận ở màn Hoa hồng).
-     Để ở đây vì trước đó cùng một chuỗi gradient bị chép tay ở hai file, sửa một chỗ
-     là hai màn lệch nhau. */
-  --np-hero-gradient: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+  /* Gradient nhận diện Nguyên Phương, chính là dải màu trong logo: xanh dương sang
+     xanh lá. Dùng chung cho dải đầu màn đăng nhập và các thẻ số liệu lớn (Hoa hồng
+     tạm tính ở Trang chủ, Thực nhận ở màn Hoa hồng), để cả app chỉ có MỘT dải nhận
+     diện. Trước đó cùng một chuỗi gradient bị chép tay ở nhiều file. */
+  --np-brand-gradient-from: #0D509F;
+  --np-brand-gradient-mid: #14639E;
+  --np-brand-gradient-to: #1CAB89;
+  --np-hero-gradient: linear-gradient(
+    135deg,
+    var(--np-brand-gradient-from) 0%,
+    var(--np-brand-gradient-mid) 44%,
+    var(--np-brand-gradient-to) 100%
+  );
 
   /* Status */
   --color-np-success: #008060;
@@ -332,10 +341,15 @@
 
 /* Gradient nhận diện: dải đầu trang và nút chính của màn đăng nhập. */
 .np-login-header {
-  background: linear-gradient(130deg, #0D509F 0%, #14639E 44%, #1CAB89 100%);
+  background: linear-gradient(
+    130deg,
+    var(--np-brand-gradient-from) 0%,
+    var(--np-brand-gradient-mid) 44%,
+    var(--np-brand-gradient-to) 100%
+  );
 }
 .np-login-cta {
-  background: linear-gradient(90deg, #0D509F, #1CAB89);
+  background: linear-gradient(90deg, var(--np-brand-gradient-from), var(--np-brand-gradient-to));
 }
 
 .np-divider::after {
