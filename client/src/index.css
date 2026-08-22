@@ -36,6 +36,11 @@
   --color-np-brand-ink: #008060;
   --color-np-link: #005BD3;
 
+  /* Nền thẻ số liệu lớn (Hoa hồng tạm tính ở Trang chủ, Thực nhận ở màn Hoa hồng).
+     Để ở đây vì trước đó cùng một chuỗi gradient bị chép tay ở hai file, sửa một chỗ
+     là hai màn lệch nhau. */
+  --np-hero-gradient: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+
   /* Status */
   --color-np-success: #008060;
   --color-np-success-bg: #E4F3D9;
@@ -256,9 +261,6 @@
 }
 
 @layer utilities {
-  .bg-gradient-primary-teal {
-    background: linear-gradient(135deg, var(--color-np-brand) 0%, #22a594 100%);
-  }
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;

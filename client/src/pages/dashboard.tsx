@@ -457,7 +457,7 @@ function HeroCard({
         background:
           variant === "admin"
             ? "linear-gradient(135deg, #1A1C1D 0%, #303030 100%)"
-            : "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)",
+            : "var(--np-hero-gradient)",
       }}
     >
       {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
