@@ -48,8 +48,8 @@ const MAP: Record<string, MapValue> = {
   AlertCircle: "danger-circle",
   AlertTriangle: "danger-triangle",
   ArrowDownRight: "arrow-right-down",
-  ArrowLeft: { solar: "arrow-left", style: "linear" },
-  ArrowRight: { solar: "arrow-right", style: "linear" },
+  ArrowLeft: "arrow-left",
+  ArrowRight: "arrow-right",
   ArrowUpRight: "arrow-right-up",
   /** Mục Phụ trách, dòng "Chỉ định": bảng kẹp có dấu tích, đọc ra "giao cho ai". */
   AssignmentInd: "clipboard-check",
@@ -72,14 +72,14 @@ const MAP: Record<string, MapValue> = {
   CancelScheduleSend: "close-circle",
   /** Nhắn Zalo. */
   Chat: "chat-round",
-  Check: { solar: "check-circle", style: "linear" },
+  Check: "check-circle",
   CheckCircle: "check-circle",
   CheckCircle2: "check-circle",
-  ChevronDown: { solar: "alt-arrow-down", style: "linear" },
-  ChevronLeft: { solar: "alt-arrow-left", style: "linear" },
-  ChevronRight: { solar: "alt-arrow-right", style: "linear" },
-  ChevronUp: { solar: "alt-arrow-up", style: "linear" },
-  Circle: { solar: "record", style: "linear" },
+  ChevronDown: "alt-arrow-down",
+  ChevronLeft: "alt-arrow-left",
+  ChevronRight: "alt-arrow-right",
+  ChevronUp: "alt-arrow-up",
+  Circle: "record",
   ClipboardList: "clipboard-list",
   Clock: "clock-circle",
   /** Khách hàng: sổ danh bạ, phân biệt với user dùng cho nhân sự. */
@@ -101,14 +101,14 @@ const MAP: Record<string, MapValue> = {
   FileSpreadsheet: "document-text",
   FileText: "document-text",
   Gift: { solar: "gift", style: "bold" },
-  GripVertical: { solar: "menu-dots", style: "linear" },
+  GripVertical: "menu-dots",
   Hash: "hashtag",
   History: "history",
   /** Trang chủ của app phòng khám. */
   HomeHealth: "home-smile",
   Info: "info-circle",
   Layers: "layers",
-  Loader2: { solar: "refresh", style: "linear" },
+  Loader2: "refresh",
   LogIn: "login",
   LogOut: "logout",
   Mail: "letter",
@@ -118,10 +118,10 @@ const MAP: Record<string, MapValue> = {
   /** Icon dịch vụ dùng chung toàn app. */
   MedicalServices: "medical-kit",
   MessageSquare: "chat-square",
-  Minus: { solar: "minus-circle", style: "linear" },
-  MoreHorizontal: { solar: "menu-dots", style: "linear" },
+  Minus: "minus-circle",
+  MoreHorizontal: "menu-dots",
   Package: "box",
-  PanelLeftIcon: { solar: "sidebar-minimalistic", style: "linear" },
+  PanelLeftIcon: "sidebar-minimalistic",
   /** Icon gọi dùng chung toàn app. */
   PermPhoneMsg: "phone-calling",
   Play: "play",
@@ -162,7 +162,7 @@ const MAP: Record<string, MapValue> = {
   Verified: "verified-check",
   /** Chip "Ngày mai": mặt trời mọc. */
   WbTwilight: "sunrise",
-  X: { solar: "close-circle", style: "linear" },
+  X: "close-circle",
   XCircle: "close-circle",
 };
 

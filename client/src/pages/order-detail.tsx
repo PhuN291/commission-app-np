@@ -755,7 +755,7 @@ export default function OrderDetail() {
                 onClick={moSuaDichVu}
                 className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
               >
-                <EditSquare size={18} fill="none" />
+                <EditSquare size={18} />
               </button>
             ) : undefined
           }
@@ -846,7 +846,7 @@ export default function OrderDetail() {
                 }}
                 className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
               >
-                <EditSquare size={18} fill="none" />
+                <EditSquare size={18} />
               </button>
             ) : undefined
           }
@@ -1398,7 +1398,7 @@ function PhuTrachRow({
         !last && "np-divider",
       )}
     >
-      <Icon size={18} fill="none" className="flex-shrink-0 text-np-text-muted" />
+      <Icon size={18} className="flex-shrink-0 text-np-text-muted" />
       {/* Nhãn không co: tên dài mà bóp nhãn xuống hai dòng thì dòng phình cao,
           ba dòng lệch nhịp nhau. Phần bị cắt bớt phải là tên, không phải nhãn. */}
       <span className="flex-shrink-0 text-[14px] text-np-text-sub">{label}</span>

@@ -176,7 +176,7 @@ export function DatePicker({ value, onChange, min, className }: DatePickerProps)
                   : "border-np-border-strong bg-white text-np-ink active:bg-np-surface-sub",
               )}
             >
-              <Icon size={15} fill="none" className={chon ? "text-white/80" : "text-np-text-sub"} />
+              <Icon size={15} className={chon ? "text-white/80" : "text-np-text-sub"} />
               {m.nhan}
               <span className={cn("text-[11px]", chon ? "text-white/60" : "text-np-text-muted")}>
                 {THU_NGAN[m.ngay.getDay()]}
