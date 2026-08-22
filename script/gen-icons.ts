@@ -23,8 +23,14 @@ import { resolve } from "path";
 
 /** Kiểu dáng mặc định. Đổi được sang bất kỳ hậu tố nào Solar có: bold | linear | outline | broken. */
 const STYLE_SOLID = "bold-duotone";
-/** Kiểu dùng khi điểm gọi truyền fill="none". */
-const STYLE_OUTLINE = "line-duotone";
+/**
+ * Kiểu dùng khi điểm gọi truyền fill="none".
+ *
+ * Dùng linear chứ KHÔNG dùng line-duotone: line-duotone vẫn kèm lớp mờ 50%, nên icon
+ * nét mảnh hiện ra chỗ đậm chỗ nhạt, nhìn như bị lỗi hơn là như một kiểu. linear vẽ
+ * nét đều một độ dày, đầu nét bo tròn, đọc rõ hơn hẳn ở cỡ nhỏ.
+ */
+const STYLE_OUTLINE = "linear";
 
 const SRC = resolve(process.cwd(), "node_modules/@iconify-json/solar/icons.json");
 const OUT = resolve(process.cwd(), "client/src/components/np/icon.tsx");
