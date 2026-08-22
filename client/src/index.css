@@ -83,8 +83,10 @@
   --font-login: Arial, Helvetica, sans-serif;
 
   /* Header */
-  --color-np-header: #1A1C1D;
-  --color-np-header-hover: #303030;
+  --color-np-header: #2B2F33;
+  /* Nền ô tìm kiếm nằm TRÊN nền thanh đầu, phải nhạt hơn một bậc mới thấy được ô.
+     Giữ #303030 cũ thì gần như trùng #2B2F33, ô tìm kiếm biến mất. */
+  --color-np-header-hover: #3A3F45;
 
   /* Rank badges (Vietnamese tiers) */
   --color-np-rank-dong: #B45309;
