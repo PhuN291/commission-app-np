@@ -47,12 +47,12 @@ type MapValue = string | { solar: string; style?: string };
 const MAP: Record<string, MapValue> = {
   AlertCircle: "danger-circle",
   AlertTriangle: "danger-triangle",
-  ArrowDownRight: "arrow-right-down",
-  ArrowLeft: "arrow-left",
-  ArrowRight: "arrow-right",
-  ArrowUpRight: "arrow-right-up",
+  ArrowDownRight: { solar: "arrow-right-down", style: "bold" },
+  ArrowLeft: { solar: "arrow-left", style: "bold" },
+  ArrowRight: { solar: "arrow-right", style: "bold" },
+  ArrowUpRight: { solar: "arrow-right-up", style: "bold" },
   /** Mục Phụ trách, dòng "Chỉ định": bảng kẹp có dấu tích, đọc ra "giao cho ai". */
-  AssignmentInd: "clipboard-check",
+  AssignmentInd: { solar: "clipboard-check", style: "bold" },
   /** Chọn giờ hẹn. */
   AvTimer: "stopwatch",
   Award: "medal-star",
@@ -75,10 +75,10 @@ const MAP: Record<string, MapValue> = {
   Check: "check-circle",
   CheckCircle: "check-circle",
   CheckCircle2: "check-circle",
-  ChevronDown: "alt-arrow-down",
-  ChevronLeft: "alt-arrow-left",
-  ChevronRight: "alt-arrow-right",
-  ChevronUp: "alt-arrow-up",
+  ChevronDown: { solar: "alt-arrow-down", style: "bold" },
+  ChevronLeft: { solar: "alt-arrow-left", style: "bold" },
+  ChevronRight: { solar: "alt-arrow-right", style: "bold" },
+  ChevronUp: { solar: "alt-arrow-up", style: "bold" },
   Circle: "record",
   ClipboardList: "clipboard-list",
   Clock: "clock-circle",
@@ -144,10 +144,10 @@ const MAP: Record<string, MapValue> = {
   Smartphone: "smartphone",
   Sparkles: "stars",
   /** Mục Phụ trách, dòng "Thực hiện": ống nghe, người trực tiếp làm dịch vụ. */
-  Stethoscope: "stethoscope",
+  Stethoscope: { solar: "stethoscope", style: "bold" },
   StickyNote: "notes",
   /** Mục Phụ trách, dòng "Tư vấn": người đeo tai nghe, đúng nghĩa tư vấn viên. */
-  SupportAgent: "headphones-round",
+  SupportAgent: { solar: "headphones-round", style: "bold" },
   Ticket: "ticket",
   /** Chip "Hôm nay". */
   Today: "calendar-date",
