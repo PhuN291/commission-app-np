@@ -10,7 +10,8 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "seed": "tsx script/seed.ts"
+    "seed": "tsx script/seed.ts",
+    "gen-icons": "tsx script/gen-icons.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -70,10 +71,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
-    "@material-symbols/svg-300": "^0.45.10",
-    "@material-symbols/svg-400": "^0.45.10",
-    "@material-symbols/svg-500": "^0.45.10",
-    "@material-symbols/svg-600": "^0.45.10",
+    "@iconify-json/solar": "^1.2.9",
     "@tailwindcss/vite": "^4.1.14",
     "@types/express": "^5.0.0",
     "@types/node": "^20.19.0",

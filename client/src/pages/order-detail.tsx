@@ -16,7 +16,6 @@ import {
   ContactsProduct,
   EditSquare,
   EyeOff,
-  FileText,
   History,
   LogIn,
   MapPin,
