@@ -21,8 +21,16 @@
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
-/** Kiểu dáng mặc định. Đổi được sang bất kỳ hậu tố nào Solar có: bold | linear | outline | broken. */
-const STYLE_SOLID = "bold-duotone";
+/**
+ * Kiểu mặc định: bold, tức hình đặc một lớp.
+ *
+ * KHÔNG lấy bold-duotone làm mặc định, dù đó là kiểu đẹp nhất của Solar. Lý do là cỡ:
+ * đo toàn bộ điểm gọi trong app thì phần lớn icon vẽ ở 10 tới 20px, chỉ vài cái từ
+ * 26px trở lên. Duotone chỉ đọc được từ khoảng 24px, dưới đó lớp mờ 50% nuốt mất phần
+ * thân hình và icon thành một cục xám. Nên duotone là NGOẠI LỆ cho chỗ to, ghi rõ
+ * từng cái ở bảng dưới, chứ không phải mặc định.
+ */
+const STYLE_SOLID = "bold";
 /**
  * Kiểu dùng khi điểm gọi truyền fill="none".
  *
@@ -45,7 +53,8 @@ const OUT = resolve(process.cwd(), "client/src/components/np/icon.tsx");
  */
 type MapValue = string | { solar: string; style?: string };
 const MAP: Record<string, MapValue> = {
-  AlertCircle: "danger-circle",
+  /** Chỉ dùng ở màn không tìm thấy trang, cỡ 48px, đủ to để duotone có đất diễn. */
+  AlertCircle: { solar: "danger-circle", style: "bold-duotone" },
   AlertTriangle: "danger-triangle",
   /* Nhóm mũi tên có đuôi dùng bản outline: nét đều một độ dày, đúng hình mũi tên quen
      thuộc. Bản bold đặc trông lạ vì cái đuôi bị vẽ thành thanh dày, còn bản duotone thì
@@ -59,7 +68,8 @@ const MAP: Record<string, MapValue> = {
   Award: "medal-star",
   BadgePercent: "sale",
   BarChart3: "chart",
-  Bell: "bell",
+  /** Chỉ dùng ở trạng thái rỗng màn Thông báo, cỡ 32px. */
+  Bell: { solar: "bell", style: "bold-duotone" },
   /** Riêng cho nút thông báo ở thanh đầu app. */
   BellAlert: "bell-bing",
   Building2: "buildings",
@@ -73,7 +83,7 @@ const MAP: Record<string, MapValue> = {
   CancelScheduleSend: "close-circle",
   /** Nhắn Zalo. */
   Chat: "chat-round",
-  Check: "check-circle",
+  Check: { solar: "check-circle", style: "outline" },
   CheckCircle: "check-circle",
   CheckCircle2: "check-circle",
   /* Cùng họ với nhóm mũi tên trên: bản bold là tam giác đặc, đọc nhầm thành nút phát,
@@ -96,22 +106,23 @@ const MAP: Record<string, MapValue> = {
   /** Nút sửa ghi chú: bút trên khung giấy, đứng riêng dễ nhận hơn cây bút trơn. */
   EditSquare: "pen-new-square",
   /** Thành tích: cúp có sao, đọc ra "đã đạt" rõ hơn cái cúp trơn. */
-  EditorChoice: "cup-star",
+  /** Thành tích: cúp có sao. Chỉ vẽ ở 26 và 28px. */
+  EditorChoice: { solar: "cup-star", style: "bold-duotone" },
   /** Chip "Tuần sau". */
   EventUpcoming: "calendar-date",
   ExternalLink: "square-arrow-right-up",
   EyeOff: "eye-closed",
   FileSpreadsheet: "document-text",
   FileText: "document-text",
-  Gift: { solar: "gift", style: "bold" },
-  GripVertical: "menu-dots",
+  Gift: "gift",
+  GripVertical: { solar: "menu-dots", style: "outline" },
   Hash: "hashtag",
   History: "history",
   /** Trang chủ của app phòng khám. */
   HomeHealth: "home-smile",
   Info: "info-circle",
   Layers: "layers",
-  Loader2: "refresh",
+  Loader2: { solar: "refresh", style: "outline" },
   LogIn: "login",
   LogOut: "logout",
   Mail: "letter",
@@ -121,8 +132,8 @@ const MAP: Record<string, MapValue> = {
   /** Icon dịch vụ dùng chung toàn app. */
   MedicalServices: "medical-kit",
   MessageSquare: "chat-square",
-  Minus: "minus-circle",
-  MoreHorizontal: "menu-dots",
+  Minus: { solar: "minus-circle", style: "outline" },
+  MoreHorizontal: { solar: "menu-dots", style: "outline" },
   Package: "box",
   PanelLeftIcon: "sidebar-minimalistic",
   /** Icon gọi dùng chung toàn app. */
@@ -132,12 +143,12 @@ const MAP: Record<string, MapValue> = {
   PlusCircle: "add-circle",
   Receipt: "bill-list",
   /** Tab Hoa hồng: hộp quà, đọc ra "phần thưởng" rõ hơn cái ví. */
-  Redeem: { solar: "gift", style: "bold" },
+  Redeem: "gift",
   /** Nút trợ lý AI ở thanh đầu app. Solar không có robot, cpu-bolt là gần nhất. */
   Robot: "cpu-bolt",
   Save: "diskette",
   /** Solar viết thiếu chữ i, "magnifer" mới là tên đúng trong gói. */
-  Search: "magnifer",
+  Search: { solar: "magnifer", style: "outline" },
   Settings: "settings",
   Shield: "shield-check",
   ShieldAlert: "shield-warning",
@@ -160,21 +171,22 @@ const MAP: Record<string, MapValue> = {
      Phải để bold: đã thử duotone, nó đẩy nguyên phần THÂN người xuống lớp mờ 50% nên
      ở cỡ 18px chỉ còn thấy cái đầu với một vệt mờ, dấu tích gần như mất hẳn. */
   /** Người kèm dấu tích. Mục Phụ trách, dòng "Chỉ định". */
-  UserCheck: { solar: "user-check-rounded", style: "bold" },
+  UserCheck: "user-check-rounded",
   UserCog: "user-id",
   UserPlus: "user-plus",
   UserRound: "user-rounded",
   /** Người trơn bản đặc. Mục Phụ trách, dòng "Thực hiện". */
-  UserSolid: { solar: "user-rounded", style: "bold" },
+  UserSolid: "user-rounded",
   /** Người kèm sóng âm, tức đang trao đổi. Mục Phụ trách, dòng "Tư vấn". */
-  UserSpeak: { solar: "user-speak-rounded", style: "bold" },
+  UserSpeak: "user-speak-rounded",
   UserX: "user-block",
-  Users: "users-group-rounded",
+  /** Chỉ vẽ ở 28 và 36px. */
+  Users: { solar: "users-group-rounded", style: "bold-duotone" },
   /** Dấu tích trạng thái dùng chung: đã đạt, đã duyệt, đã xong. */
   Verified: "verified-check",
   /** Chip "Ngày mai": mặt trời mọc. */
   WbTwilight: "sunrise",
-  X: "close-circle",
+  X: { solar: "close-circle", style: "outline" },
   XCircle: "close-circle",
 };
 
