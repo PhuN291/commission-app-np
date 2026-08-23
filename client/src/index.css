@@ -36,19 +36,17 @@
   --color-np-brand-ink: #008060;
   --color-np-link: #005BD3;
 
-  /* Gradient nhận diện Nguyên Phương, chính là dải màu trong logo: xanh dương sang
-     xanh lá. Dùng chung cho dải đầu màn đăng nhập và các thẻ số liệu lớn (Hoa hồng
-     tạm tính ở Trang chủ, Thực nhận ở màn Hoa hồng), để cả app chỉ có MỘT dải nhận
-     diện. Trước đó cùng một chuỗi gradient bị chép tay ở nhiều file. */
+  /* Dải nhận diện Nguyên Phương, chính là dải màu trong logo: xanh dương sang xanh lá.
+     Dùng cho dải đầu và nút chính của màn đăng nhập. */
   --np-brand-gradient-from: #0D509F;
   --np-brand-gradient-mid: #14639E;
   --np-brand-gradient-to: #1CAB89;
-  --np-hero-gradient: linear-gradient(
-    135deg,
-    var(--np-brand-gradient-from) 0%,
-    var(--np-brand-gradient-mid) 44%,
-    var(--np-brand-gradient-to) 100%
-  );
+
+  /* Nền thẻ số liệu lớn: Hoa hồng tạm tính ở Trang chủ, Thực nhận ở màn Hoa hồng.
+     CỐ Ý không dùng dải nhận diện ở trên: dải đó kết thúc bằng xanh lá sáng, chữ trắng
+     đặt lên chỉ đạt tương phản 2.9 trong khi cần 4.5, con số phần trăm ở góc phải dưới
+     mờ hẳn. Dải teal này kết thúc bằng màu tối nên chữ trắng đạt khoảng 8. */
+  --np-hero-gradient: linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%);
 
   /* Status */
   --color-np-success: #008060;
