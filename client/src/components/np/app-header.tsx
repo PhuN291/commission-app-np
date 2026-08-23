@@ -41,7 +41,9 @@ export function AppHeader({
         className="flex h-9 flex-1 cursor-pointer items-center gap-[10px] rounded-np-button border-0 bg-np-header-hover px-3"
       >
         <Search size={18} className="text-np-header-placeholder" />
-        <span className="text-[14px] font-medium text-np-header-placeholder">Tìm kiếm</span>
+        <span className="truncate text-[13px] font-medium text-np-header-placeholder">
+          Tìm kiếm đơn, khách, dịch vụ
+        </span>
       </button>
       <IconButton onClick={onSparkle} aria-label="AI">
         <Robot size={20} className="text-np-header-fg" />
