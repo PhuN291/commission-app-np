@@ -98,6 +98,12 @@
 
   /* Header */
   --color-np-header: #2B2F33;
+  /* Chữ và icon trên thanh đầu. Sáng hơn mức trực giác vì icon là duotone: phần thân
+     chuông và vòng kính lúp nằm ở LỚP MỜ 50%, nên độ tương phản thật chỉ còn một nửa
+     con số của màu này. Đo trên nền #2B2F33: lớp đặc 9.6, lớp mờ 3.6. */
+  --color-np-header-fg: #D6DADF;
+  /* Chữ gợi ý trong ô tìm kiếm. Nền ô sáng hơn thanh đầu nên cần đậm hơn nữa. */
+  --color-np-header-placeholder: #B8BDC3;
   /* Nền ô tìm kiếm nằm TRÊN nền thanh đầu, phải nhạt hơn một bậc mới thấy được ô.
      Giữ #303030 cũ thì gần như trùng #2B2F33, ô tìm kiếm biến mất. */
   --color-np-header-hover: #3A3F45;
