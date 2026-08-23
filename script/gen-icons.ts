@@ -47,10 +47,13 @@ type MapValue = string | { solar: string; style?: string };
 const MAP: Record<string, MapValue> = {
   AlertCircle: "danger-circle",
   AlertTriangle: "danger-triangle",
-  ArrowDownRight: { solar: "arrow-right-down", style: "bold" },
-  ArrowLeft: { solar: "arrow-left", style: "bold" },
-  ArrowRight: { solar: "arrow-right", style: "bold" },
-  ArrowUpRight: { solar: "arrow-right-up", style: "bold" },
+  /* Nhóm mũi tên có đuôi dùng bản outline: nét đều một độ dày, đúng hình mũi tên quen
+     thuộc. Bản bold đặc trông lạ vì cái đuôi bị vẽ thành thanh dày, còn bản duotone thì
+     đẩy nguyên cái đuôi xuống lớp mờ 50% nên nhìn như mũi tên vẽ dở. */
+  ArrowDownRight: { solar: "arrow-right-down", style: "outline" },
+  ArrowLeft: { solar: "arrow-left", style: "outline" },
+  ArrowRight: { solar: "arrow-right", style: "outline" },
+  ArrowUpRight: { solar: "arrow-right-up", style: "outline" },
   /** Mục Phụ trách, dòng "Chỉ định": bảng kẹp có dấu tích, đọc ra "giao cho ai". */
   AssignmentInd: { solar: "clipboard-check", style: "bold" },
   /** Chọn giờ hẹn. */
@@ -75,10 +78,12 @@ const MAP: Record<string, MapValue> = {
   Check: "check-circle",
   CheckCircle: "check-circle",
   CheckCircle2: "check-circle",
-  ChevronDown: { solar: "alt-arrow-down", style: "bold" },
-  ChevronLeft: { solar: "alt-arrow-left", style: "bold" },
-  ChevronRight: { solar: "alt-arrow-right", style: "bold" },
-  ChevronUp: { solar: "alt-arrow-up", style: "bold" },
+  /* Cùng họ với nhóm mũi tên trên: bản bold là tam giác đặc, đọc nhầm thành nút phát,
+     và đứng cạnh nút quay lại viền thì thành hai họ khác nhau trên cùng một hàng. */
+  ChevronDown: { solar: "alt-arrow-down", style: "outline" },
+  ChevronLeft: { solar: "alt-arrow-left", style: "outline" },
+  ChevronRight: { solar: "alt-arrow-right", style: "outline" },
+  ChevronUp: { solar: "alt-arrow-up", style: "outline" },
   Circle: "record",
   ClipboardList: "clipboard-list",
   Clock: "clock-circle",
