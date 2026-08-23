@@ -5,7 +5,6 @@ import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useRoute } from "wouter";
 import type { LucideIcon } from "@/components/np/icon";
 import {
-  AssignmentInd,
   Calendar,
   CalendarCheck,
   CalendarDays,
@@ -24,10 +23,11 @@ import {
   Play,
   PlusCircle,
   Receipt,
-  Stethoscope,
   StickyNote,
-  SupportAgent,
+  UserCheck,
   UserCog,
+  UserSolid,
+  UserSpeak,
   UserX,
   Verified,
   X,
@@ -164,9 +164,9 @@ type StaffOption = {
  * phòng khám nhỏ hay kiêm nhiệm, khoá cứng theo vai là có ngày không chọn được ai.
  */
 const PHU_TRACH = [
-  { cot: "indicatedByUserId", nhan: "Chỉ định", icon: AssignmentInd, uuTien: "doctor" },
-  { cot: "performedByUserId", nhan: "Thực hiện", icon: Stethoscope, uuTien: "doctor" },
-  { cot: "saleUserId", nhan: "Tư vấn", icon: SupportAgent, uuTien: "sale" },
+  { cot: "indicatedByUserId", nhan: "Chỉ định", icon: UserCheck, uuTien: "doctor" },
+  { cot: "performedByUserId", nhan: "Thực hiện", icon: UserSolid, uuTien: "doctor" },
+  { cot: "saleUserId", nhan: "Tư vấn", icon: UserSpeak, uuTien: "sale" },
 ] as const;
 
 type PhuTrachCot = (typeof PHU_TRACH)[number]["cot"];

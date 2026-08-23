@@ -54,8 +54,6 @@ const MAP: Record<string, MapValue> = {
   ArrowLeft: { solar: "arrow-left", style: "outline" },
   ArrowRight: { solar: "arrow-right", style: "outline" },
   ArrowUpRight: { solar: "arrow-right-up", style: "outline" },
-  /** Mục Phụ trách, dòng "Chỉ định": bảng kẹp có dấu tích, đọc ra "giao cho ai". */
-  AssignmentInd: { solar: "clipboard-check", style: "bold" },
   /** Chọn giờ hẹn. */
   AvTimer: "stopwatch",
   Award: "medal-star",
@@ -148,19 +146,28 @@ const MAP: Record<string, MapValue> = {
   SlidersHorizontal: "tuning",
   Smartphone: "smartphone",
   Sparkles: "stars",
-  /** Mục Phụ trách, dòng "Thực hiện": ống nghe, người trực tiếp làm dịch vụ. */
-  Stethoscope: { solar: "stethoscope", style: "bold" },
   StickyNote: "notes",
-  /** Mục Phụ trách, dòng "Tư vấn": người đeo tai nghe, đúng nghĩa tư vấn viên. */
-  SupportAgent: { solar: "headphones-round", style: "bold" },
   Ticket: "ticket",
   /** Chip "Hôm nay". */
   Today: "calendar-date",
   TrendingDown: "graph-down",
   TrendingUp: "graph-up",
+  /* Ba icon dưới đây dựng mục Phụ trách ở chi tiết đơn: chỉ định, thực hiện, tư vấn.
+     Cả ba là HÌNH NGƯỜI vì cả ba trả lời cùng một câu "ai làm việc này". Trước đây
+     dùng bảng kẹp, ống nghe và tai nghe: đúng nghĩa công việc nhưng người đọc phải
+     suy một bước mới ra là đang nói về một con người. Dùng bản đầu tròn cho cả ba để
+     ba cái đầu cùng dáng.
+     Phải để bold: đã thử duotone, nó đẩy nguyên phần THÂN người xuống lớp mờ 50% nên
+     ở cỡ 18px chỉ còn thấy cái đầu với một vệt mờ, dấu tích gần như mất hẳn. */
+  /** Người kèm dấu tích. Mục Phụ trách, dòng "Chỉ định". */
+  UserCheck: { solar: "user-check-rounded", style: "bold" },
   UserCog: "user-id",
   UserPlus: "user-plus",
   UserRound: "user-rounded",
+  /** Người trơn bản đặc. Mục Phụ trách, dòng "Thực hiện". */
+  UserSolid: { solar: "user-rounded", style: "bold" },
+  /** Người kèm sóng âm, tức đang trao đổi. Mục Phụ trách, dòng "Tư vấn". */
+  UserSpeak: { solar: "user-speak-rounded", style: "bold" },
   UserX: "user-block",
   Users: "users-group-rounded",
   /** Dấu tích trạng thái dùng chung: đã đạt, đã duyệt, đã xong. */
