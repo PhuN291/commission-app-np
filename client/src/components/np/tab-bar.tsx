@@ -16,7 +16,7 @@ const TABS: TabDef[] = [
   // Hoa hồng (/income) chỉ cho sale/doctor/tc. KT/CEO dùng /admin/commission-approval.
   { key: "commission", label: "Hoa hồng", icon: Redeem, roles: ["sale", "doctor", "tc"] },
   { key: "customers", label: "Khách hàng", icon: ContactsProduct },
-  { key: "more", label: "Thêm", icon: Menu },
+  { key: "more", label: "Menu", icon: Menu },
 ];
 
 type TabBarProps = {

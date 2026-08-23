@@ -3,6 +3,12 @@ import { cn } from "@/lib/utils";
 import { IconButton } from "./icon-button";
 import npMark from "@assets/np-brand/np-mark-trang.png";
 
+/**
+ * Tạm ẩn nút trợ lý. Tính năng chưa chạy nên để nút ở đó chỉ tổ người dùng bấm vào rồi
+ * không thấy gì. Đổi thành true là hiện lại, phần mã bên dưới vẫn còn nguyên.
+ */
+const HIEN_TRO_LY = false;
+
 type AppHeaderProps = {
   notifCount?: number;
   onSearch?: () => void;
@@ -45,9 +51,11 @@ export function AppHeader({
           Tìm kiếm đơn, khách, dịch vụ
         </span>
       </button>
-      <IconButton onClick={onSparkle} aria-label="AI">
-        <Robot size={20} className="text-np-header-fg" />
-      </IconButton>
+      {HIEN_TRO_LY && (
+        <IconButton onClick={onSparkle} aria-label="Trợ lý">
+          <Robot size={20} className="text-np-header-fg" />
+        </IconButton>
+      )}
       <IconButton onClick={onBell} aria-label="Thông báo">
         <div className="relative">
           <BellAlert size={20} className="text-np-header-fg" />
