@@ -1,6 +1,7 @@
 import { BellAlert, Robot, Search } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./icon-button";
+import monogram from "@assets/np-monogram.png";
 
 type AppHeaderProps = {
   notifCount?: number;
@@ -24,6 +25,13 @@ export function AppHeader({
         className,
       )}
     >
+      {/* Dấu nhận diện phòng khám. Dùng lại đúng hình chìm trên thẻ hoa hồng, nhưng ở
+          đây để đục hoàn toàn vì nó đứng trên nền tối và phải đọc ra được. */}
+      <img
+        src={monogram}
+        alt="Phòng khám Nguyên Phương"
+        className="mr-0.5 h-[26px] w-auto flex-shrink-0 select-none"
+      />
       <button
         type="button"
         onClick={onSearch}
