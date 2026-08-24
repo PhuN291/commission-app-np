@@ -230,7 +230,7 @@ export default function Income() {
       <div className="px-4">
         <div
           className="relative overflow-hidden rounded-np-card p-[22px] text-white"
-          style={{ background: "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)" }}
+          style={{ background: "var(--np-hero-gradient)" }}
         >
           {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
               mép phải và mép trên nên chỉ thấy một phần, đủ nhận ra mà không giành chỗ

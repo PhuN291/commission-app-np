@@ -5,7 +5,6 @@ import { useQuayLai } from "@/lib/use-back";
 import { useLocation, useRoute } from "wouter";
 import type { LucideIcon } from "@/components/np/icon";
 import {
-  AssignmentInd,
   Calendar,
   CalendarCheck,
   CalendarDays,
@@ -16,7 +15,6 @@ import {
   ContactsProduct,
   EditSquare,
   EyeOff,
-  FileText,
   History,
   LogIn,
   MapPin,
@@ -25,10 +23,11 @@ import {
   Play,
   PlusCircle,
   Receipt,
-  Stethoscope,
   StickyNote,
-  SupportAgent,
+  UserCheck,
   UserCog,
+  UserSolid,
+  UserSpeak,
   UserX,
   Verified,
   X,
@@ -165,9 +164,9 @@ type StaffOption = {
  * phòng khám nhỏ hay kiêm nhiệm, khoá cứng theo vai là có ngày không chọn được ai.
  */
 const PHU_TRACH = [
-  { cot: "indicatedByUserId", nhan: "Chỉ định", icon: AssignmentInd, uuTien: "doctor" },
-  { cot: "performedByUserId", nhan: "Thực hiện", icon: Stethoscope, uuTien: "doctor" },
-  { cot: "saleUserId", nhan: "Tư vấn", icon: SupportAgent, uuTien: "sale" },
+  { cot: "indicatedByUserId", nhan: "Chỉ định", icon: UserCheck, uuTien: "doctor" },
+  { cot: "performedByUserId", nhan: "Thực hiện", icon: UserSolid, uuTien: "doctor" },
+  { cot: "saleUserId", nhan: "Tư vấn", icon: UserSpeak, uuTien: "sale" },
 ] as const;
 
 type PhuTrachCot = (typeof PHU_TRACH)[number]["cot"];
@@ -756,7 +755,7 @@ export default function OrderDetail() {
                 onClick={moSuaDichVu}
                 className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
               >
-                <EditSquare size={18} fill="none" />
+                <EditSquare size={18} />
               </button>
             ) : undefined
           }
@@ -847,7 +846,7 @@ export default function OrderDetail() {
                 }}
                 className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
               >
-                <EditSquare size={18} fill="none" />
+                <EditSquare size={18} />
               </button>
             ) : undefined
           }
@@ -1399,7 +1398,7 @@ function PhuTrachRow({
         !last && "np-divider",
       )}
     >
-      <Icon size={18} fill="none" className="flex-shrink-0 text-np-text-muted" />
+      <Icon size={18} className="flex-shrink-0 text-np-text-muted" />
       {/* Nhãn không co: tên dài mà bóp nhãn xuống hai dòng thì dòng phình cao,
           ba dòng lệch nhịp nhau. Phần bị cắt bớt phải là tên, không phải nhãn. */}
       <span className="flex-shrink-0 text-[14px] text-np-text-sub">{label}</span>

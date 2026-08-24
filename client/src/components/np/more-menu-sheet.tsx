@@ -174,6 +174,13 @@ export function MoreMenuSheet({ open, onOpenChange }: MoreMenuSheetProps) {
               Đăng xuất
             </button>
           </div>
+
+          {/* Ghi công bắt buộc theo giấy phép CC BY 4.0 của bộ biểu tượng Solar.
+              Đặt ở đây vì menu Thêm là chỗ duy nhất mọi vai đều mở được; màn Cài đặt
+              hệ thống chỉ CEO, trưởng ca và kế toán vào được nên không đủ. Đừng gỡ. */}
+          <p className="mt-3 text-center text-[11px] leading-[1.5] text-np-text-muted">
+            Bộ biểu tượng Solar của 480 Design, giấy phép CC BY 4.0.
+          </p>
         </div>
       </SheetContent>
     </Sheet>
@@ -201,7 +208,7 @@ function MenuItem({ node, depth, expanded, toggle, onLink }: MenuItemProps) {
         className="flex w-full items-center gap-3 pr-4 text-left transition-colors hover:bg-np-surface-sub"
       >
         <div className="flex w-5 flex-shrink-0 justify-center">
-          {Icon && <Icon size={18} strokeWidth={2} className="text-np-text-sub" />}
+          {Icon && <Icon size={20} strokeWidth={2} className="text-np-text-sub" />}
         </div>
         <span
           className={cn(
@@ -225,7 +232,7 @@ function MenuItem({ node, depth, expanded, toggle, onLink }: MenuItemProps) {
         className="flex w-full items-center gap-3 pr-4 text-left transition-colors hover:bg-np-surface-sub"
       >
         <div className="flex w-5 flex-shrink-0 justify-center">
-          {Icon && <Icon size={18} strokeWidth={2} className="text-np-text-sub" />}
+          {Icon && <Icon size={20} strokeWidth={2} className="text-np-text-sub" />}
         </div>
         <span
           className={cn(

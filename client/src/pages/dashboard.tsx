@@ -12,7 +12,6 @@ import monogram from "@assets/np-monogram.png";
 import { useLocation } from "wouter";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
-  Bell,
   Calendar,
   ClipboardList,
   Clock,
@@ -21,7 +20,6 @@ import {
   Info,
   Medal,
   TrendingDown,
-  ChevronRight,
   TrendingUp,
   Users,
 } from "@/components/np/icon";
@@ -219,7 +217,6 @@ function PersonalView({
           amount={hero.commission}
           showInfoPopover
           trendPct={hero.commissionTrendPct}
-          onXemChiTiet={() => navigate("/income")}
         />
       </div>
 
@@ -444,7 +441,6 @@ function HeroCard({
   showInfoPopover = false,
   variant = "personal",
   trendPct = null,
-  onXemChiTiet,
 }: {
   label: string;
   amount: number;
@@ -452,9 +448,8 @@ function HeroCard({
   showInfoPopover?: boolean;
   variant?: "personal" | "admin";
   trendPct?: number | null;
-  /** Mở nơi liệt kê từng khoản. Con số ở đây là tổng nên không thao tác được gì. */
-  onXemChiTiet?: () => void;
 }) {
+  const [, navigate] = useLocation();
   return (
     <div
       className="relative overflow-hidden rounded-np-card p-[22px] text-white"
@@ -462,7 +457,7 @@ function HeroCard({
         background:
           variant === "admin"
             ? "linear-gradient(135deg, #1A1C1D 0%, #303030 100%)"
-            : "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)",
+            : "var(--np-hero-gradient)",
       }}
     >
       {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
@@ -497,9 +492,20 @@ function HeroCard({
               >
                 <div className="np-divider px-4 pb-3 pt-4">
                   <p className="text-[14px] font-bold text-np-ink">Cách tính hoa hồng</p>
-                  <p className="mt-0.5 text-[12px] text-np-text-muted">
-                    Hoa hồng dự tính của tháng này
-                  </p>
+                  {/* Con số ở thẻ là TỔNG của nhiều khoản nên không thao tác gì tại
+                      chỗ được. Dẫn sang trang Hoa hồng, ở đó mới liệt kê từng khoản. */}
+                  <div className="mt-0.5 flex items-center justify-between gap-2">
+                    <p className="min-w-0 text-[12px] text-np-text-muted">
+                      Hoa hồng dự tính tháng này
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/income")}
+                      className="flex-shrink-0 text-[12px] font-semibold text-np-link"
+                    >
+                      Xem chi tiết
+                    </button>
+                  </div>
                 </div>
                 <div className="px-4 py-3">
                   <div className="text-[11px] leading-relaxed text-np-text-muted">
@@ -530,18 +536,6 @@ function HeroCard({
       </div>
       {subtitle && (
         <div className="mt-2.5 text-[12px] font-medium text-white/75">{subtitle}</div>
-      )}
-      {/* Con số này là TỔNG của nhiều khoản nên không khiếu nại hay thao tác gì
-          tại chỗ được. Dẫn sang nơi liệt kê từng khoản, ở đó mới có nút. */}
-      {onXemChiTiet && (
-        <button
-          type="button"
-          onClick={onXemChiTiet}
-          className="relative mt-3 inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-bold text-white transition-colors active:bg-white/25"
-        >
-          Xem từng khoản
-          <ChevronRight size={14} strokeWidth={2.5} />
-        </button>
       )}
     </div>
   );

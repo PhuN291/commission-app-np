@@ -10,9 +10,10 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, EditorChoice, Medal, TrendingUp, Verified, XCircle } from "@/components/np/icon";
+import { EditorChoice, Medal, TrendingUp } from "@/components/np/icon";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
+  Badge,
   Card,
   NPProgress,
   PageHeader,
@@ -77,6 +78,14 @@ export default function RankingPage() {
 // PersonalRankView — NV/BS only (R-9-1)
 // ─────────────────────────────────────────────────────────────────
 
+type RankTierView = {
+  key: Ranking;
+  label: string;
+  pctBp: number | null;
+  requirement: { revenue: number; months: number } | null;
+  state: "passed" | "current" | "locked";
+};
+
 type PersonalRankingData = {
   user: { id: number; name: string; role: string; ranking: Ranking | null };
   monthlyRevenue: number;
@@ -86,8 +95,22 @@ type PersonalRankingData = {
   nextTier: Ranking | null;
   target: { revenue: number; months: number } | null;
   historyMonths: Array<{ month: string; revenue: number; achieved: boolean; current?: boolean }>;
+  streakBefore: number;
+  tiers: RankTierView[];
   isAtTopTier: boolean;
 };
+
+/** 500 basis point → "5%". Bỏ số lẻ .0 cho gọn. */
+function fmtPct(bp: number | null): string | null {
+  if (bp == null) return null;
+  const v = bp / 100;
+  return `${Number.isInteger(v) ? v : v.toFixed(1)}%`;
+}
+
+/** "3 tháng liên tiếp", nhưng một tháng thì bỏ chữ liên tiếp cho xuôi câu. */
+function soThangText(months: number): string {
+  return months <= 1 ? "1 tháng" : `${months} tháng liên tiếp`;
+}
 
 function PersonalRankView() {
   const { active, onTab } = useTabNav();
@@ -110,74 +133,101 @@ function PersonalRankView() {
     );
   }
 
-  const { user, monthlyRevenue, tierPositionPct, isSoloInTier, nextTier, target, historyMonths, isAtTopTier } = data;
+  const {
+    user,
+    monthlyRevenue,
+    tierPositionPct,
+    isSoloInTier,
+    nextTier,
+    target,
+    historyMonths,
+    isAtTopTier,
+  } = data;
+  // Chốt hình dạng: hai trường này thêm sau. Máy chủ chưa nạp bản mới (tsx không tự
+  // theo dõi) thì payload thiếu chúng, và `tiers.find` làm vỡ trắng cả màn.
+  const streakBefore = data.streakBefore ?? 0;
+  const tiers = data.tiers ?? [];
   const remaining = target ? Math.max(0, target.revenue - monthlyRevenue) : 0;
-  const currentMonthProgress = target
-    ? Math.min(100, Math.round((monthlyRevenue / target.revenue) * 100))
-    : 0;
+  const datThangNay = !!target && monthlyRevenue >= target.revenue;
+  const daCo = streakBefore + (datThangNay ? 1 : 0);
+  const bacHienTai = tiers.find((t) => t.state === "current");
+  const pctHienTai = fmtPct(bacHienTai?.pctBp ?? null);
+  const thangNay = historyMonths.find((m) => m.current)?.month;
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Xếp hạng" subtitle="Vị trí tháng này" />
+      <PageHeader title="Xếp hạng" subtitle="Bậc hiện tại và tiến độ lên bậc kế" />
 
-      {/* Hero card — current rank + tier position */}
+      {/* Bậc đang đứng, kèm mức hoa hồng vì đó mới là lý do người ta quan tâm tới bậc */}
       <Card className="px-4 py-5">
-        <div className="text-[11px] font-semibold text-np-text-muted">
-          Bậc hiện tại
-        </div>
+        <div className="text-[11px] font-semibold text-np-text-muted">Bậc hiện tại</div>
         <div className="mt-2 flex items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-np-brand-soft to-np-brand-soft/60">
+          <div
+            className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full"
+            style={{ background: rankingBg(user.ranking) }}
+          >
             <Medal size={26} color={rankingColor(user.ranking)} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[22px] font-extrabold tracking-[-0.4px] text-np-ink">
-              {user.ranking ? RANKING_LABEL[user.ranking] : "Chưa xếp bậc"}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[22px] font-extrabold tracking-[-0.4px] text-np-ink">
+                {user.ranking ? RANKING_LABEL[user.ranking] : "Chưa xếp bậc"}
+              </span>
+              {pctHienTai && <Badge tone="success">Hoa hồng {pctHienTai}</Badge>}
             </div>
-            {isSoloInTier ? (
-              <div className="mt-0.5 text-[12px] font-medium text-np-text-sub">
-                Duy nhất ở bậc {user.ranking && RANKING_LABEL[user.ranking]}
+            {isSoloInTier && user.ranking ? (
+              <div className="mt-1 text-[12px] font-medium text-np-text-sub">
+                Hiện chỉ có bạn ở bậc {RANKING_LABEL[user.ranking]}
               </div>
             ) : tierPositionPct !== null && user.ranking ? (
-              <div className="mt-0.5 text-[12px] font-medium text-np-text-sub">
-                Top <span className="font-bold text-np-brand-ink">{tierPositionPct}%</span> trong bậc {RANKING_LABEL[user.ranking]}
+              <div className="mt-1 text-[12px] font-medium text-np-text-sub">
+                Top <span className="font-bold text-np-brand-ink">{tierPositionPct}%</span> trong bậc{" "}
+                {RANKING_LABEL[user.ranking]}
               </div>
             ) : null}
           </div>
         </div>
         <div className="mt-4 border-t border-np-surface-pressed pt-3">
           <div className="text-[11px] font-semibold text-np-text-muted">
-            Doanh số tháng
+            Doanh số tháng {thangNay ?? ""}
           </div>
-          <div className="mt-1 text-[20px] font-extrabold text-np-ink tabular-nums">
+          <div className="mt-1 text-[20px] font-extrabold tabular-nums text-np-ink">
             {fmtVND(monthlyRevenue)}
+          </div>
+          <div className="mt-1 text-[11px] leading-[1.5] text-np-text-muted">
+            Tính trên đơn đã khám xong, sau khi trừ bảo hiểm, voucher và tiền hoàn.
           </div>
         </div>
       </Card>
 
-      {/* Progress section — chỉ hiện khi không ở đỉnh tier */}
       {isAtTopTier ? (
         <Card className="mt-4 flex items-center gap-3 px-4 py-4">
-          <EditorChoice size={28} className="flex-shrink-0 text-np-rank-vang" style={{ color: "var(--color-np-rank-vang, #D97706)" }} />
+          <EditorChoice
+            size={28}
+            className="flex-shrink-0"
+            style={{ color: "var(--color-np-rank-vang)" }}
+          />
           <div>
             <div className="text-[14px] font-bold text-np-ink">Bậc cao nhất</div>
             <div className="mt-0.5 text-[12px] text-np-text-sub">
-              Đã đạt bậc cao nhất.
+              Bạn đang ở bậc cao nhất của thang, không còn bậc nào để lên.
             </div>
           </div>
         </Card>
       ) : target && nextTier ? (
         <>
           <SectionTitle>Tiến độ lên {RANKING_LABEL[nextTier]}</SectionTitle>
-          <Card className="space-y-3 px-4 py-4">
-            <div className="flex items-start gap-2 rounded-np-button border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] text-np-text-sub">
+          <Card className="space-y-3.5 px-4 py-4">
+            <div className="flex items-start gap-2 rounded-np-button border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] leading-[1.5] text-np-text-sub">
               <TrendingUp size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
               <span>
-                Mục tiêu: <strong className="text-np-ink">{fmtVND(target.revenue)}/tháng</strong>{" "}
-                × <strong className="text-np-ink">{target.months} tháng liên tiếp</strong>
+                Cần <strong className="text-np-ink">{fmtVND(target.revenue)}</strong> mỗi tháng, đạt{" "}
+                <strong className="text-np-ink">{soThangText(target.months)}</strong>.
+                {target.months > 1 && " Trượt một tháng là đếm lại từ đầu."}
               </span>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {historyMonths.map((m) => (
                 <MonthRow
                   key={m.month}
@@ -190,29 +240,120 @@ function PersonalRankView() {
               ))}
             </div>
 
-            {remaining > 0 && (
-              <div className="border-t border-np-surface-pressed pt-3 text-center text-[13px] font-medium text-np-text-sub">
-                Còn{" "}
-                <span className="font-bold text-np-brand-ink tabular-nums">
-                  {fmtVND(remaining)}
-                </span>{" "}
-                để đạt mục tiêu tháng này
+            {/* Câu chốt. Trước đây chỗ này chỉ nói "đã đạt mục tiêu tháng này", người
+                dùng đọc xong tưởng sắp lên bậc trong khi chuỗi mới được 1 trên 3. */}
+            <div className="border-t border-np-surface-pressed pt-3">
+              <div className="text-[13px] font-bold text-np-ink">
+                {target.months > 1
+                  ? `Đã có ${daCo} trên ${target.months} tháng liên tiếp`
+                  : datThangNay
+                    ? "Đã đạt mục tiêu tháng này"
+                    : "Chưa đạt mục tiêu tháng này"}
               </div>
-            )}
-            {remaining === 0 && currentMonthProgress >= 100 && (
-              <div className="flex items-center justify-center gap-1.5 border-t border-np-surface-pressed pt-3 text-[13px] font-bold text-np-badge-success-fg">
-                <Verified size={15} />
-                Đã đạt mục tiêu tháng này
+              <div className="mt-0.5 text-[12px] leading-[1.5] text-np-text-sub">
+                {daCo >= target.months ? (
+                  <>Đủ điều kiện lên bậc {RANKING_LABEL[nextTier]}.</>
+                ) : datThangNay ? (
+                  <>
+                    Giữ nhịp thêm {target.months - daCo} tháng nữa là lên bậc{" "}
+                    {RANKING_LABEL[nextTier]}.
+                  </>
+                ) : (
+                  <>
+                    Còn{" "}
+                    <span className="font-bold tabular-nums text-np-brand-ink">
+                      {fmtVND(remaining)}
+                    </span>{" "}
+                    nữa là tháng này được tính.
+                  </>
+                )}
               </div>
-            )}
+            </div>
           </Card>
         </>
       ) : null}
 
+      {tiers.length > 0 && (
+        <>
+          <SectionTitle>Thang bậc {roleWord(user.role)}</SectionTitle>
+          <Card className="overflow-hidden p-0">
+            {tiers.map((t, i) => (
+              <TierRow key={t.key} tier={t} next={tiers[i + 1]} last={i === tiers.length - 1} />
+            ))}
+          </Card>
+        </>
+      )}
     </Screen>
   );
 }
 
+/** Nhãn vai dùng trong câu, viết thường vì nằm giữa câu. */
+function roleWord(role: string): string {
+  return role === "doctor" ? "bác sĩ" : "điều dưỡng";
+}
+
+function TierRow({
+  tier,
+  next,
+  last,
+}: {
+  tier: RankTierView;
+  next?: RankTierView;
+  last: boolean;
+}) {
+  const pct = fmtPct(tier.pctBp);
+  const laHienTai = tier.state === "current";
+  return (
+    <div
+      className={`flex items-start gap-3 px-4 py-3 ${last ? "" : "np-divider"} ${
+        laHienTai ? "bg-np-brand-soft/30" : ""
+      }`}
+    >
+      {/* Chấm mang HAI thông tin: màu là bậc, đặc hay rỗng là đã qua hay chưa tới.
+          Chỉ dùng màu thì không đủ, vì Tập sự và Bạc cùng tông xám. */}
+      <div
+        className="mt-[3px] h-3 w-3 flex-shrink-0 rounded-full"
+        style={
+          tier.state === "locked"
+            ? { border: `2px solid ${rankingColor(tier.key)}`, opacity: 0.5 }
+            : { background: rankingColor(tier.key) }
+        }
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span
+            className={`text-[14px] text-np-ink ${laHienTai ? "font-extrabold" : "font-semibold"}`}
+          >
+            {tier.label}
+          </span>
+          {pct && (
+            <Badge tone={laHienTai ? "success" : "neutral"}>Hoa hồng {pct}</Badge>
+          )}
+          {laHienTai && <span className="text-[11px] font-bold text-np-brand-ink">Bậc của bạn</span>}
+        </div>
+        <div className="mt-0.5 text-[11px] leading-[1.5] text-np-text-sub">
+          {tier.requirement && next ? (
+            <>
+              Lên {next.label}: {fmtVND(tier.requirement.revenue)} mỗi tháng, đạt{" "}
+              {soThangText(tier.requirement.months)}
+            </>
+          ) : (
+            "Bậc cao nhất"
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Một tháng trong cửa sổ xét.
+ *
+ * Màu thanh phải NÓI CÙNG MỘT ĐIỀU với nhãn trạng thái. Bản trước vẽ mọi tháng bằng
+ * một màu xanh, nên tháng trượt 28 trên 30 triệu hiện ra thành thanh xanh dài 93% với
+ * một dấu ✕ xám bé ở mép: mắt đọc màu và độ dài trước, nên cả ba tháng nhìn như đã
+ * xong trong khi hai tháng đã hỏng.
+ */
 function MonthRow({
   month,
   revenue,
@@ -226,28 +367,60 @@ function MonthRow({
   achieved: boolean;
   current: boolean;
 }) {
-  const pct = Math.min(100, Math.round((revenue / target) * 100));
+  const pct = target > 0 ? Math.min(100, Math.round((revenue / target) * 100)) : 0;
+  const tone = achieved ? "success" : current ? "info" : "muted";
+  const nhan = achieved ? "Đạt" : current ? "Đang tính" : "Chưa đạt";
+  const mauThanh = achieved
+    ? "var(--color-np-badge-success-fg)"
+    : current
+      ? "var(--color-np-badge-info-fg)"
+      : "var(--color-np-badge-muted-fg)";
+
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-[12px]">
-        <span className={`font-semibold ${current ? "text-np-ink" : "text-np-text-sub"}`}>
-          {month}
-          {current && <span className="ml-1.5 text-[10px] font-medium text-np-text-muted">(tháng này)</span>}
-        </span>
-        <span className="flex items-center gap-1.5 font-medium tabular-nums text-np-text-sub">
-          <span className={current ? "text-np-ink font-bold" : ""}>{fmtVND(revenue)}</span>
-          {achieved ? (
-            <Verified size={15} className="text-np-badge-success-fg" />
-          ) : current ? (
-            <Clock size={15} className="text-np-text-muted" />
-          ) : (
-            <XCircle size={15} className="text-np-text-muted" />
-          )}
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={`text-[12px] ${current ? "font-bold text-np-ink" : "font-semibold text-np-text-sub"}`}
+          >
+            {month}
+          </span>
+          <Badge tone={tone}>{nhan}</Badge>
+        </div>
+        <span
+          className={`flex-shrink-0 text-[12px] tabular-nums ${
+            current ? "font-bold text-np-ink" : "font-medium text-np-text-sub"
+          }`}
+        >
+          {fmtVND(revenue)}
         </span>
       </div>
-      <NPProgress value={pct} />
+      <NPProgress value={pct} color={mauThanh} />
     </div>
   );
+}
+
+/**
+ * Nền vòng huy hiệu, đi theo cặp với rankingColor.
+ *
+ * Trước đây vòng luôn là gradient xanh thương hiệu bất kể bậc, trong khi cái huy hiệu
+ * bên trong lại đổi màu theo bậc, nên bậc Bạc hiện ra là huy hiệu xám trên nền xanh lá.
+ */
+function rankingBg(ranking: Ranking | null): string {
+  switch (ranking) {
+    case "M1":
+    case "L1":
+      return "var(--color-np-rank-dong-bg)";
+    case "M2":
+      return "var(--color-np-rank-bac-bg)";
+    case "M3":
+    case "L2":
+      return "var(--color-np-rank-vang-bg)";
+    case "L3":
+      return "var(--color-np-rank-kim-bg)";
+    default:
+      return "var(--color-np-surface-sub)";
+  }
 }
 
 /**
@@ -286,16 +459,6 @@ interface StaffMember {
   revenue: number;
   commission: number;
   rank: number;
-}
-
-function getRankTier(revenue: number) {
-  if (revenue >= 100_000_000)
-    return { name: "Kim cương", color: "var(--color-np-rank-kim)", bg: "var(--color-np-rank-kim-bg)" };
-  if (revenue >= 50_000_000)
-    return { name: "Vàng", color: "var(--color-np-rank-vang)", bg: "var(--color-np-rank-vang-bg)" };
-  if (revenue >= 20_000_000)
-    return { name: "Bạc", color: "var(--color-np-rank-bac)", bg: "var(--color-np-rank-bac-bg)" };
-  return { name: "Đồng", color: "var(--color-np-rank-dong)", bg: "var(--color-np-rank-dong-bg)" };
 }
 
 // Huy hiệu hạng 1-2-3: cùng một hình, khác màu (vàng, bạc, đồng).

@@ -74,8 +74,7 @@ export function NoteSection({
               aria-label={`Sửa ${title.toLowerCase()}`}
               className="-my-2 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-np-text-sub transition-colors active:bg-np-surface-pressed"
             >
-              {/* fill="none" để lấy bản viền: nút phụ, tô đặc thì nặng hơn cả tiêu đề mục. */}
-              <EditSquare size={18} fill="none" />
+              <EditSquare size={18} />
             </button>
           ) : undefined
         }

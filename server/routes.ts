@@ -143,7 +143,7 @@ export async function registerRoutes(
     const user = await storage.getUserByPhone(phone);
     if (!user) {
       // Trung tính: không lộ số chưa đăng ký (giống hệt khi không có OTP hợp lệ).
-      return res.status(400).json({ status: "invalid", message: "OTP không tồn tại hoặc đã dùng" });
+      return res.status(400).json({ status: "invalid", message: "Mã xác thực không đúng hoặc đã dùng rồi" });
     }
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
       return res.status(423).json({
@@ -155,11 +155,11 @@ export async function registerRoutes(
 
     const session = await getOtpSession(phone);
     if (!session) {
-      return res.status(400).json({ status: "invalid", message: "OTP không tồn tại hoặc đã dùng" });
+      return res.status(400).json({ status: "invalid", message: "Mã xác thực không đúng hoặc đã dùng rồi" });
     }
     if (Date.now() > session.expiresAt) {
       await deleteOtpSession(phone);
-      return res.status(400).json({ status: "expired", message: "OTP đã hết hạn, vui lòng gửi lại" });
+      return res.status(400).json({ status: "expired", message: "Mã xác thực đã hết hạn, bấm gửi lại mã" });
     }
 
     // OTP check — chấp nhận mã đã gen hoặc mã đăng nhập TẠM 062026 (hợp lệ mọi môi trường).
@@ -178,7 +178,7 @@ export async function registerRoutes(
       }
       return res.status(400).json({
         status: "invalid",
-        message: `OTP sai (còn ${MAX_OTP_ATTEMPTS - attempts} lần thử)`,
+        message: `Mã xác thực không đúng, còn ${MAX_OTP_ATTEMPTS - attempts} lần thử`,
         attempts_left: MAX_OTP_ATTEMPTS - attempts,
       });
     }

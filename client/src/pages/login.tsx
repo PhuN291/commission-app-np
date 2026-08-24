@@ -420,7 +420,7 @@ function BuocSoDienThoai({
       </button>
 
       <p className="mt-[18px] text-center text-[13px] text-np-login-sub">
-        Mã OTP sẽ được gửi đến số điện thoại này.
+        Mã xác thực sẽ được gửi đến số điện thoại này.
       </p>
 
       {loi && <HopLoi>{loi}</HopLoi>}
@@ -466,9 +466,9 @@ function BuocOtp({
   const duSo = otp.length === 6;
   return (
     <>
-      <h1 className="text-[30px] font-bold leading-[1.22] text-np-login-blue">Nhập mã OTP</h1>
+      <h1 className="text-[30px] font-bold leading-[1.22] text-np-login-blue">Nhập mã xác thực</h1>
       <p className="mt-2.5 text-[16px] leading-[1.5] text-np-login-sub">
-        Nhập mã xác thực vừa gửi đến
+        Mã gồm 6 số vừa gửi đến
         <br />
         <b className="text-np-login-ink">{soDaChe(so)}</b>
       </p>
@@ -515,7 +515,7 @@ function BuocOtp({
           <div className="mt-6 min-h-[22px]">
             {giayGuiLai > 0 ? (
               <div className="text-[17px] font-bold text-np-login-ink">
-                Gửi lại OTP sau {giayGuiLai}s
+                Gửi lại mã sau {giayGuiLai}s
               </div>
             ) : (
               <button
@@ -524,7 +524,7 @@ function BuocOtp({
                 disabled={dangGui}
                 className="text-[17px] font-bold text-np-login-green underline disabled:opacity-50"
               >
-                {dangGui ? "Đang gửi lại..." : "Gửi lại OTP"}
+                {dangGui ? "Đang gửi lại..." : "Gửi lại mã"}
               </button>
             )}
           </div>
