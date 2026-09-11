@@ -13,7 +13,9 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const TONE_CLASSES: Record<ButtonTone, string> = {
-  primary: "border-0 bg-np-brand text-white hover:bg-np-brand-hover",
+  // Nút chính màu đen, trùng với tone dark và nút xác nhận trong hộp thoại (--primary cũng
+  // là màu ink), để cả app chỉ có một kiểu nút đen. Teal để dành cho trạng thái đang chọn.
+  primary: "border-0 bg-np-ink text-white hover:bg-np-ink-sub",
   dark: "border-0 bg-np-ink text-white hover:bg-np-ink-sub",
   // Bóng rất nhẹ để ô trắng nổi khỏi nền xám, bấm xuống thì tắt bóng cho cảm
   // giác nút lún vào. Nền trắng viền xám trơn nằm trên nền #F1F1F1 nhìn khá phẳng.

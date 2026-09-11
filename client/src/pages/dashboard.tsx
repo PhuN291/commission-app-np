@@ -8,33 +8,29 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import monogram from "@assets/np-monogram.png";
 import { useLocation } from "wouter";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
-  Calendar,
-  ClipboardList,
-  Clock,
   EditorChoice,
   Gift,
   Info,
   Medal,
+  Users,
   TrendingDown,
   TrendingUp,
-  Users,
 } from "@/components/np/icon";
 import {
   Badge,
   type BadgeTone,
   Card,
   Chev,
-  IconTile,
   NPProgress,
   PageHeader,
   Row,
   Screen,
   SectionTitle,
   useTabNav,
+  HeroSurface,
 } from "@/components/np";
 import {
   Popover,
@@ -42,8 +38,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ROLE_LABEL, type UserRole } from "@shared/types";
-import metricRevenueIcon from "@/assets/icons/metric-revenue.svg";
-import metricCustomersClosedIcon from "@/assets/icons/metric-customers-closed.svg";
+import metricRevenueIcon from "@/assets/icons/np-doanh-so.png";
+import metricCustomersClosedIcon from "@/assets/icons/np-da-chot.png";
+import taskPendingIcon from "@/assets/icons/np-don-cho-xac-nhan.png";
+import taskLateIcon from "@/assets/icons/np-khach-tre.png";
+import taskRecallIcon from "@/assets/icons/np-tai-kham.png";
+import heroIcon from "@/assets/np-hoa-hong.png";
 
 // ─────────────────────────────────────────────────────────────────
 // Types matching server response
@@ -208,37 +208,36 @@ function PersonalView({
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName}`} />
+      {/* Tiêu đề, thẻ hoa hồng và hai ô chỉ số chung một khối trắng: đây là phần tóm tắt
+          đầu trang, gom lại cho tách hẳn khỏi các khối việc cần làm bên dưới. */}
+      <div className="bg-white pb-4">
+        <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName}`} className="pb-3" />
 
-      {/* Hero — HH cá nhân tháng */}
-      <div className="px-4 pb-2">
-        <HeroCard
-          label="Hoa hồng tạm tính"
-          amount={hero.commission}
-          showInfoPopover
-          trendPct={hero.commissionTrendPct}
-        />
-      </div>
+        {/* Hero — HH cá nhân tháng */}
+        <div className="px-4">
+          <HeroCard
+            label="Hoa hồng tạm tính"
+            amount={hero.commission}
+            showInfoPopover
+            trendPct={hero.commissionTrendPct}
+          />
+        </div>
 
-      {/* Quick metrics */}
-      <div className="grid grid-cols-2 gap-2.5 pt-3">
-        <MetricCard
-          label="Doanh số"
-          value={fmtShort(kpis.revenue)}
-          delta={
-            kpis.revenueTrendPct != null
-              ? `${kpis.revenueTrendPct >= 0 ? "+" : ""}${kpis.revenueTrendPct}%`
-              : null
-          }
-          tone="success"
-          icon={metricRevenueIcon}
-        />
-        <MetricCard
-          label="Đã chốt"
-          value={`${kpis.closedDeals}`}
-          delta={null}
-          icon={metricCustomersClosedIcon}
-        />
+        {/* Quick metrics */}
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5 px-4">
+          <MetricCard
+            label="Doanh số"
+            value={fmtShort(kpis.revenue)}
+            delta={null}
+            icon={metricRevenueIcon}
+          />
+          <MetricCard
+            label="Đơn chốt"
+            value={`${kpis.closedDeals}`}
+            delta={null}
+            icon={metricCustomersClosedIcon}
+          />
+        </div>
       </div>
 
       {/* Cần xử lý */}
@@ -319,32 +318,33 @@ function AdminView({
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName}`} />
+      <div className="bg-white pb-4">
+        <PageHeader title="Trang chủ" subtitle={`${getGreeting()}, ${firstName}`} className="pb-3" />
 
-      {/* Hero — Tổng HH chi PK tháng */}
-      <div className="px-4 pb-2">
-        <HeroCard
-          label={hero.label}
-          amount={hero.clinicCommission}
-          variant="admin"
-        />
-      </div>
+        {/* Hero — Tổng HH chi PK tháng */}
+        <div className="px-4">
+          <HeroCard
+            label={hero.label}
+            amount={hero.clinicCommission}
+          />
+        </div>
 
-      {/* Quick metrics — PK aggregate */}
-      <div className="grid grid-cols-2 gap-2.5 pt-3">
-        <MetricCard
-          label="Doanh số"
-          value={fmtShort(kpis.totalRevenue)}
-          delta={`${kpis.activeStaffCount} nhân viên`}
-          tone="success"
-          icon={metricRevenueIcon}
-        />
-        <MetricCard
-          label="Đơn"
-          value={`${kpis.closedDeals}/${kpis.totalDeals}`}
-          delta="Đã chốt"
-          icon={metricCustomersClosedIcon}
-        />
+        {/* Quick metrics — PK aggregate */}
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5 px-4">
+          <MetricCard
+            label="Doanh số"
+            value={fmtShort(kpis.totalRevenue)}
+            delta={`${kpis.activeStaffCount} nhân viên`}
+            tone="success"
+            icon={metricRevenueIcon}
+          />
+          <MetricCard
+            label="Đơn"
+            value={`${kpis.closedDeals}/${kpis.totalDeals}`}
+            delta="Đã chốt"
+            icon={metricCustomersClosedIcon}
+          />
+        </div>
       </div>
 
       {/* Cần xử lý — toàn PK */}
@@ -439,39 +439,29 @@ function HeroCard({
   amount,
   subtitle,
   showInfoPopover = false,
-  variant = "personal",
   trendPct = null,
 }: {
   label: string;
   amount: number;
   subtitle?: string;
   showInfoPopover?: boolean;
-  variant?: "personal" | "admin";
   trendPct?: number | null;
 }) {
   const [, navigate] = useLocation();
   return (
-    <div
-      className="relative overflow-hidden rounded-np-card p-[22px] text-white"
-      style={{
-        background:
-          variant === "admin"
-            ? "linear-gradient(135deg, #1A1C1D 0%, #303030 100%)"
-            : "var(--np-hero-gradient)",
-      }}
-    >
-      {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
-          mép phải và mép trên nên chỉ thấy một phần, đủ nhận ra mà không giành chỗ
-          của con số. aria-hidden vì đây là hoa văn, không phải thông tin. */}
+    <HeroSurface>
+      {/* Minh họa hoa hồng ở góc phải dưới, ngay dưới nhãn phần trăm. Cao 50px là cỡ lớn nhất
+          lọt khoảng trống đó mà không đè nhãn và không làm thẻ cao thêm. Chỉ để trang trí nên
+          ẩn khỏi trình đọc màn hình. */}
       <img
-        src={monogram}
+        src={heroIcon}
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute -right-2 top-2 h-[104px] w-auto select-none opacity-[0.24]"
+        className="pointer-events-none absolute bottom-1.5 right-4 h-[50px] w-auto select-none"
       />
       <div className="relative flex items-start justify-between">
         <div className="flex items-center gap-1.5">
-          <div className="text-[11px] font-bold text-white/85">
+          <div className="text-[11px] font-bold text-np-hero-ink">
             {label}
           </div>
           {showInfoPopover && (
@@ -480,7 +470,7 @@ function HeroCard({
                 <button
                   type="button"
                   aria-label="Cách tính hoa hồng"
-                  className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-white/90 transition-colors hover:bg-white/25"
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-np-ink/10 text-np-ink/70 transition-colors hover:bg-np-ink/15"
                 >
                   <Info size={12} strokeWidth={2.25} />
                 </button>
@@ -516,28 +506,26 @@ function HeroCard({
             </Popover>
           )}
         </div>
-        {variant === "personal" && trendPct != null && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold">
-            {trendPct >= 0 ? (
-              <TrendingUp size={12} strokeWidth={2.25} />
-            ) : (
-              <TrendingDown size={12} strokeWidth={2.25} />
-            )}{" "}
+        {/* Viên trắng trong trên nền ảnh sáng nên nổi mà không cần viền. Một màu teal cho cả
+            tăng lẫn giảm theo ảnh mẫu, chiều đã nói bằng dấu và hình mũi tên. */}
+        {trendPct != null && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2.5 py-1 text-[11px] font-bold text-np-hero-ink">
+            {trendPct >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             {trendPct >= 0 ? "+" : ""}
             {trendPct}%
           </span>
         )}
       </div>
-      <div className="mt-3.5 flex items-baseline gap-1">
-        <span className="text-[36px] font-extrabold leading-none tracking-[-1px] tabular-nums">
+      <div className="relative mt-2 flex items-baseline gap-1">
+        <span className="text-[36px] font-extrabold leading-none tracking-[-1px] text-np-hero-ink tabular-nums">
           {fmtFull(amount)}
         </span>
-        <span className="text-base font-bold text-white/80">VNĐ</span>
+        <span className="text-base font-bold text-np-text-sub">VNĐ</span>
       </div>
       {subtitle && (
-        <div className="mt-2.5 text-[12px] font-medium text-white/75">{subtitle}</div>
+        <div className="mt-2.5 text-[12px] font-medium text-np-text-sub">{subtitle}</div>
       )}
-    </div>
+    </HeroSurface>
   );
 }
 
@@ -555,7 +543,8 @@ function PendingTasksCard({
     label: string;
     subtitle: string;
     count: number;
-    icon: typeof ClipboardList;
+    /** Ảnh minh họa 3D, cùng bộ với hai thẻ chỉ số phía trên. */
+    icon: string;
     onClick: () => void;
   };
   const items: Item[] = [
@@ -564,7 +553,7 @@ function PendingTasksCard({
       label: "Đơn chờ xác nhận",
       subtitle: "Cần xác nhận hoặc nhắc lịch",
       count: tasks.pendingOrders,
-      icon: ClipboardList,
+      icon: taskPendingIcon,
       onClick: () => navigate("/orders?status=pending"),
     },
   ];
@@ -575,7 +564,7 @@ function PendingTasksCard({
       label: "Khách trễ",
       subtitle: "Cần gọi xác nhận",
       count: tasks.customersLate15min,
-      icon: Clock,
+      icon: taskLateIcon,
       onClick: () => navigate("/orders?filter=late"),
     });
   }
@@ -584,7 +573,7 @@ function PendingTasksCard({
     label: "Đến hạn tái khám",
     subtitle: "Trong 7 ngày tới",
     count: tasks.customersRecallDue,
-    icon: Calendar,
+    icon: taskRecallIcon,
     onClick: () => navigate("/recalls"),
   });
 
@@ -593,7 +582,18 @@ function PendingTasksCard({
       {items.map((it, i) => (
         <Row
           key={it.key}
-          leading={<IconTile icon={it.icon} />}
+          // Không lót ô xám như icon cũ: ảnh 3D đã có khối và bóng riêng, lót thêm ô thì
+          // thành cái hộp bọc quanh miếng dán. Giữ đúng 36px để hàng không xê dịch.
+          leading={
+            <img
+              src={it.icon}
+              alt=""
+              aria-hidden="true"
+              width={36}
+              height={36}
+              className="flex-shrink-0 select-none"
+            />
+          }
           title={
             <span className="flex items-center gap-1.5">
               <span>
@@ -637,12 +637,16 @@ function MetricCard({
   tone?: "neutral" | "success";
   icon?: string;
 }) {
+  // Ô trắng đặt trên khối trắng đầu trang. Mép vẽ bằng bóng 1px rất mờ thay cho viền xám đặc
+  // (nhìn thành khung đậm), cộng bóng tỏa nhẹ phía dưới để ô vẫn tách khỏi nền.
   return (
-    <div className="bg-white px-3.5 py-3">
+    <div className="rounded-np-card bg-white px-3.5 py-2.5 shadow-[0_0_0_1px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.06)]">
       <div className="flex items-start justify-between gap-2">
+        {/* Chiều cao dòng đặt cứng: để mặc định 1.5 thì nhãn 12px chiếm 21px và số 18px
+            chiếm 27px, thẻ cao thừa khoảng chục pixel mà không thêm chữ nào. */}
         <div className="min-w-0 flex-1">
-          <span className="text-[12px] font-medium text-np-text-sub">{label}</span>
-          <div className="mt-0.5 truncate text-[18px] font-extrabold tracking-[-0.3px] text-np-ink tabular-nums">
+          <span className="block text-[12px] font-medium leading-4 text-np-text-sub">{label}</span>
+          <div className="mt-0.5 truncate text-[18px] font-extrabold leading-6 tracking-[-0.3px] text-np-ink tabular-nums">
             {value}
           </div>
         </div>
@@ -661,7 +665,7 @@ function MetricCard({
           cứng tone="success" nên trước đây mức giảm "-8%" vẫn hiện xanh lá, tức
           màu nói ngược hẳn nội dung. */}
       {delta != null && (
-        <Badge tone={toneDelta(delta, tone)} className="mt-1.5">
+        <Badge tone={toneDelta(delta, tone)} className="mt-1">
           {delta}
         </Badge>
       )}

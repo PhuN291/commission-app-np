@@ -27,7 +27,9 @@ export function AppHeader({
   return (
     <div
       className={cn(
-        "flex h-14 items-center gap-2 bg-np-header px-3",
+        // Không tô nền: gradient do khung vẽ (lớp np-header-bg trong Screen) để phủ cả
+        // hai góc bo bên dưới. Tô thêm ở đây thì thanh và góc thành hai dải lệch nhau.
+        "flex h-14 items-center gap-2 px-3",
         className,
       )}
     >
@@ -35,7 +37,7 @@ export function AppHeader({
           Chỉ lấy phần HÌNH, bỏ phần chữ "Phòng khám Nguyên Phương" và dòng khẩu hiệu
           bên dưới: thanh đầu chỉ cao 56px, để nguyên khối dọc thì chữ còn khoảng 3px,
           không ai đọc được.
-          Bản này vẽ bằng màu sáng nên đứng thẳng trên nền tối, không cần lót ô trắng. */}
+          Bản này vẽ bằng màu sáng nên đứng thẳng trên nền teal, không cần lót ô trắng. */}
       <img
         src={npMark}
         alt="Phòng khám Nguyên Phương"
