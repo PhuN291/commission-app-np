@@ -5,7 +5,6 @@ import { useTheoDoiDieuHuong } from "@/lib/use-back";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Spinner } from "@/components/ui/spinner";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 
@@ -33,11 +32,9 @@ const Notifications = lazy(() => import("@/pages/notifications"));
 const RecallWorklist = lazy(() => import("@/pages/recall-worklist"));
 
 function RouteFallback() {
-  return (
-    <div className="flex h-[50vh] items-center justify-center">
-      <Spinner className="size-6" />
-    </div>
-  );
+  // Tạm ẩn spinner khi chuyển trang — Suspense vẫn cần thiết cho React.lazy(),
+  // chỉ là không hiển thị gì trong lúc chờ chunk tải xong.
+  return null;
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
