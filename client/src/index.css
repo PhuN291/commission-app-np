@@ -34,7 +34,17 @@
   --color-np-brand-hover: #168173;
   --color-np-brand-soft: #E4F3D9;
   --color-np-brand-ink: #008060;
+  /* Chữ teal trên nền ảnh sáng của các thẻ số lớn (HeroSurface), lấy màu đầu tối của gradient
+     thanh đầu cho cùng họ. Màu giữa #0F766E chỉ đạt 4.09 ở thẻ Thực nhận: thẻ đó cao hơn nên
+     ảnh nền lộ phần xanh đậm phía phải, chữ nhỏ tụt dưới 4.5. np-brand (#1A8A7D) còn kém hơn. */
+  --color-np-hero-ink: #0B5F58;
   --color-np-link: #005BD3;
+
+  /* Dải nhận diện Nguyên Phương, chính là dải màu trong logo: xanh dương sang xanh lá.
+     Dùng cho dải đầu và nút chính của màn đăng nhập. */
+  --np-brand-gradient-from: #0D509F;
+  --np-brand-gradient-mid: #14639E;
+  --np-brand-gradient-to: #1CAB89;
 
   /* Status */
   --color-np-success: #008060;
@@ -82,9 +92,22 @@
   /* Hai màn đăng nhập dùng Arial theo handoff, phần còn lại của app dùng Inter. */
   --font-login: Arial, Helvetica, sans-serif;
 
-  /* Header */
-  --color-np-header: #1A1C1D;
-  --color-np-header-hover: #303030;
+  /* Header: gradient teal. Màu đặc chỉ là nền dự phòng, dải màu thật nằm ở
+     --np-header-gradient và được vẽ lên KHUNG (lớp .np-header-bg) chứ không lên thanh đầu,
+     để phủ luôn phần góc bo của vùng nội dung ngay bên dưới. */
+  --color-np-header: #0F766E;
+  /* Phần tối phủ khoảng 70% bề ngang, phần sáng chỉ dồn về mép phải. Mốc 65% chứ không
+     phải 70% vì gradient chạy chéo: đo ở hàng giữa thanh đầu, mốc 65% mới rơi đúng 70%. */
+  --np-header-gradient: linear-gradient(135deg, #0B5F58 0%, #0F766E 65%, #17A398 100%);
+  /* Icon trên thanh đầu: trắng. Chuông nằm ở phía sáng của gradient, đo được 3.77, trên
+     mức 3 tối thiểu cho icon. Kéo phần sáng lan sang trái nhiều thì chuông chìm. */
+  --color-np-header-fg: #FFFFFF;
+  /* Chữ gợi ý và kính lúp trong ô tìm kiếm. Dùng lại màu chữ mờ chung của app cho giống
+     mọi ô nhập khác, trên nền trắng đo được 4.73. */
+  --color-np-header-placeholder: var(--color-np-text-muted);
+  /* Nền ô tìm kiếm: trắng đặc. Ô trắng tách hẳn khỏi thanh teal ở cả đầu tối lẫn đầu sáng,
+     và chữ bên trong không còn phụ thuộc vào chỗ gradient sáng hay tối. */
+  --color-np-header-hover: #FFFFFF;
 
   /* Rank badges (Vietnamese tiers) */
   --color-np-rank-dong: #B45309;
@@ -254,9 +277,6 @@
 }
 
 @layer utilities {
-  .bg-gradient-primary-teal {
-    background: linear-gradient(135deg, var(--color-np-brand) 0%, #22a594 100%);
-  }
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -326,12 +346,28 @@
   animation: np-caret-blink 1.1s step-end infinite;
 }
 
+/* Nền khung khi có thanh đầu. Gradient chỉ phủ đúng dải trên cùng, cao bằng thanh đầu
+   (3.5rem) cộng bán kính bo của vùng nội dung, vì góc bo để lộ nền khung ra ngoài. Thanh
+   đầu thì trong suốt nên thanh và hai góc liền một dải, không có vệt nối. */
+.np-header-bg {
+  background-color: var(--color-np-header);
+  background-image: var(--np-header-gradient);
+  background-repeat: no-repeat;
+  background-position: top;
+  background-size: 100% calc(3.5rem + var(--radius-np-sheet));
+}
+
 /* Gradient nhận diện: dải đầu trang và nút chính của màn đăng nhập. */
 .np-login-header {
-  background: linear-gradient(130deg, #0D509F 0%, #14639E 44%, #1CAB89 100%);
+  background: linear-gradient(
+    130deg,
+    var(--np-brand-gradient-from) 0%,
+    var(--np-brand-gradient-mid) 44%,
+    var(--np-brand-gradient-to) 100%
+  );
 }
 .np-login-cta {
-  background: linear-gradient(90deg, #0D509F, #1CAB89);
+  background: linear-gradient(90deg, var(--np-brand-gradient-from), var(--np-brand-gradient-to));
 }
 
 .np-divider::after {

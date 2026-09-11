@@ -24,6 +24,15 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("/react/") || id.includes("/react-dom/")) return "vendor-react";
+        },
+      },
+    },
   },
   server: {
     host: "0.0.0.0",

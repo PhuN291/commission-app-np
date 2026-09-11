@@ -834,7 +834,7 @@ export default function OrderCreate() {
             className={cn(
               "h-12 w-full rounded-np-button text-[15px] font-bold transition-colors",
               canSubmit
-                ? "bg-np-brand text-white hover:bg-np-brand-hover"
+                ? "bg-np-ink text-white hover:bg-np-ink-sub"
                 : "cursor-not-allowed bg-np-surface-pressed text-np-text-muted",
             )}
           >

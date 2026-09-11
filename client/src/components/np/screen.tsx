@@ -80,7 +80,7 @@ export function Screen({
       className={cn(
         FRAME,
         "font-sans text-np-ink",
-        noHeader ? "bg-white" : "bg-np-header",
+        noHeader ? "bg-white" : "np-header-bg",
         className,
       )}
     >

@@ -26,7 +26,7 @@ export function SectionTitle({ children, action, className, style, icon: Icon }:
       {/* Cỡ chữ phải LỚN hơn nội dung bên dưới (Row là 15px), nếu không thì tiêu
           đề chìm nghỉm và người đọc không thấy ranh giới giữa các mục. */}
       <span className="inline-flex items-center gap-1.5 text-[16px] font-bold tracking-[-0.2px] text-np-ink">
-        {Icon && <Icon size={16} strokeWidth={2.25} className="text-np-text-muted" />}
+        {Icon && <Icon size={16} className="text-np-text-muted" />}
         {children}
       </span>
       {action}

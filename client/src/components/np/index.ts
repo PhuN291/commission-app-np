@@ -18,6 +18,7 @@ export { IconTile } from "./icon-tile";
 export { MoreMenuSheet } from "./more-menu-sheet";
 export { OrderStatusBadges, CR_TONE } from "./order-status-badges";
 export { PageHeader } from "./page-header";
+export { HeroSurface } from "./hero-surface";
 export { ActivityLog, type ActivityEntry } from "./activity-log";
 export { CallResultSheet, type CallOutcome } from "./call-result-sheet";
 export { DatePicker } from "./date-picker";

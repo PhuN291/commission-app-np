@@ -5,11 +5,8 @@ import { useLocation, useRoute } from "wouter";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import {
   Calendar,
-  Copy,
   Crown,
-  Mail,
   MedicalServices,
-  MessageSquare,
   Plus,
   StickyNote,
   X,

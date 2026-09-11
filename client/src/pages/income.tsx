@@ -14,7 +14,6 @@
  * KHÔNG hiển thị %cap (per task spec).
  */
 
-import monogram from "@assets/np-monogram.png";
 import { useState } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,6 +35,7 @@ import {
   Screen,
   SectionTitle,
   useTabNav,
+  HeroSurface,
 } from "@/components/np";
 import {
   Select,
@@ -208,64 +208,54 @@ export default function Income() {
 
   return (
     <Screen activeTab={active} onTab={onTab}>
-      <PageHeader title="Hoa hồng" />
+      {/* Tiêu đề, ô chọn tháng và thẻ Thực nhận chung một khối trắng, cùng kiểu đầu trang với
+          Trang chủ: phần tóm tắt tách hẳn khỏi các danh sách khoản bên dưới. */}
+      <div className="bg-white pb-4">
+        <PageHeader title="Hoa hồng" className="pb-3" />
 
-      {/* Cycle selector */}
-      <div className="mx-4 mb-3">
-        <Select value={cycle} onValueChange={setCycle}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {data.availableCycles.map((c) => (
-              <SelectItem key={c} value={c}>
-                {cycleLabel(c)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        {/* Cycle selector */}
+        <div className="mx-4 mb-3">
+          <Select value={cycle} onValueChange={setCycle}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {data.availableCycles.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {cycleLabel(c)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      {/* Hero card */}
-      <div className="px-4">
-        <div
-          className="relative overflow-hidden rounded-np-card p-[22px] text-white"
-          style={{ background: "linear-gradient(135deg, #1A8A7D 0%, #0F5F56 100%)" }}
-        >
-          {/* Dấu hiệu nhận diện phòng khám thay cho hình tròn trang trí cũ. Tràn khỏi
-              mép phải và mép trên nên chỉ thấy một phần, đủ nhận ra mà không giành chỗ
-              của con số. aria-hidden vì đây là hoa văn, không phải thông tin. */}
-          <img
-            src={monogram}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-2 top-2 h-[104px] w-auto select-none opacity-[0.24]"
-          />
-          <div className="relative">
-            <div className="mb-1.5 text-[11px] font-medium text-white/80">
-              Thực nhận
-            </div>
+        {/* Hero card */}
+        <div className="px-4">
+          <HeroSurface>
+            <div className="mb-2 text-[11px] font-bold text-np-hero-ink">Thực nhận</div>
             <div className="flex items-baseline gap-1">
-              <span className="text-[34px] font-extrabold leading-none tracking-[-0.8px] tabular-nums">
+              <span className="text-[36px] font-extrabold leading-none tracking-[-1px] text-np-hero-ink tabular-nums">
                 {new Intl.NumberFormat("vi-VN").format(data.netHh)}
               </span>
-              <span className="text-base font-bold text-white/80">đ</span>
+              <span className="text-base font-bold text-np-text-sub">đ</span>
             </div>
             {data.target > 0 && (
-              <div className="mt-3.5">
-                <div className="mb-1.5 flex items-baseline justify-between text-[11px] font-medium text-white/80">
+              <div className="mt-3">
+                <div className="mb-1.5 flex items-baseline justify-between text-[11px] font-medium text-np-text-sub">
                   <span>Mục tiêu tháng {fmtVND(data.target)}</span>
-                  <span className="font-bold tabular-nums text-white">{targetPct}%</span>
+                  <span className="font-bold tabular-nums text-np-hero-ink">{targetPct}%</span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                {/* Rãnh trắng đục, phần đã đạt màu teal, cùng cặp màu với chữ trên thẻ. Cặp trắng
+                    trên trắng mờ cũ chỉ đọc được trên nền tối. */}
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/70">
                   <div
-                    className="h-full rounded-full bg-white"
+                    className="h-full rounded-full bg-np-hero-ink"
                     style={{ width: `${targetPct}%` }}
                   />
                 </div>
               </div>
             )}
-          </div>
+          </HeroSurface>
         </div>
       </div>
 

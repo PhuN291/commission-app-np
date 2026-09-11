@@ -51,10 +51,17 @@ function dayOfOrder(createdAt: string | null): number | null {
   return Number.isFinite(n) && n >= 1 && n <= 31 ? n : null;
 }
 
-/** Doanh thu thực thu 1 đơn (0 nếu chưa khám xong). */
+/**
+ * Doanh thu thực thu 1 đơn (0 nếu chưa khám xong).
+ *
+ * totalListed chỉ được ghi bởi ingestOrderDerived nên đơn tạo trước đó để 0. Lấy
+ * thẳng cột đó thì đơn cũ có hoàn tiền ra số ÂM (đơn 1: 0 - 200.000), kéo doanh thu
+ * cả kỳ và giá trị trung bình đơn xuống âm theo. Rơi về totalPrice khi chưa có.
+ */
 export function orderRealRevenue(o: Order): number {
   if (o.visitStatus !== "completed") return 0;
-  return o.totalListed - o.insuranceAmount - o.voucherAmount - o.refundAmount;
+  const goc = o.totalListed > 0 ? o.totalListed : o.totalPrice;
+  return Math.max(0, goc - o.insuranceAmount - o.voucherAmount - o.refundAmount);
 }
 
 /** Tăng trưởng % so kỳ trước; null khi kỳ trước = 0 (không có nền so sánh). */
