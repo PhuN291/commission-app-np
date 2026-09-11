@@ -120,12 +120,12 @@ File: [client/src/App.tsx:6-28](../client/src/App.tsx#L6-L28)
 Quy ước: mỗi bước = 1 commit riêng trên `feature/np-ui-v4`, dừng lại review trước khi sang bước kế tiếp. Không gộp nhiều bước vào 1 commit để dễ revert nếu có vấn đề.
 
 | Bước | Nội dung | Gộp từ mục ưu tiên | Trạng thái | Commit |
-|---|---|---|---|---|
-| 1 | Refactor `dashboard.ts`: `Promise.all` hoá query độc lập + bỏ gọi `getAllOrders()` trùng lặp | #1 + #3 | ✅ Xong (chờ review) | (chưa commit) |
-| 2 | Sửa N+1 trong `getRecallWorklist` (batch `getUser` bằng `inArray`) | #2 | ⬜ Chưa làm | — |
+| --- | --- | --- | --- | --- |
+| 1 | Refactor `dashboard.ts`: `Promise.all` hoá query độc lập + bỏ gọi `getAllOrders()` trùng lặp | #1 + #3 | ✅ Xong | (chưa commit) |
+| 2 | Sửa N+1 trong `getRecallWorklist` (batch `getUser` bằng `inArray` + chạy song song với query `recallLogs`) | #2 | ✅ Xong | (chưa commit) |
 | 3 | Code splitting frontend: `React.lazy()` + `manualChunks` | #4 | ⬜ Chưa làm | — |
 | 4 | Thêm pagination cho list API/query lớn | #5 | ⬜ Chưa làm | — |
 | 5 | Đổi driver DB sang `@neondatabase/serverless` | #6 | ⬜ Chưa làm | — |
 | 6 | Xem lại `refetchOnMount: "always"` | #7 | ⬜ Chưa làm | — |
 
-Trạng thái: ⬜ Chưa làm · 🔄 Đang làm · ✅ Xong (chờ review) · ✔️ Đã review & merge
+Trạng thái: ⬜ Chưa làm · 🔄 Đang làm · ✅ Xong  · ✔️ Đã review & merge

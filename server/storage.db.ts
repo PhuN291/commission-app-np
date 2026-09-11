@@ -768,23 +768,25 @@ export class DbStorage implements IStorage {
     );
     if (rows.length === 0) return [];
 
-    // Tên người chăm (gộp 1 lượt lookup mỗi userId).
+    // Tên người chăm (1 truy vấn duy nhất, gộp mọi userId) và lần gọi gần nhất theo từng
+    // item (1 truy vấn khác) không phụ thuộc nhau — chạy song song thay vì tuần tự.
     const assigneeIds = Array.from(
       new Set(rows.map((r) => r.assigneeUserId).filter((x): x is number => x != null)),
     );
-    const nameByUser = new Map<number, string>();
-    for (const uid of assigneeIds) {
-      const u = await this.getUser(uid);
-      if (u) nameByUser.set(uid, u.name);
-    }
-
-    // Lần gọi gần nhất theo từng item (1 truy vấn, sort desc → bản ghi đầu mỗi item là mới nhất).
     const itemIds = rows.map((r) => r.orderItemId);
-    const logs = await db
-      .select()
-      .from(recallLogs)
-      .where(inArray(recallLogs.orderItemId, itemIds))
-      .orderBy(desc(recallLogs.createdAt), desc(recallLogs.id));
+    const [assignees, logs] = await Promise.all([
+      assigneeIds.length > 0
+        ? db.select().from(users).where(inArray(users.id, assigneeIds))
+        : Promise.resolve([]),
+      // sort desc → bản ghi đầu mỗi item là mới nhất.
+      db
+        .select()
+        .from(recallLogs)
+        .where(inArray(recallLogs.orderItemId, itemIds))
+        .orderBy(desc(recallLogs.createdAt), desc(recallLogs.id)),
+    ]);
+    const nameByUser = new Map<number, string>();
+    for (const u of assignees) nameByUser.set(u.id, u.name);
     const lastByItem = new Map<number, { outcome: string; at: string }>();
     for (const l of logs) {
       if (!lastByItem.has(l.orderItemId)) {
