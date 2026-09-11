@@ -123,9 +123,19 @@ Quy ước: mỗi bước = 1 commit riêng trên `feature/np-ui-v4`, dừng l�
 | --- | --- | --- | --- | --- |
 | 1 | Refactor `dashboard.ts`: `Promise.all` hoá query độc lập + bỏ gọi `getAllOrders()` trùng lặp | #1 + #3 | ✅ Xong (chờ review) | `ec1e26e` |
 | 2 | Sửa N+1 trong `getRecallWorklist` (batch `getUser` bằng `inArray` + chạy song song với query `recallLogs`) | #2 | ✅ Xong (chờ review) | `a0d70c7` |
-| 3 | Code splitting frontend: `React.lazy()` cho các trang không phải Login/Dashboard + `manualChunks` tách vendor-react/vendor-radix | #4 | ✅ Xong (chờ review) | (chưa commit) |
-| 4 | Thêm pagination cho list API/query lớn | #5 | ⬜ Chưa làm | — |
-| 5 | Đổi driver DB sang `@neondatabase/serverless` | #6 | ⬜ Chưa làm | — |
+| 3 | Code splitting frontend: `React.lazy()` cho các trang không phải Login/Dashboard + `manualChunks` tách vendor-react/vendor-radix | #4 | ✅ Xong (chờ review) | `7b738d0` |
+| 4 | Thêm pagination cho list API/query lớn | #5 | ⏸️ Tạm hoãn | — |
+| 5 | Đổi driver DB sang `@neondatabase/serverless` (bỏ `pg`) | #6 | ✅ Xong (chờ review) | (chưa commit) |
 | 6 | Xem lại `refetchOnMount: "always"` | #7 | ⬜ Chưa làm | — |
+
+### Ghi chú bước 4 — vì sao tạm hoãn
+
+Khảo sát cho thấy `getAllOrders()`/`getAllUsers()` được gọi ở gần như mọi module (`analytics.ts`, `dashboard.ts`, `ranking.ts`, `notifications.ts`, `income.ts`, các đoạn join trong `routes.ts`) để tính **aggregate trong bộ nhớ** (KPI, leaderboard, tổng doanh thu...) — không thể phân trang các hàm này mà không viết lại thành SQL aggregate riêng.
+
+Với `GET /api/orders`/`GET /api/customers`: an toàn hơn cho trang list-view (`orders.tsx`, `customers.tsx`), nhưng client hiện tự filter/search/sort trên toàn bộ mảng nhận về — cần dời logic đó lên server trước khi phân trang, nếu không sẽ lọc sai theo trang.
+
+**Rủi ro cụ thể nếu làm ẩu**: `customers.tsx` gọi `/api/orders` (toàn bộ, không lọc) chỉ để tự tính tổng chi tiêu/số đơn theo từng khách hàng trên client. Phân trang `/api/orders` mà không có endpoint aggregate riêng cho customer stats sẽ khiến trang Customers hiển thị **sai** số liệu chi tiêu.
+
+Quyết định: dữ liệu hiện tại chưa đủ lớn để pagination tạo khác biệt rõ rệt ngay bây giờ (đây là việc phòng ngừa cho tương lai, không phải fix cho vấn đề 4-5s hiện tại — vấn đề đó đã được giải quyết ở bước 1-3). Tạm hoãn để tránh rủi ro sai số liệu, ưu tiên bước 5 (đổi DB driver). Sẽ quay lại khi dữ liệu orders/customers tăng đủ lớn để cần thiết.
 
 Trạng thái: ⬜ Chưa làm · 🔄 Đang làm · ✅ Xong  · ✔️ Đã review & merge
