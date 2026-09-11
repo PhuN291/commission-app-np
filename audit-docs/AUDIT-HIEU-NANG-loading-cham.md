@@ -121,9 +121,9 @@ Quy ước: mỗi bước = 1 commit riêng trên `feature/np-ui-v4`, dừng l�
 
 | Bước | Nội dung | Gộp từ mục ưu tiên | Trạng thái | Commit |
 | --- | --- | --- | --- | --- |
-| 1 | Refactor `dashboard.ts`: `Promise.all` hoá query độc lập + bỏ gọi `getAllOrders()` trùng lặp | #1 + #3 | ✅ Xong | (chưa commit) |
-| 2 | Sửa N+1 trong `getRecallWorklist` (batch `getUser` bằng `inArray` + chạy song song với query `recallLogs`) | #2 | ✅ Xong | (chưa commit) |
-| 3 | Code splitting frontend: `React.lazy()` + `manualChunks` | #4 | ⬜ Chưa làm | — |
+| 1 | Refactor `dashboard.ts`: `Promise.all` hoá query độc lập + bỏ gọi `getAllOrders()` trùng lặp | #1 + #3 | ✅ Xong (chờ review) | `ec1e26e` |
+| 2 | Sửa N+1 trong `getRecallWorklist` (batch `getUser` bằng `inArray` + chạy song song với query `recallLogs`) | #2 | ✅ Xong (chờ review) | `a0d70c7` |
+| 3 | Code splitting frontend: `React.lazy()` cho các trang không phải Login/Dashboard + `manualChunks` tách vendor-react/vendor-radix | #4 | ✅ Xong (chờ review) | (chưa commit) |
 | 4 | Thêm pagination cho list API/query lớn | #5 | ⬜ Chưa làm | — |
 | 5 | Đổi driver DB sang `@neondatabase/serverless` | #6 | ⬜ Chưa làm | — |
 | 6 | Xem lại `refetchOnMount: "always"` | #7 | ⬜ Chưa làm | — |
