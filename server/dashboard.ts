@@ -14,7 +14,7 @@
  * KHÔNG để ở dashboard trang chủ.
  */
 
-import type { User } from "@shared/schema";
+import type { Order, User } from "@shared/schema";
 import { isLate15min } from "@shared/status";
 import { isGrossCommission } from "@shared/types";
 import { storage } from "./storage";
@@ -70,8 +70,8 @@ export type PendingTasks = {
 async function buildPendingTasks(
   userId: number | null,
   role: string,
+  allOrders: Order[],
 ): Promise<PendingTasks> {
-  const allOrders = await storage.getAllOrders();
   const myOrders = userId ? allOrders.filter((o) => o.userId === userId) : allOrders;
 
   const pendingOrders = myOrders.filter((o) => o.appointmentStatus === "pending").length;
@@ -166,14 +166,26 @@ export async function getPersonalDashboard(userId: number): Promise<PersonalDash
   const user = await storage.getUser(userId);
   if (!user) return null;
   const cycle = currentCycleId();
+  const prevCycle = previousCycleId();
 
-  // Hoa hồng thật: tổng amount commission_records của user trong kỳ — cùng nguồn màn Income
-  // nên hai màn ra cùng một con số cho cùng người, cùng kỳ.
-  const myRecords = await storage.getCommissionRecordsByUser(userId, cycle);
+  // Các query dưới đây không phụ thuộc lẫn nhau — chạy song song thay vì tuần tự
+  // để giảm tổng round-trip DB (mỗi round-trip cộng dồn latency tới Neon).
+  const [myRecords, myOrders, prevRecords, rateBp, allOrders] = await Promise.all([
+    // Hoa hồng thật: tổng amount commission_records của user trong kỳ — cùng nguồn màn Income
+    // nên hai màn ra cùng một con số cho cùng người, cùng kỳ.
+    storage.getCommissionRecordsByUser(userId, cycle),
+    // Doanh số + đếm đơn: đơn của user trong kỳ hiện tại, loại đơn đã hủy.
+    storage.getOrdersByUser(userId),
+    // Tăng trưởng so tháng trước (số thật): cùng cách tính nhưng cho kỳ liền trước.
+    storage.getCommissionRecordsByUser(userId, prevCycle),
+    // commissionRate chỉ để hiển thị: % tier Sale hiện tại theo hạng (500bp → 5). null → 0.
+    storage.getEffectiveCommissionRate("sale", user.ranking ?? null, new Date()),
+    // Dùng chung cho buildPendingTasks bên dưới — tránh gọi getAllOrders() lần nữa.
+    storage.getAllOrders(),
+  ]);
+
   const commission = myRecords.filter((r) => isGrossCommission(r.status)).reduce((s, r) => s + r.amount, 0);
 
-  // Doanh số + đếm đơn: đơn của user trong kỳ hiện tại, loại đơn đã hủy.
-  const myOrders = await storage.getOrdersByUser(userId);
   const cycleOrders = myOrders.filter(
     (o) => orderCycle(o.createdAt) === cycle && o.appointmentStatus !== "cancelled",
   );
@@ -181,17 +193,12 @@ export async function getPersonalDashboard(userId: number): Promise<PersonalDash
   const totalDeals = cycleOrders.length;
   const closedDeals = cycleOrders.filter((o) => o.visitStatus === "completed").length;
 
-  // Tăng trưởng so tháng trước (số thật): cùng cách tính nhưng cho kỳ liền trước.
-  const prevCycle = previousCycleId();
-  const prevRecords = await storage.getCommissionRecordsByUser(userId, prevCycle);
   const prevCommission = prevRecords.filter((r) => isGrossCommission(r.status)).reduce((s, r) => s + r.amount, 0);
   const prevRevenue = myOrders
     .filter((o) => orderCycle(o.createdAt) === prevCycle && o.appointmentStatus !== "cancelled")
     .reduce((s, o) => s + o.totalPrice, 0);
 
-  // commissionRate chỉ để hiển thị: % tier Sale hiện tại theo hạng (500bp → 5). null → 0.
-  const rateBp = (await storage.getEffectiveCommissionRate("sale", user.ranking ?? null, new Date())) ?? 0;
-  const commissionRate = rateBp / 100;
+  const commissionRate = (rateBp ?? 0) / 100;
 
   return {
     view: "personal",
@@ -209,7 +216,7 @@ export async function getPersonalDashboard(userId: number): Promise<PersonalDash
       totalDeals,
       revenueTrendPct: trendPct(revenue, prevRevenue),
     },
-    pendingTasks: await buildPendingTasks(userId, user.role),
+    pendingTasks: await buildPendingTasks(userId, user.role, allOrders),
   };
 }
 
@@ -217,8 +224,14 @@ export async function getAdminDashboard(userId: number): Promise<AdminDashboard 
   const user = await storage.getUser(userId);
   if (!user) return null;
   const cycle = currentCycleId();
-  const allUsers = await storage.getAllUsers();
-  const allOrders = await storage.getAllOrders();
+
+  // Các query dưới đây không phụ thuộc lẫn nhau — chạy song song thay vì tuần tự.
+  const [allUsers, allOrders, allRecords] = await Promise.all([
+    storage.getAllUsers(),
+    storage.getAllOrders(),
+    // Tổng HH thật toàn phòng khám trong kỳ: cộng amount mọi commission_records của kỳ.
+    storage.getAllCommissionRecordsByCycle(cycle),
+  ]);
 
   // Doanh số + đếm đơn toàn phòng khám trong kỳ hiện tại, loại đơn đã hủy.
   const cycleOrders = allOrders.filter(
@@ -228,8 +241,6 @@ export async function getAdminDashboard(userId: number): Promise<AdminDashboard 
   const totalDeals = cycleOrders.length;
   const closedDeals = cycleOrders.filter((o) => o.visitStatus === "completed").length;
 
-  // Tổng HH thật toàn phòng khám trong kỳ: cộng amount mọi commission_records của kỳ.
-  const allRecords = await storage.getAllCommissionRecordsByCycle(cycle);
   const clinicCommission = allRecords.filter((r) => isGrossCommission(r.status)).reduce((s, r) => s + r.amount, 0);
 
   // Số NV ăn hoa hồng đang active (sale/doctor/tc) — chỉ để hiển thị, không tính tiền.
@@ -272,7 +283,7 @@ export async function getAdminDashboard(userId: number): Promise<AdminDashboard 
       totalDeals,
       activeStaffCount,
     },
-    pendingTasks: await buildPendingTasks(null, user.role),
+    pendingTasks: await buildPendingTasks(null, user.role, allOrders),
     leaderboard,
   };
 }
