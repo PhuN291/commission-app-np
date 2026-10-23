@@ -43,7 +43,7 @@ const MENU: MenuNode[] = [
       {
         type: "group",
         label: "Phân tích",
-        roles: ["ceo", "tc", "kt"],
+        roles: ["ceo", "tc", "kt", "ktt"],
         children: [
           { type: "link", label: "Tổng quan", href: "/analytics/overview" },
           { type: "link", label: "Lịch hẹn", href: "/analytics/appointments" },
@@ -61,12 +61,14 @@ const MENU: MenuNode[] = [
         type: "group",
         label: "Hoa hồng",
         children: [
-          { type: "link", label: "Cấu hình", href: "/admin/commission-config", roles: ["ceo", "tc", "kt"] },
-          { type: "link", label: "Duyệt", href: "/admin/commission-approval", roles: ["ceo", "tc", "kt"] },
+          { type: "link", label: "Cấu hình", href: "/admin/commission-config", roles: ["ceo", "tc", "kt", "ktt"] },
+          // Trưởng ca không duyệt và không xem bảng kê toàn phòng khám (BR-HH03-01).
+          { type: "link", label: "Duyệt", href: "/admin/commission-approval", roles: ["ceo", "kt", "ktt"] },
         ],
       },
-      { type: "link", label: "Voucher", href: "/admin/vouchers", roles: ["ceo", "tc"] },
-      { type: "link", label: "Cài đặt hệ thống", href: "/admin/settings", roles: ["ceo", "tc", "kt"] },
+      // Mọi API mã giảm giá chỉ mở cho CEO, Trưởng ca mở vào chỉ thấy trang trống (CM-37).
+      { type: "link", label: "Voucher", href: "/admin/vouchers", roles: ["ceo"] },
+      { type: "link", label: "Cài đặt hệ thống", href: "/admin/settings", roles: ["ceo", "tc", "kt", "ktt"] },
     ],
   },
 ];

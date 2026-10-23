@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format";
 import { Badge } from "./badge";
 import { NPButton } from "./button";
 import { CR_TONE } from "./order-status-badges";
@@ -38,10 +39,6 @@ export type CommissionRecordView = {
   /** Đã gửi khiếu nại cho khoản này chưa. Mỗi khoản chỉ khiếu nại một lần. */
   daKhieuNai?: boolean;
 };
-
-function fmtVND(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
-}
 
 /**
  * Một dòng hoa hồng kèm nút khiếu nại, dùng chung cho mọi màn có hoa hồng.
@@ -106,7 +103,7 @@ export function CommissionRow({
           )}
         </div>
         <div className="flex-shrink-0 text-[14px] font-extrabold tabular-nums text-np-brand-ink">
-          {fmtVND(cr.amount)}
+          {formatMoney(cr.amount)}
         </div>
       </div>
 

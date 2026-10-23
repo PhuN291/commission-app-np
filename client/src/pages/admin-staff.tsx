@@ -82,6 +82,8 @@ import {
   type UserRole,
   type UserStatus,
 } from "@shared/types";
+import { formatVnDateTime, vnDateKey } from "@shared/vn-time";
+import { formatMoney } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────
 // Types matching server response
@@ -108,10 +110,12 @@ type AuditLogEntry = {
   id: number;
   userId: number;
   action: AuditAction;
-  actorId: number;
+  actorId: number | null;
   actorName: string;
   timestamp: number;
   payload?: Record<string, unknown>;
+  /** Giá trị cũ của các ô đã đổi; nhật ký ghi trước Đợt 0 không có. */
+  before?: Record<string, unknown> | null;
 };
 
 
@@ -735,6 +739,7 @@ export default function AdminStaff() {
                       // Nhãn trong AUDIT_ACTION_LABEL viết hoa chữ đầu vì đứng
                       // riêng, ở đây nó nối sau tên người nên phải hạ xuống.
                       action: thuongHoaDau(AUDIT_ACTION_LABEL[entry.action] ?? entry.action),
+                      detail: chiTietThayDoi(entry),
                     }))}
                     emptyText="Chưa có lịch sử"
                   />
@@ -801,7 +806,7 @@ export default function AdminStaff() {
               date={offboardingDialog.date}
               onDateChange={(v) => setOffboardingDialog((p) => ({ ...p, date: v }))}
               withTime={false}
-              min={new Date().toISOString().slice(0, 10)}
+              min={vnDateKey()}
               placeholder="Chọn ngày nghỉ"
             />
           </div>
@@ -919,20 +924,51 @@ function formatDate(yyyyMmDd: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Nhãn từng ô của biểu mẫu nhân sự, dùng lại trong nhật ký cho khớp chữ trên màn. */
+const NHAN_O: Record<string, string> = {
+  name: "Họ tên",
+  phone: "Số điện thoại",
+  role: "Vai trò",
+  ranking: "Bậc",
+  ihosUserId: "Mã iHOS",
+  monthlyTargetHh: "Chỉ tiêu hoa hồng/tháng",
+  monthlyTargetOrders: "Chỉ tiêu đơn/tháng",
+};
+
+function giaTriO(key: string, v: unknown): string {
+  if (v === null || v === undefined || v === "") return "trống";
+  if (key === "role") return ROLE_LABEL[v as UserRole] ?? String(v);
+  if (key === "ranking") return RANKING_LABEL[v as Ranking] ?? String(v);
+  if (key === "monthlyTargetHh" && typeof v === "number") return formatMoney(v);
+  return String(v);
+}
+
+/**
+ * "Bậc: Đồng → Bạc" cho lần sửa thông tin. Chỉ có khi máy chủ ghi kèm giá trị cũ,
+ * nhật ký cũ không có nên để trống thay vì đoán.
+ */
+function chiTietThayDoi(entry: AuditLogEntry): string | undefined {
+  if (entry.action !== "user.update" || !entry.before || !entry.payload) return undefined;
+  const before = entry.before;
+  const dong = Object.keys(entry.payload)
+    .filter((k) => k in before)
+    .map((k) => `${NHAN_O[k] ?? k}: ${giaTriO(k, before[k])} → ${giaTriO(k, entry.payload![k])}`);
+  return dong.length > 0 ? dong.join(", ") : undefined;
+}
+
 /** Hạ chữ cái đầu để nhãn hành động nối được sau tên người. */
 function thuongHoaDau(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
-function formatTimestamp(ms: number): string {
-  const d = new Date(ms);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+const formatTimestamp = (ms: number): string => formatVnDateTime(ms);
 
+/**
+ * Mặc định 2 tuần sau, theo lịch Việt Nam. Bản cũ cộng ngày theo giờ máy rồi cắt
+ * toISOString() (ngày UTC), trước 07:00 sáng thì lùi mất một ngày.
+ */
 function defaultOffboardingDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 14); // mặc định 2 tuần sau
-  return d.toISOString().slice(0, 10);
+  return vnDateKey(Date.now() + 14 * 86_400_000);
 }
 
 function handleApiError(

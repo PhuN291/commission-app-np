@@ -7,6 +7,7 @@
 
 import { type Adjustment, type CommissionRecord, type Clawback } from "./commission-types";
 import { isGrossCommission } from "@shared/types";
+import { recentCycles, vnCycleOf } from "@shared/vn-time";
 import { storage } from "./storage";
 
 export type IncomeCROrderGroup = {
@@ -28,20 +29,17 @@ export type IncomeData = {
   netHh: number;
 };
 
+/**
+ * Kỳ hiện tại theo lịch Việt Nam. Đọc giờ máy thì trên Vercel (UTC), từ 00:00 tới
+ * 07:00 sáng ngày 01 máy chủ vẫn trả về kỳ tháng trước.
+ */
 export function currentCycleId(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return vnCycleOf();
 }
 
 /** Last 6 cycles từ tháng hiện tại lùi về quá khứ. */
 export function generateLast6Cycles(): string[] {
-  const list: string[] = [];
-  const d = new Date();
-  for (let i = 0; i < 6; i++) {
-    list.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-    d.setMonth(d.getMonth() - 1);
-  }
-  return list;
+  return recentCycles(6);
 }
 
 export async function getIncomeForUser(userId: number, cycle: string): Promise<IncomeData | null> {

@@ -15,6 +15,8 @@ import type { NotificationType, UserRole } from "@shared/types";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
+import { formatMoney, formatSignedMoney } from "@shared/money";
+import { parseVnDateTime, vnDaysUntil } from "@shared/vn-time";
 import { currentCycleId } from "./income";
 
 export type Notification = {
@@ -72,7 +74,7 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
     const records = await storage.getCommissionRecordsByUser(userId, cycle);
     for (const r of records) {
       const order = orderById.get(r.orderId);
-      const body = `${order?.code ?? ""} · ${order?.serviceName ?? ""} · ${fmtVND(r.amount)}đ`;
+      const body = `${order?.code ?? ""} · ${order?.serviceName ?? ""} · ${formatMoney(Math.abs(r.amount))}`;
       if (r.status === "TU_CHOI") {
         const daCo = await storage.getCommissionComplaints(r.id);
         list.push({
@@ -108,8 +110,8 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
     }
   }
 
-  // KT/CEO: 1 notif aggregate cho CR chờ duyệt trong kỳ — đếm từ DB.
-  if (role === "kt" || role === "ceo") {
+  // KT/KTT/CEO: 1 notif aggregate cho CR chờ duyệt trong kỳ — đếm từ DB.
+  if (role === "kt" || role === "ktt" || role === "ceo") {
     const { count: pending } = await storage.countCrs(cycle, "CHO_DUYET");
     if (pending > 0) {
       list.push({
@@ -130,16 +132,14 @@ async function genFromCRs(userId: number, role: UserRole): Promise<Notification[
 }
 
 async function genFromRecalls(userId: number, role: UserRole): Promise<Notification[]> {
-  // Notif recall: NV (sale/doctor) chỉ nhận của khách MÌNH chăm; quản lý (tc/kt/ceo) nhận hết.
-  if (!["sale", "doctor", "tc", "kt", "ceo"].includes(role)) return [];
-  const isManager = role === "tc" || role === "kt" || role === "ceo";
+  // Notif recall: NV (sale/doctor) chỉ nhận của khách MÌNH chăm; quản lý (tc/kt/ktt/ceo) nhận hết.
+  if (!["sale", "doctor", "tc", "kt", "ktt", "ceo"].includes(role)) return [];
+  const isManager = role === "tc" || role === "kt" || role === "ktt" || role === "ceo";
 
   const list: Notification[] = [];
   const customers = await storage.getAllCustomers();
   // Trạng thái tái khám gộp từ database (hệ mới): chỉ notif khách còn lượt pending.
   const recallState = await storage.getRecallStateByCustomer();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   for (const c of customers) {
     if (recallState.get(c.id) !== "pending") continue; // đã xử lý hết / không có lượt → bỏ qua
@@ -150,9 +150,11 @@ async function genFromRecalls(userId: number, role: UserRole): Promise<Notificat
     // còn đọc customer.next_recall_due_at seed cứng.
     const recallDue = await storage.getNextRecallDueForCustomer(c.id);
     if (!recallDue) continue;
-    const due = new Date(recallDue);
-    due.setHours(0, 0, 0, 0);
-    const overdueDays = Math.floor((today.getTime() - due.getTime()) / DAY_MS);
+    // Đếm theo ngày lịch Việt Nam: trên Vercel (UTC) "hôm nay" của máy chủ chậm 7 tiếng.
+    const due = parseVnDateTime(recallDue); // 00:00 giờ Việt Nam của ngày tới hạn
+    const daysUntil = vnDaysUntil(recallDue);
+    if (!due || daysUntil === null) continue;
+    const overdueDays = -daysUntil;
 
     // Chỉ notif nếu overdue hoặc đến hạn hôm nay/ngày mai
     if (overdueDays < -1) continue;
@@ -194,7 +196,7 @@ async function genFromAdjustments(userId: number, role: UserRole): Promise<Notif
       userId,
       type: "adjustment.created",
       tag: isThuong ? "Thưởng" : "Phạt",
-      title: isThuong ? `+${fmtVND(a.amount)}đ` : `-${fmtVND(a.amount)}đ`,
+      title: formatSignedMoney(isThuong ? Math.abs(a.amount) : -Math.abs(a.amount)),
       body: a.reason,
       link: `/income`,
       readAt: null,
@@ -257,10 +259,6 @@ export async function markAllRead(userId: number, notifIds: string[]): Promise<v
 // ─────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────
-
-function fmtVND(n: number): string {
-  return new Intl.NumberFormat("vi-VN").format(Math.abs(n));
-}
 
 // Type guard helper export (cho route use type-check Order).
 export type { Order };

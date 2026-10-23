@@ -82,11 +82,11 @@ export default function AnalyticsAppointments() {
   const { active, onTab } = useTabNav();
   const quayLai = useQuayLai("/");
 
-  // Chặn vai: chỉ quản lý (ceo/tc/kt) xem; vai khác về trang chủ.
+  // Chặn vai: chỉ quản lý (ceo/tc/kt/ktt) xem; vai khác về trang chủ.
   const role = (typeof window !== "undefined"
     ? localStorage.getItem("np_role")
     : null) as UserRole | null;
-  const canView = role === "ceo" || role === "tc" || role === "kt";
+  const canView = role === "ceo" || role === "tc" || role === "kt" || role === "ktt";
   if (typeof window !== "undefined" && !canView) {
     return <Redirect to="/" />;
   }

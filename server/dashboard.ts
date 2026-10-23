@@ -16,35 +16,15 @@
 
 import type { Order, User } from "@shared/schema";
 import { isLate15min } from "@shared/status";
+import { shiftCycle, vnDaysUntil } from "@shared/vn-time";
 import { isGrossCommission } from "@shared/types";
 import { storage } from "./storage";
 import { currentCycleId } from "./income";
-import { orderRealRevenue } from "./analytics";
-
-/**
- * Lấy kỳ 'YYYY-MM' từ order.createdAt (định dạng 'DD/MM/YYYY HH:mm').
- * Chịu được định dạng lạ/rỗng: trả null (đơn đó coi như không thuộc kỳ nào, bị loại
- * khỏi bộ lọc kỳ) thay vì ném lỗi.
- */
-function orderCycle(createdAt: string | null): string | null {
-  try {
-    const datePart = (createdAt ?? "").trim().split(" ")[0]; // 'DD/MM/YYYY'
-    const [, mm, yyyy] = datePart.split("/");
-    if (yyyy && mm && /^\d{4}$/.test(yyyy) && /^\d{1,2}$/.test(mm)) {
-      return `${yyyy}-${mm.padStart(2, "0")}`;
-    }
-  } catch {
-    // rơi xuống null
-  }
-  return null;
-}
+import { orderCycle, orderRealRevenue } from "./analytics";
 
 /** Kỳ 'YYYY-MM' của tháng liền trước tháng hiện tại (để tính tăng trưởng so tháng trước). */
 function previousCycleId(): string {
-  const d = new Date();
-  d.setDate(1); // tránh tràn ngày (vd 31/05 lùi tháng thành 01/05)
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return shiftCycle(currentCycleId(), -1);
 }
 
 /**
@@ -77,24 +57,22 @@ async function buildPendingTasks(
   const pendingOrders = myOrders.filter((o) => o.appointmentStatus === "pending").length;
 
   // Late 15p chỉ là task vận hành — Sale gọi xác nhận đơn của mình; TC giám sát toàn PK.
-  // BS/KT/CEO không cần (R-9-1).
+  // BS/KT/CEO không cần (R-9-1). Số phút lấy từ cấu hình late_minutes, cùng con số
+  // màn Đơn hàng dùng để lọc "Khách trễ", nên hai chỗ đếm ra như nhau.
   let customersLate15min = 0;
-  if (role === "sale") {
-    customersLate15min = myOrders.filter(isLate15min).length;
-  } else if (role === "tc") {
-    customersLate15min = allOrders.filter(isLate15min).length;
+  if (role === "sale" || role === "tc") {
+    const { late_minutes: lateMinutes } = await storage.getSystemSettings();
+    const pool = role === "sale" ? myOrders : allOrders;
+    customersLate15min = pool.filter((o) => isLate15min(o, lateMinutes)).length;
   }
 
   // Đếm số lượt tái khám của NGƯỜI ĐANG XEM đã tới hạn / quá hạn — dùng CÙNG nguồn với
   // màn danh sách tái khám (getRecallWorklist) để hai chỗ khớp nhau. sale/doctor chỉ tính
-  // khách mình chăm; tc/kt/ceo tính tất cả. So theo ngày (bỏ giờ).
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // khách mình chăm; tc/kt/ktt/ceo tính tất cả. So theo ngày lịch Việt Nam (bỏ giờ).
   const worklist = await storage.getRecallWorklist(userId ?? 0, role);
   const customersRecallDue = worklist.filter((w) => {
-    const due = new Date(w.recallDueDate);
-    due.setHours(0, 0, 0, 0);
-    return due.getTime() <= today.getTime();
+    const days = vnDaysUntil(w.recallDueDate);
+    return days !== null && days <= 0;
   }).length;
 
   return {

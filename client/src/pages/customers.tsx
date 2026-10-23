@@ -31,16 +31,11 @@ import {
 } from "@/components/np";
 import type { Customer, Order } from "@shared/schema";
 import { isWithinLastMonths, type RecallStatus } from "@shared/types";
+import { vnDateKey, vnDaysUntil, vnInstant, vnParts } from "@shared/vn-time";
+import { formatMoneyShort } from "@/lib/format";
 
 /** Khách trong list kèm trạng thái recall (API /api/customers bổ sung). */
 type CustomerRow = Customer & { recallStatus?: RecallStatus };
-
-function fmtShort(n: number) {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + " tỷ";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + " triệu";
-  if (n >= 1_000) return Math.round(n / 1_000) + " nghìn";
-  return String(n);
-}
 
 /**
  * "Sắp tái khám" — nextRecallDueAt nằm trong [hôm nay, hôm nay + 7 ngày] (chưa trễ).
@@ -50,10 +45,10 @@ function fmtShort(n: number) {
  */
 const RECALL_UPCOMING_WINDOW_DAYS = 7;
 
+/** 00:00 hôm nay theo lịch Việt Nam, để mốc "hôm nay" khớp với máy chủ. */
 function startOfToday(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  const t = vnParts();
+  return vnInstant(t.year, t.month, t.day).getTime();
 }
 
 function isUpcomingRecall(customer: Customer): boolean {
@@ -70,12 +65,7 @@ function isOverdueRecall(customer: Customer): boolean {
 
 /** Tính số ngày quá hạn (-N = future). */
 function daysOverdue(dueAt: Date): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDay = new Date(dueAt);
-  dueDay.setHours(0, 0, 0, 0);
-  const dayMs = 24 * 60 * 60 * 1000;
-  return Math.floor((today.getTime() - dueDay.getTime()) / dayMs);
+  return -(vnDaysUntil(vnDateKey(dueAt)) ?? 0);
 }
 
 export default function Customers() {
@@ -200,7 +190,7 @@ export default function Customers() {
                   <div className="flex items-center gap-1.5">
                     <div className="text-right">
                       <div className="text-[13px] font-bold text-np-ink tabular-nums">
-                        {fmtShort(stats.totalSpent)}₫
+                        {formatMoneyShort(stats.totalSpent)}
                       </div>
                       <div className="text-[11px] text-np-text-muted">{stats.orderCount} đơn</div>
                     </div>

@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RANKING_LABEL, type Ranking, type UserRole } from "@shared/types";
+import { vnCycleOf } from "@shared/vn-time";
+import { formatMoney, formatMoneyShort } from "@/lib/format";
 
 /** 'YYYY-MM' → 'Tháng MM/YYYY'. */
 function cycleLabel(cycle: string): string {
@@ -36,21 +38,9 @@ function cycleLabel(cycle: string): string {
   return `Tháng ${m}/${y}`;
 }
 
+/** Kỳ mặc định theo lịch Việt Nam như máy chủ, máy đặt múi giờ khác vẫn mở đúng kỳ. */
 function currentCycleId(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function fmtVND(amount: number) {
-  return new Intl.NumberFormat("vi-VN").format(amount) + "₫";
-}
-
-function fmtShort(amount: number) {
-  if (amount >= 1_000_000_000) return (amount / 1_000_000_000).toFixed(1) + " tỷ";
-  if (amount >= 1_000_000)
-    return (amount / 1_000_000).toFixed(amount >= 10_000_000 ? 0 : 1) + " tr";
-  if (amount >= 1_000) return Math.round(amount / 1_000) + "k";
-  return String(amount);
+  return vnCycleOf();
 }
 
 function getInitials(name: string) {
@@ -192,7 +182,7 @@ function PersonalRankView() {
             Doanh số tháng {thangNay ?? ""}
           </div>
           <div className="mt-1 text-[20px] font-extrabold tabular-nums text-np-ink">
-            {fmtVND(monthlyRevenue)}
+            {formatMoney(monthlyRevenue)}
           </div>
           <div className="mt-1 text-[11px] leading-[1.5] text-np-text-muted">
             Tính trên đơn đã khám xong, sau khi trừ bảo hiểm, voucher và tiền hoàn.
@@ -221,7 +211,7 @@ function PersonalRankView() {
             <div className="flex items-start gap-2 rounded-np-button border border-np-brand-soft bg-np-brand-soft/30 p-3 text-[12px] leading-[1.5] text-np-text-sub">
               <TrendingUp size={14} className="mt-0.5 flex-shrink-0 text-np-brand-ink" />
               <span>
-                Cần <strong className="text-np-ink">{fmtVND(target.revenue)}</strong> mỗi tháng, đạt{" "}
+                Cần <strong className="text-np-ink">{formatMoney(target.revenue)}</strong> mỗi tháng, đạt{" "}
                 <strong className="text-np-ink">{soThangText(target.months)}</strong>.
                 {target.months > 1 && " Trượt một tháng là đếm lại từ đầu."}
               </span>
@@ -262,7 +252,7 @@ function PersonalRankView() {
                   <>
                     Còn{" "}
                     <span className="font-bold tabular-nums text-np-brand-ink">
-                      {fmtVND(remaining)}
+                      {formatMoney(remaining)}
                     </span>{" "}
                     nữa là tháng này được tính.
                   </>
@@ -334,7 +324,7 @@ function TierRow({
         <div className="mt-0.5 text-[11px] leading-[1.5] text-np-text-sub">
           {tier.requirement && next ? (
             <>
-              Lên {next.label}: {fmtVND(tier.requirement.revenue)} mỗi tháng, đạt{" "}
+              Lên {next.label}: {formatMoney(tier.requirement.revenue)} mỗi tháng, đạt{" "}
               {soThangText(tier.requirement.months)}
             </>
           ) : (
@@ -392,7 +382,7 @@ function MonthRow({
             current ? "font-bold text-np-ink" : "font-medium text-np-text-sub"
           }`}
         >
-          {fmtVND(revenue)}
+          {formatMoney(revenue)}
         </span>
       </div>
       <NPProgress value={pct} color={mauThanh} />
@@ -548,7 +538,7 @@ function FullLeaderboardView() {
                 <p className="mt-1 text-center text-[13px] font-bold text-np-ink">{person.name}</p>
                 <p className="text-[11px] text-np-text-muted">{person.role}</p>
                 <p className="mt-0.5 text-[12px] font-bold text-np-brand-ink">
-                  {fmtShort(person.revenue)}₫
+                  {formatMoneyShort(person.revenue)}
                 </p>
                 <div
                   className="mt-2 flex w-16 items-center justify-center rounded-t-lg bg-gradient-to-t from-np-border to-np-surface-sub"
@@ -617,7 +607,7 @@ function FullLeaderboardView() {
               </div>
               <div className="flex-shrink-0 text-right">
                 <p className="text-[14px] font-bold text-np-brand-ink tabular-nums">
-                  {fmtShort(p.commission)}₫
+                  {formatMoneyShort(p.commission)}
                 </p>
                 <p className="text-[11px] text-np-text-muted">Hoa hồng kỳ này</p>
               </div>

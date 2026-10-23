@@ -33,14 +33,17 @@ import {
   type BadgeTone,
 } from "@/components/np";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format";
 import { eventView, type ActivityEvent } from "@/lib/activity-text";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import type { Customer, Order } from "@shared/schema";
 import {
   RECALL_OUTCOME_LABEL,
+  canCreateOrder,
   type RecallOutcome,
 } from "@shared/types";
+import { vnDaysUntil, vnParts } from "@shared/vn-time";
 
 // 1 lượt tái khám (order_item) của khách — shape khớp GET /api/customers/:id .recallItems.
 type RecallItem = {
@@ -63,10 +66,6 @@ type RecallLogEntry = {
   createdAt: string; // ISO
 };
 
-function fmtVND(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
-}
-
 // Kết quả gọi tái khám — 3 lựa chọn (giống màn "Tái khám cần gọi" /recalls).
 /** Chiều cao thanh trên của DetailHeader: nút tròn 36px + lề dọc 2×10px. */
 const DETAIL_HEADER_HEIGHT = 56;
@@ -83,19 +82,17 @@ function fmtCallTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
+  const t = vnParts(d);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)} lúc ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${p(t.day)}/${p(t.month)} lúc ${p(t.hour)}:${p(t.minute)}`;
 }
 
 /** Số ngày từ hôm nay tới recallDueDate (dương = quá hạn). null nếu thiếu/lạ. */
 function daysOverdue(dateStr: string | null | undefined): number | null {
-  if (!dateStr) return null;
-  const due = new Date(dateStr);
-  if (Number.isNaN(due.getTime())) return null;
-  due.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((today.getTime() - due.getTime()) / 86_400_000);
+  // Đếm theo lịch Việt Nam như máy chủ: new Date("YYYY-MM-DD") là nửa đêm UTC, máy
+  // đặt múi giờ phía tây sẽ đọc thành hôm trước và lệch hạn một ngày.
+  const days = vnDaysUntil(dateStr);
+  return days === null ? null : -days;
 }
 
 /** Nhãn trạng thái thời gian theo số ngày quá hạn (giống worklist). */
@@ -119,6 +116,8 @@ export default function CustomerDetail() {
   const [, navigate] = useLocation();
   const quayLai = useQuayLai("/customers");
   const customerId = params?.id ? parseInt(params.id, 10) : 0;
+  // Kế toán không tạo đơn, máy chủ cũng chặn, nên ẩn nút thay vì để bấm rồi báo lỗi.
+  const coTheTaoDon = canCreateOrder(typeof window !== "undefined" ? localStorage.getItem("np_role") : null);
 
   const {
     data: customerData,
@@ -344,15 +343,17 @@ export default function CustomerDetail() {
         }
         className="bg-white"
         action={
-          <NPButton
-            tone="primary"
-            size="sm"
-            icon={Plus}
-            onClick={() => navigate(`/orders/new?customerId=${customer.id}`)}
-            className="flex-shrink-0"
-          >
-            Tạo đơn
-          </NPButton>
+          coTheTaoDon ? (
+            <NPButton
+              tone="primary"
+              size="sm"
+              icon={Plus}
+              onClick={() => navigate(`/orders/new?customerId=${customer.id}`)}
+              className="flex-shrink-0"
+            >
+              Tạo đơn
+            </NPButton>
+          ) : undefined
         }
       >
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -412,7 +413,7 @@ export default function CustomerDetail() {
             }
             trailing={
               <span className="text-[15px] font-semibold text-np-ink tabular-nums">
-                {fmtVND(stats.totalSpent)}
+                {formatMoney(stats.totalSpent)}
               </span>
             }
             last
@@ -523,7 +524,7 @@ export default function CustomerDetail() {
                 }
                 trailing={
                   <div className="flex-shrink-0 text-right text-[15px] font-semibold text-np-ink tabular-nums">
-                    {fmtVND(o.totalPrice)}
+                    {formatMoney(o.totalPrice)}
                   </div>
                 }
                 last={i === orders.length - 1}

@@ -22,6 +22,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { authFetch } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────
 // Types matching /api/search response
@@ -57,8 +58,6 @@ type SearchResults = {
 };
 
 const EMPTY: SearchResults = { services: [], customers: [], orders: [] };
-
-const fmtVND = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
 // ─────────────────────────────────────────────────────────────────
 // Component
@@ -257,7 +256,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
                       key={`o-${o.id}`}
                       title={o.code}
                       subtitle={`${o.patientName} · ${o.serviceName}`}
-                      meta={`${fmtVND(o.totalPrice)}đ`}
+                      meta={formatMoney(o.totalPrice)}
                       onClick={() => go(`/orders/${o.id}`)}
                     />
                   ))}
@@ -292,7 +291,7 @@ export function SearchSheet({ open, onOpenChange }: SearchSheetProps) {
                       key={`s-${s.id}`}
                       title={s.title}
                       subtitle={`${s.code}${s.category ? " · " + s.category : ""}`}
-                      meta={`${fmtVND(s.price)}đ`}
+                      meta={formatMoney(s.price)}
                       onClick={() => go(`/services/${s.id}`)}
                     />
                   ))}

@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertServiceSchema, insertOrderSchema, insertCustomerSchema, insertVoucherSchema, type User } from "@shared/schema";
+import { insertServiceSchema, insertCustomerSchema, insertVoucherSchema, type Order, type User } from "@shared/schema";
 import { computeVoucherDiscount } from "./vouchers";
 import { seedDatabase } from "./seed";
 import { APPOINTMENT_TRANSITIONS, VISIT_TRANSITIONS, type AppointmentStatusCode, type VisitStatusCode } from "@shared/status";
@@ -34,25 +34,33 @@ import {
   adminUpdateStaffSchema,
   markOffboardingSchema,
   updateCommissionTiersSchema,
-  rejectCRSchema,
   complaintSchema,
   adminRejectCRSchema,
   bulkApproveCycleSchema,
   resolveComplaintSchema,
   updateAutoRuleSchema,
-  updatePayCycleSchema,
   AUTO_RULE_KEYS,
   COMMISSION_RANKINGS,
   CUSTOMER_STATS_MONTHS,
   ROLE_LABEL,
   isGrossCommission,
   isWithinLastMonths,
+  ORDER_CREATOR_ROLES,
+  canCreateOrder,
   type AutoRuleKey,
   type CommissionableRole,
   type UserRole,
   type UserStatus,
+  USER_ROLES,
 } from "@shared/types";
-import { ingestOrderDerived } from "./ingest";
+import {
+  isSystemSettingKey,
+  toRuntimeSettings,
+  updateSystemSettingsSchema,
+} from "@shared/system-settings";
+import { parseVnDateTime, vnDateKey } from "@shared/vn-time";
+import { LoiNghiepVu, doiLichDon, taoDonSchema, taoDonTuApp } from "./order-create";
+import { danhSachDongSchema, giaDongTuDanhMuc } from "./order-lines";
 import { logCustomerEvent } from "./customer-events";
 import { mapCrRowToView, canEditAdjustment } from "./commission-types";
 import { getIncomeForUser, generateLast6Cycles, currentCycleId } from "./income";
@@ -68,6 +76,16 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 // nối Zalo OA gửi OTP thật.
 // TODO: BỎ hằng này khi có kênh gửi OTP thật; lúc đó verify phải khớp đúng code đã gen.
 const TEMP_LOGIN_OTP = "062026";
+
+/**
+ * Ai được thao tác trên một đơn: Trưởng ca, CEO, hoặc chủ đơn khi vai hiện tại vẫn được
+ * tạo đơn. Kế toán từng tạo được đơn nên còn đơn cũ đứng tên mình; dời lịch đơn đó là
+ * đẻ ra đơn mới mang tên Kế toán, sửa dịch vụ là đổi hoa hồng Trưởng ca mà chính người
+ * đó duyệt.
+ */
+function duocThaoTacDon(order: Order, u: User): boolean {
+  return u.role === "tc" || u.role === "ceo" || (order.userId === u.id && canCreateOrder(u.role));
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -222,28 +240,21 @@ export async function registerRoutes(
   // Permission: CEO full, TC view + mark-offboarding, others 403.
   // ============================================================
 
-  /** Helper — count đơn pending của user (chưa terminal). */
-  function countPendingOrders(userId: number): number {
-    // appointmentStatus terminal = cancelled / no_show; visitStatus terminal = completed / cancelled.
-    // "Pending" = chưa terminal cả 2 tier.
-    let count = 0;
-    for (const o of (storage as any).orders ?? []) {
-      if (o.userId !== userId) continue;
-      const apptDone = o.appointmentStatus === "cancelled" || o.appointmentStatus === "no_show";
-      const visitDone = o.visitStatus === "completed" || o.visitStatus === "cancelled";
-      if (apptDone) continue;
-      if (o.visitStatus && visitDone) continue;
-      count++;
-    }
-    return count;
+  /**
+   * Đơn dở dang theo nhân viên, đọc từ DB. Bản cũ đọc mảng đơn của MemoryStorage
+   * trong khi kho thật là DbStorage, nên luôn ra 0 và cảnh báo bàn giao không bao giờ
+   * hiện (NS-11).
+   */
+  async function countPendingOrders(userId: number): Promise<number> {
+    return (await storage.countOpenOrdersByStaff()).get(userId) ?? 0;
   }
 
   /** Helper — strip + enrich user object for admin staff list. */
-  async function enrichUserForAdmin(user: any) {
+  async function enrichUserForAdmin(user: any, donDoDang: Map<number, number>) {
     const safe = stripPassword(user);
     return {
       ...safe,
-      pendingOrders: countPendingOrders(user.id),
+      pendingOrders: donDoDang.get(user.id) ?? 0,
       deviceBinding: await getDeviceBinding(user.phone),
     };
   }
@@ -262,7 +273,8 @@ export async function registerRoutes(
       }
       return true;
     });
-    const enriched = await Promise.all(filtered.map(enrichUserForAdmin));
+    const donDoDang = await storage.countOpenOrdersByStaff();
+    const enriched = await Promise.all(filtered.map((u) => enrichUserForAdmin(u, donDoDang)));
     res.json(enriched);
   });
 
@@ -343,12 +355,25 @@ export async function registerRoutes(
     }
     const updated = await storage.updateUserFields(id, data as any);
     if (!updated) return res.status(404).json({ error: "not_found" });
-    await auditLog.append({
-      userId: id,
-      action: "user.update",
-      actorId: req.currentUser!.id,
-      payload: data,
-    });
+    // Màn nhân sự gửi lại cả biểu mẫu mỗi lần lưu, nên chỉ ghi những ô thật sự đổi,
+    // kèm giá trị cũ, để nhật ký đọc được "đổi bậc từ Đồng thành Bạc".
+    const truoc: Record<string, unknown> = {};
+    const sau: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data)) {
+      const cu = (target as Record<string, unknown>)[k] ?? null;
+      if (v === undefined || (v ?? null) === cu) continue;
+      truoc[k] = cu;
+      sau[k] = v ?? null;
+    }
+    if (Object.keys(sau).length > 0) {
+      await auditLog.append({
+        userId: id,
+        action: "user.update",
+        actorId: req.currentUser!.id,
+        before: truoc,
+        payload: sau,
+      });
+    }
     res.json(stripPassword(updated));
   });
 
@@ -365,11 +390,9 @@ export async function registerRoutes(
         issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
       });
     }
-    // Date >= today check (allow same day for testing flexibility)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const offDate = new Date(parsed.data.offboardingDate);
-    if (offDate.getTime() < today.getTime()) {
+    // Date >= today check (allow same day for testing flexibility). Hôm nay theo lịch
+    // Việt Nam; cả hai là "YYYY-MM-DD" nên so chuỗi là so ngày.
+    if (parsed.data.offboardingDate < vnDateKey()) {
       return res.status(400).json({
         error: "validation",
         issues: [{ path: ["offboardingDate"], message: "Ngày nghỉ phải >= hôm nay" }],
@@ -379,7 +402,7 @@ export async function registerRoutes(
     if (!updated) return res.status(404).json({ error: "not_found" });
     // Thu hồi token để NV mất phiên ngay khi bị đánh dấu nghỉ.
     const revokedTokens = await revokeTokensForPhone(target.phone);
-    const pendingOrders = countPendingOrders(id);
+    const pendingOrders = await countPendingOrders(id);
     await auditLog.append({
       userId: id,
       action: "user.mark_offboarding",
@@ -414,7 +437,8 @@ export async function registerRoutes(
     if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
     const target = await storage.getUser(id);
     if (!target) return res.status(404).json({ error: "not_found" });
-    const today = new Date().toISOString().slice(0, 10);
+    // toISOString() là ngày UTC: trước 07:00 sáng giờ Việt Nam nó còn là hôm qua.
+    const today = vnDateKey();
     const updated = await storage.updateUserStatus(id, "offboarded", target.offboardingDate ?? today);
     if (!updated) return res.status(404).json({ error: "not_found" });
     // Thu hồi token để NV mất phiên ngay khi bị xóa mềm (đã nghỉ).
@@ -436,8 +460,8 @@ export async function registerRoutes(
     // Enrich với actor name
     const enriched = await Promise.all(
       entries.map(async (e) => {
-        const actor = await storage.getUser(e.actorId);
-        return { ...e, actorName: actor?.name ?? "Unknown" };
+        const actor = e.actorId !== null ? await storage.getUser(e.actorId) : undefined;
+        return { ...e, actorName: e.actorId === null ? "Hệ thống" : (actor?.name ?? "Không rõ") };
       }),
     );
     res.json(enriched);
@@ -445,17 +469,17 @@ export async function registerRoutes(
 
   // ============================================================
   // Admin: Commission tier config (B4 R-1-2 + R-1-3)
-  // Permission: CEO edit, TC + KT view-only.
+  // Permission: CEO edit, TC + KT + KTT view-only.
   // ============================================================
 
-  // GET /api/admin/commission-tiers (CEO + TC + KT view active rows)
-  app.get("/api/admin/commission-tiers", requireRole(["ceo", "tc", "kt"]), async (_req, res) => {
+  // GET /api/admin/commission-tiers (CEO + TC + KT + KTT view active rows)
+  app.get("/api/admin/commission-tiers", requireRole(["ceo", "tc", "kt", "ktt"]), async (_req, res) => {
     const tiers = await storage.listCommissionTiers(true);
     res.json(tiers);
   });
 
-  // GET /api/admin/commission-tiers/history (CEO + TC + KT view all rows including expired)
-  app.get("/api/admin/commission-tiers/history", requireRole(["ceo", "tc", "kt"]), async (_req, res) => {
+  // GET /api/admin/commission-tiers/history (CEO + TC + KT + KTT view all rows including expired)
+  app.get("/api/admin/commission-tiers/history", requireRole(["ceo", "tc", "kt", "ktt"]), async (_req, res) => {
     const all = await storage.listCommissionTiers(false);
     // Enrich actor name
     const enriched = await Promise.all(
@@ -488,6 +512,16 @@ export async function registerRoutes(
         });
       }
     }
+    // Tỷ lệ đang áp dụng trước khi sửa, để nhật ký ghi được từ bao nhiêu thành bao nhiêu.
+    const dangApDung = await storage.listCommissionTiers(true);
+    const tyLeCu = (role: string, ranking: string | null) =>
+      dangApDung.find((x) => x.role === role && (x.ranking ?? null) === ranking)?.percentBp ?? null;
+    const thayDoi = parsed.data.tiers.map((t) => ({
+      role: t.role,
+      ranking: t.ranking,
+      fromBp: tyLeCu(t.role, t.ranking),
+      toBp: t.percentBp,
+    }));
     // Apply (mark old expired + insert new).
     const updated = [];
     for (const t of parsed.data.tiers) {
@@ -499,28 +533,27 @@ export async function registerRoutes(
       });
       updated.push(result);
     }
-    // Audit log — config change tracked under CEO actor. userId = actor (config global, không attach NV).
+    // Bảng tỷ lệ là cấu hình chung nên ghi theo entity riêng, không gắn vào người sửa:
+    // gắn vào CEO thì nó hiện trong nhật ký nhân sự của CEO thành "Cập nhật thông tin".
     await auditLog.append({
-      userId: req.currentUser!.id,
-      action: "user.update",
+      entityType: "commission_tiers",
+      action: "setting.commission_rate_update",
       actorId: req.currentUser!.id,
-      payload: {
-        type: "commission_tiers_update",
-        changes: parsed.data.tiers,
-      },
+      before: { tiers: thayDoi.map(({ role, ranking, fromBp }) => ({ role, ranking, percentBp: fromBp })) },
+      payload: { tiers: thayDoi.map(({ role, ranking, toBp }) => ({ role, ranking, percentBp: toBp })) },
     });
     res.json(updated);
   });
 
   // ───────────────────────────────────────────────────────────────
   // Admin settings — Auto Rule + Pay cycle (B5-2 §3.10 + §3.11)
-  // CEO edit; TC + KT view-only. R-9-1 permission gate.
+  // CEO edit; TC + KT + KTT view-only. R-9-1 permission gate.
   // ───────────────────────────────────────────────────────────────
 
-  // GET auto rules — view all (CEO + TC + KT)
+  // GET auto rules — view all (CEO + TC + KT + KTT)
   app.get(
     "/api/admin/settings/auto-rules",
-    requireRole(["ceo", "tc", "kt"]),
+    requireRole(["ceo", "tc", "kt", "ktt"]),
     async (_req, res) => {
       res.json(await storage.listAutoRules());
     },
@@ -542,47 +575,72 @@ export async function registerRoutes(
           issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
         });
       }
+      const truoc = await storage.getAutoRule(key as AutoRuleKey);
       const updated = await storage.updateAutoRule(key as AutoRuleKey, parsed.data, req.currentUser!.id);
       if (!updated) return res.status(404).json({ error: "rule_not_found" });
       await auditLog.append({
-        userId: req.currentUser!.id,
+        entityType: "auto_rule",
         action: "setting.auto_rule_update",
         actorId: req.currentUser!.id,
+        before: truoc ? { key, active: truoc.active, targetPct: truoc.targetPct, bonusPct: truoc.bonusPct } : null,
         payload: { key, ...parsed.data },
       });
       res.json(updated);
     },
   );
 
-  // GET pay cycle — view (CEO + TC + KT)
+  // ───────────────────────────────────────────────────────────────
+  // Cấu hình hệ thống (system_settings): kỳ lương, cửa sổ sửa, ngưỡng lịch hẹn.
+  // CEO và Kế toán trưởng sửa; Trưởng ca, Kế toán xem (CM-28). Kế toán không tự sửa vì
+  // cửa sổ sửa kỳ quyết định bao lâu chính Kế toán còn sửa được điều chỉnh đã duyệt;
+  // tách người lập sổ khỏi người đặt luật là lý do có vai Kế toán trưởng. Mỗi lần đổi một
+  // khóa ghi một dòng lịch sử cũ/mới trong cùng transaction (AC-CH01-01), không ghi thêm
+  // vào audit_logs.
+  // ───────────────────────────────────────────────────────────────
+
   app.get(
-    "/api/admin/settings/pay-cycle",
-    requireRole(["ceo", "tc", "kt"]),
+    "/api/admin/settings",
+    requireRole(["ceo", "tc", "kt", "ktt"]),
     async (_req, res) => {
-      res.json(await storage.getPayCycle());
+      res.json(await storage.getSystemSettingsView());
     },
   );
 
-  // PATCH pay cycle — CEO only, audit-logged
-  app.patch(
-    "/api/admin/settings/pay-cycle",
-    requireRole(["ceo"]),
+  app.put(
+    "/api/admin/settings",
+    requireRole(["ceo", "ktt"]),
     async (req, res) => {
-      const parsed = updatePayCycleSchema.safeParse(req.body);
+      const parsed = updateSystemSettingsSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({
-          error: "validation",
-          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
-        });
+        const issues = parsed.error.issues.map((i) => ({ path: i.path, message: i.message }));
+        return res.status(400).json({ error: "validation", message: issues[0]?.message, issues });
       }
-      const updated = await storage.updatePayCycle(parsed.data, req.currentUser!.id);
-      await auditLog.append({
-        userId: req.currentUser!.id,
-        action: "setting.pay_cycle_update",
-        actorId: req.currentUser!.id,
-        payload: parsed.data,
-      });
-      res.json(updated);
+      res.json(await storage.updateSystemSettings(parsed.data, req.currentUser!.id));
+    },
+  );
+
+  // ?key= lọc một khóa; bỏ trống là mọi khóa. limit mặc định 20, tối đa 100.
+  app.get(
+    "/api/admin/settings/history",
+    requireRole(["ceo", "tc", "kt", "ktt"]),
+    async (req, res) => {
+      const key = req.query.key;
+      if (key !== undefined && !isSystemSettingKey(key)) {
+        return res.status(400).json({ error: "invalid_key" });
+      }
+      const limitRaw = Number(req.query.limit);
+      const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 20;
+      res.json(await storage.listSystemSettingsHistory(key ?? null, limit));
+    },
+  );
+
+  // Ngưỡng mọi vai cần để tự tính trên giao diện (huy hiệu trễ hẹn). Không nằm dưới
+  // /api/admin vì Điều dưỡng, Bác sĩ cũng đọc.
+  app.get(
+    "/api/settings/runtime",
+    requireRole([...USER_ROLES]),
+    async (_req, res) => {
+      res.json(toRuntimeSettings(await storage.getSystemSettings()));
     },
   );
 
@@ -649,7 +707,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/services", async (req, res) => {
+  // Danh mục dịch vụ sẽ đồng bộ từ HIS (BR-DM01-02) và app chưa có màn thêm dịch vụ,
+  // nên chỉ CEO gọi được, để nạp tay khi cần.
+  app.post("/api/services", requireRole(["ceo"]), async (req, res) => {
     try {
       const parsed = insertServiceSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -665,9 +725,9 @@ export async function registerRoutes(
   app.get("/api/orders", async (req, res) => {
     try {
       // Lọc theo người đăng nhập (token): NV (sale/doctor) chỉ thấy đơn của mình;
-      // quản lý (tc/kt/ceo) thấy tất cả. KHÔNG theo userId client gửi.
+      // quản lý (tc/kt/ktt/ceo) thấy tất cả. KHÔNG theo userId client gửi.
       const user = req.currentUser!;
-      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
+      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ktt" || user.role === "ceo";
       const list = seesAll ? await storage.getAllOrders() : await storage.getOrdersByUser(user.id);
       res.json(list);
     } catch (error) {
@@ -682,10 +742,10 @@ export async function registerRoutes(
   // GET /api/orders/:id — extended với items + crs (B5-3 Section 2)
   // CR visibility theo R-9-1:
   //   - Sale / BS: chỉ CR của chính mình
-  //   - TC / KT / CEO: toàn PK (full view)
+  //   - TC / KT / KTT / CEO: toàn PK (full view)
   app.get(
     "/api/orders/:id",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       try {
         const id = parseInt(String(req.params.id), 10);
@@ -695,7 +755,7 @@ export async function registerRoutes(
         }
         // Chủ đơn: NV (sale/doctor) chỉ xem đơn của mình; quản lý xem mọi đơn.
         const user = req.currentUser!;
-        const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
+        const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ktt" || user.role === "ceo";
         if (!seesAll && order.userId !== user.id) {
           return res.status(403).json({ error: "forbidden", message: "Không có quyền xem đơn này" });
         }
@@ -750,24 +810,8 @@ export async function registerRoutes(
   // (order.exam_finished + order.adjusted). updateItemStatus() giữ trong server/orderItems.ts
   // cho webhook handler dùng lại.
 
-  // POST /api/orders/:orderId/cr/:crId/reject — KT only
-  app.post(
-    "/api/orders/:orderId/cr/:crId/reject",
-    requireRole(["kt"]),
-    async (req, res) => {
-      const parsed = rejectCRSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "validation", issues: parsed.error.issues });
-      }
-      const crId = parseInt(String(req.params.crId), 10);
-      if (!Number.isFinite(crId)) return res.status(400).json({ error: "invalid_id" });
-      const cr = await storage.rejectCommissionRecord(crId, parsed.data.reason);
-      if (!cr) {
-        return res.status(404).json({ error: "not_found_or_invalid_state" });
-      }
-      res.json(cr);
-    },
-  );
+  // Từ chối hoa hồng chỉ còn một route: POST /api/admin/commission-approval/cr/:crId/reject,
+  // màn chi tiết đơn và màn duyệt cùng gọi.
 
   // POST /api/orders/:orderId/cr/:crId/complaint — Sale/Doctor + ownership + 3-day window
   app.post(
@@ -792,54 +836,33 @@ export async function registerRoutes(
     },
   );
 
-  app.post("/api/orders", async (req, res) => {
+  /** Lỗi zod đầu tiên thành một câu tiếng Việt, kèm danh sách đủ cho ai cần soi. */
+  function loiDuLieu(res: Response, issues: { path: (string | number)[]; message: string }[]) {
+    return res.status(400).json({
+      message: issues[0]?.message ?? "Dữ liệu không hợp lệ",
+      issues: issues.map((i) => ({ path: i.path, message: i.message })),
+    });
+  }
+
+  // POST /api/orders — máy chủ cấp mã đơn, giờ tạo, giá từng dòng, số giảm, tổng và
+  // hoa hồng; tiền điện thoại gửi lên (nếu còn) bị bỏ qua. Kế toán không tạo đơn.
+  app.post("/api/orders", requireRole([...ORDER_CREATOR_ROLES]), async (req, res) => {
+    const parsed = taoDonSchema.safeParse(req.body);
+    if (!parsed.success) return loiDuLieu(res, parsed.error.issues);
     try {
-      const parsed = insertOrderSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid order data", errors: parsed.error.errors });
-      }
-      // IDOR (tạo đơn): NV thường luôn tạo đơn cho CHÍNH MÌNH (bỏ qua userId client gửi);
-      // chỉ trưởng ca/CEO mới được tạo hộ người khác theo userId trong body.
-      const u = req.currentUser!;
-      const data =
-        u.role === "tc" || u.role === "ceo" ? parsed.data : { ...parsed.data, userId: u.id };
-      const order = await storage.createOrder(data);
-      // Chi tiết từng dịch vụ nằm NGOÀI insertOrderSchema (bảng orders lưu kiểu gộp),
-      // nên đọc thẳng từ body. Thiếu thì ingest tự rơi về cách cũ.
-      const chiTietDv = Array.isArray(req.body?.services)
-        ? req.body.services.map((x: Record<string, unknown>) => ({
-            serviceCode: String(x.serviceCode ?? ""),
-            serviceName: String(x.serviceName ?? ""),
-            serviceCategory: x.serviceCategory ? String(x.serviceCategory) : null,
-            quantity: Math.max(1, Number(x.quantity ?? 1)),
-            unitPrice: Math.max(0, Number(x.unitPrice ?? 0)),
-          }))
-        : null;
-      // G1b: sinh dữ liệu phái sinh (order_items + role_assignments). KHÔNG được làm
-      // hỏng tạo đơn nếu lỗi → bọc try/catch, log, vẫn trả đơn đã tạo. Response giữ nguyên.
-      try {
-        await ingestOrderDerived(order, chiTietDv);
-      } catch (ingestErr) {
-        console.error(`[ingest] lỗi sinh dữ liệu phái sinh cho order ${order.id}:`, ingestErr);
-      }
+      const order = await taoDonTuApp(parsed.data, req.currentUser!);
       await logCustomerEvent({
         phone: order.phone,
         type: "order_created",
-        actorUserId: order.userId,
+        actorUserId: req.currentUser!.id,
         orderId: order.id,
         meta: { code: order.code, serviceName: order.serviceName },
       });
-      // Voucher: cộng lượt dùng nếu đơn có áp mã. Không làm hỏng tạo đơn nếu lỗi.
-      if (order.voucherCode) {
-        try {
-          await storage.incrementVoucherUse(order.voucherCode);
-        } catch (voucherErr) {
-          console.error(`[voucher] tăng lượt dùng lỗi cho ${order.voucherCode}:`, voucherErr);
-        }
-      }
       res.status(201).json(order);
     } catch (error) {
-      res.status(500).json({ message: "Failed to create order" });
+      if (error instanceof LoiNghiepVu) return res.status(error.status).json({ message: error.message });
+      console.error("[orders] tạo đơn lỗi:", error);
+      res.status(500).json({ message: "Không tạo được đơn hàng, chưa có gì được lưu. Thử lại sau ít phút." });
     }
   });
 
@@ -922,7 +945,7 @@ export async function registerRoutes(
       }
       // IDOR: chỉ chủ đơn hoặc trưởng ca/CEO mới được thao tác.
       const u = req.currentUser!;
-      if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
+      if (!duocThaoTacDon(order, u)) {
         return res.status(403).json({ message: "Bạn không có quyền sửa đơn này" });
       }
       const currentStatus = order.appointmentStatus as AppointmentStatusCode;
@@ -930,7 +953,7 @@ export async function registerRoutes(
       if (!validTransitions.includes(status)) {
         return res.status(400).json({ message: `Cannot transition from ${currentStatus} to ${status}` });
       }
-      const updated = await storage.updateOrderAppointmentStatus(id, status, note);
+      const updated = await storage.updateOrderAppointmentStatus(id, status, note, { actorUserId: u.id, source: "app" });
       if (!updated) {
         return res.status(400).json({ message: "Failed to update status" });
       }
@@ -961,7 +984,7 @@ export async function registerRoutes(
       }
       // IDOR: chỉ chủ đơn hoặc trưởng ca/CEO mới được thao tác.
       const u = req.currentUser!;
-      if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
+      if (!duocThaoTacDon(order, u)) {
         return res.status(403).json({ message: "Không có quyền với đơn này" });
       }
       const currentStatus = order.visitStatus as VisitStatusCode;
@@ -969,7 +992,7 @@ export async function registerRoutes(
       if (!validTransitions.includes(status)) {
         return res.status(400).json({ message: `Cannot transition from ${currentStatus} to ${status}` });
       }
-      const updated = await storage.updateOrderVisitStatus(id, status, note);
+      const updated = await storage.updateOrderVisitStatus(id, status, note, { actorUserId: u.id, source: "app" });
       if (!updated) {
         return res.status(400).json({ message: "Failed to update visit status" });
       }
@@ -994,7 +1017,7 @@ export async function registerRoutes(
       if (!order) return res.status(404).json({ message: "Order not found" });
       // IDOR: chỉ chủ đơn hoặc trưởng ca/CEO mới được thao tác.
       const u = req.currentUser!;
-      if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
+      if (!duocThaoTacDon(order, u)) {
         return res.status(403).json({ message: "Không có quyền với đơn này" });
       }
       const raw = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
@@ -1034,7 +1057,7 @@ export async function registerRoutes(
       return null;
     }
     const u = req.currentUser!;
-    if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
+    if (!duocThaoTacDon(order, u)) {
       res.status(403).json({ message: "Không có quyền với đơn này" });
       return null;
     }
@@ -1142,33 +1165,50 @@ export async function registerRoutes(
   });
 
   // PATCH /api/orders/:id/services — đổi danh sách dịch vụ của đơn.
-  // Đổi dịch vụ là đổi tiền, nên sinh lại luôn order_items và bảng hoa hồng.
+  // Đổi dịch vụ là đổi tiền, nên sinh lại luôn order_items và tính lại khoản còn chờ
+  // duyệt. Giá tra từ danh mục như lúc tạo đơn, không thì tạo đơn đúng giá rồi sửa
+  // dịch vụ là đổi được tiền.
   app.patch("/api/orders/:id/services", async (req, res) => {
     try {
       const order = await layDonChoSua(req, res);
       if (!order) return;
-      const dsRaw = Array.isArray(req.body?.services) ? req.body.services : null;
-      if (!dsRaw || dsRaw.length === 0) {
-        return res.status(400).json({ message: "Đơn phải có ít nhất một dịch vụ" });
-      }
-      const ds = dsRaw.map((x: Record<string, unknown>) => ({
-        serviceCode: String(x.serviceCode ?? ""),
-        serviceName: String(x.serviceName ?? ""),
-        serviceCategory: x.serviceCategory ? String(x.serviceCategory) : null,
-        quantity: Math.max(1, Number(x.quantity ?? 1)),
-        unitPrice: Math.max(0, Number(x.unitPrice ?? 0)),
-      }));
-      if (ds.some((x: { serviceCode: string; serviceName: string }) => !x.serviceCode || !x.serviceName)) {
-        return res.status(400).json({ message: "Dịch vụ không hợp lệ" });
-      }
-      const updated = await storage.replaceOrderServices(order.id, ds);
+      const parsed = danhSachDongSchema.safeParse(req.body?.services);
+      if (!parsed.success) return loiDuLieu(res, parsed.error.issues);
+      const danhMuc = await storage.getAllServices();
+      const giaDong = giaDongTuDanhMuc(parsed.data, danhMuc);
+      if (!giaDong.ok) return res.status(400).json({ message: giaDong.message });
+      const dongCu = await storage.getOrderItems(order.id);
+      const updated = await storage.replaceOrderServices(order.id, giaDong.lines, danhMuc, order.appointmentStatus);
       if (!updated) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+      if ("loi" in updated) return res.status(updated.status).json({ message: updated.message });
       await logCustomerEvent({
         phone: order.phone,
         type: "order_updated",
         actorUserId: req.currentUser?.id ?? null,
         orderId: order.id,
         meta: { code: order.code, serviceName: updated.serviceName },
+      });
+      // Sửa dịch vụ là viết lại tiền của đơn; nhật ký khách chỉ giữ tên dịch vụ mới,
+      // nên dòng, tổng và hoa hồng trước và sau phải nằm ở đây mới tra lại được.
+      const dongNhatKy = (ds: { serviceName: string; quantity: number; unitPrice: number }[]) =>
+        ds.map((d) => ({ serviceName: d.serviceName, quantity: d.quantity, unitPrice: d.unitPrice }));
+      await auditLog.append({
+        entityType: "order",
+        entityId: order.id,
+        action: "order.services_update",
+        actorId: req.currentUser!.id,
+        before: {
+          lines: dongNhatKy(dongCu),
+          totalPrice: order.totalPrice,
+          voucherAmount: order.voucherAmount,
+          commission: order.commission,
+        },
+        payload: {
+          lines: dongNhatKy(giaDong.lines),
+          totalPrice: updated.totalPrice,
+          voucherAmount: updated.voucherAmount,
+          commission: updated.commission,
+        },
       });
       res.json(updated);
     } catch (error) {
@@ -1177,81 +1217,37 @@ export async function registerRoutes(
     }
   });
 
-  // Reschedule: set current order to rescheduled, create new order
-  // Reschedule: set current order to rescheduled, create new order
+  // Dời lịch: đơn cũ sang Dời lịch, đẻ đơn mới mang lịch mới. Đổi trạng thái, hủy
+  // khoản chưa duyệt của đơn cũ và tạo đơn mới nằm trong một transaction (doiLichDon).
   app.post("/api/orders/:id/reschedule", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { appointmentDate, appointmentTime } = req.body;
+      const { appointmentDate, appointmentTime } = req.body ?? {};
       if (!appointmentDate || !appointmentTime) {
-        return res.status(400).json({ message: "New appointment date and time required" });
+        return res.status(400).json({ message: "Thiếu ngày hoặc giờ hẹn mới" });
       }
       const order = await storage.getOrder(id);
       if (!order) {
-        return res.status(404).json({ message: "Order not found" });
+        return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
       }
       // IDOR: chỉ chủ đơn hoặc trưởng ca/CEO mới được thao tác.
       const u = req.currentUser!;
-      if (order.userId !== u.id && u.role !== "tc" && u.role !== "ceo") {
+      if (!duocThaoTacDon(order, u)) {
         return res.status(403).json({ message: "Không có quyền với đơn này" });
       }
-      // Mark current as rescheduled
-      const updated = await storage.updateOrderAppointmentStatus(id, "rescheduled" as AppointmentStatusCode, `Dời sang ${appointmentDate} ${appointmentTime}`);
-      if (!updated) {
-        return res.status(400).json({ message: "Cannot reschedule this order" });
-      }
-      // Create new order with status confirmed
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, "0");
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const year = String(now.getFullYear()).slice(2);
-      const rand = String(Math.floor(Math.random() * 900) + 100);
-      const code = `#NP${year}${month}${day}${rand}`;
-      const timeStr = `${day}/${month}/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-      const newOrder = await storage.createOrder({
-        code,
-        patientName: order.patientName,
-        phone: order.phone,
-        email: order.email,
-        serviceName: order.serviceName,
-        serviceCode: order.serviceCode,
-        serviceCategory: order.serviceCategory,
-        quantity: order.quantity,
-        unitPrice: order.unitPrice,
-        totalPrice: order.totalPrice,
-        commission: order.commission,
-        appointmentStatus: "confirmed",
-        notes: `Dời lịch từ đơn ${order.code}`,
-        appointmentDate,
-        appointmentTime,
-        examType: order.examType,
-        vatCompanyName: order.vatCompanyName,
-        vatTaxCode: order.vatTaxCode,
-        vatCompanyAddress: order.vatCompanyAddress,
-        vatEmail: order.vatEmail,
-        createdAt: timeStr,
-        userId: order.userId,
-        // Dời lịch đẻ ra đơn mới thay cho đơn cũ, người phụ trách phải theo sang,
-        // không thì mỗi lần khách dời hẹn là ba ô này trắng lại từ đầu.
-        saleUserId: order.saleUserId,
-        indicatedByUserId: order.indicatedByUserId,
-        performedByUserId: order.performedByUserId,
-      });
-      // G2: đơn dời lịch cũng phải có nguyên liệu + hoa hồng. Bọc try/catch giống
-      // POST /api/orders để ingest lỗi không làm hỏng dời lịch.
-      try {
-        await ingestOrderDerived(newOrder);
-      } catch (ingestErr) {
-        console.error(`[reschedule] ingest lỗi cho đơn mới ${newOrder.id}:`, ingestErr);
-      }
+      const { originalOrder: updated, newOrder } = await doiLichDon(
+        id,
+        String(appointmentDate),
+        String(appointmentTime),
+        u,
+      );
       // Ghi cho ĐƠN CŨ nữa. Màn đơn đã có dòng này qua status_logs, cái thêm được
       // là màn khách kể đủ trình tự: dời lịch đơn cũ rồi mới tới tạo đơn mới.
       // Không sinh dòng trùng ở màn đơn vì nhật ký đơn bỏ hết type status_change.
       await logCustomerEvent({
         phone: order.phone,
         type: "status_change",
-        actorUserId: req.currentUser?.id ?? order.userId,
+        actorUserId: u.id,
         orderId: id,
         meta: {
           tier: "appointment",
@@ -1263,13 +1259,15 @@ export async function registerRoutes(
       await logCustomerEvent({
         phone: newOrder.phone,
         type: "order_created",
-        actorUserId: newOrder.userId,
+        actorUserId: u.id,
         orderId: newOrder.id,
         meta: { code: newOrder.code, serviceName: newOrder.serviceName, rescheduledFrom: order.code },
       });
       res.json({ originalOrder: updated, newOrder });
     } catch (error) {
-      res.status(500).json({ message: "Failed to reschedule" });
+      if (error instanceof LoiNghiepVu) return res.status(error.status).json({ message: error.message });
+      console.error("[orders] dời lịch lỗi:", error);
+      res.status(500).json({ message: "Không dời lịch được, chưa có gì được lưu. Thử lại sau ít phút." });
     }
   });
 
@@ -1278,15 +1276,13 @@ export async function registerRoutes(
  * "DD/MM/YYYY HH:mm" của status_logs → chuỗi ISO, để so sánh được với createdAt
  * của customer_events khi trộn hai nguồn.
  *
- * Đây là phép nghịch đảo của vnTimestamp trong storage.db.ts: nó ghi bằng giờ
- * máy chủ nên đọc lại bằng giờ máy chủ là khớp. Chuỗi lạ thì trả về nguyên xi,
- * để dòng đó xếp xuống cuối chứ không bị vứt mất.
+ * Đây là phép nghịch đảo của vnTimestamp trong storage.db.ts: cả hai cùng hiểu
+ * chuỗi là giờ Việt Nam nên khớp nhau dù máy chủ chạy múi giờ nào. Chuỗi lạ thì
+ * trả về nguyên xi, để dòng đó xếp xuống cuối chứ không bị vứt mất.
  */
 function isoTuGioVN(s: string): string {
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
-  if (!m) return s;
-  const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] ?? 0), +(m[5] ?? 0));
-  return Number.isNaN(d.getTime()) ? s : d.toISOString();
+  const d = parseVnDateTime(s);
+  return d ? d.toISOString() : s;
 }
 
   /**
@@ -1313,7 +1309,7 @@ function isoTuGioVN(s: string): string {
       if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
       // Cùng quy tắc chủ đơn: NV chỉ xem nhật ký đơn của mình; quản lý xem hết.
       const user = req.currentUser!;
-      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
+      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ktt" || user.role === "ceo";
       if (!seesAll && order.userId !== user.id) {
         return res.status(403).json({ error: "forbidden", message: "Không có quyền xem đơn này" });
       }
@@ -1455,7 +1451,7 @@ function isoTuGioVN(s: string): string {
   // Quyền: mọi vai xem được khách thì bật tắt được, khớp luật xem khách hiện tại.
   app.patch(
     "/api/customers/:id/vip",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       const id = parseInt(String(req.params.id), 10);
       if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
@@ -1473,7 +1469,7 @@ function isoTuGioVN(s: string): string {
   // Dữ liệu y tế nhân viên tự nhập, lưu kèm người nhập và thời điểm để truy vết.
   app.patch(
     "/api/customers/:id/medical-note",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       const id = parseInt(String(req.params.id), 10);
       if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
@@ -1507,7 +1503,7 @@ function isoTuGioVN(s: string): string {
   // POST /api/customers/:id/events — ghi nhật ký thao tác gọi/nhắn/email (ADR-003).
   app.post(
     "/api/customers/:id/events",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       const customerId = parseInt(String(req.params.id), 10);
       if (!Number.isFinite(customerId)) return res.status(400).json({ error: "invalid_id" });
@@ -1526,7 +1522,7 @@ function isoTuGioVN(s: string): string {
   // GET /api/recalls/worklist — lọc theo người xem (sale/doctor chỉ khách mình chăm).
   app.get(
     "/api/recalls/worklist",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       try {
         const viewer = req.currentUser!;
@@ -1542,7 +1538,7 @@ function isoTuGioVN(s: string): string {
   // POST /api/recalls/item/:orderItemId/log — ghi kết quả 1 lượt gọi + đổi trạng thái item.
   app.post(
     "/api/recalls/item/:orderItemId/log",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       const orderItemId = parseInt(String(req.params.orderItemId), 10);
       if (!Number.isFinite(orderItemId)) return res.status(400).json({ error: "invalid_id" });
@@ -1553,7 +1549,7 @@ function isoTuGioVN(s: string): string {
           .json({ error: "validation", message: "Kết quả gọi không hợp lệ, chọn lại rồi lưu" });
       }
       const note = typeof req.body?.note === "string" ? req.body.note : null;
-      // Quyền ghi: NV (sale/doctor) chỉ ghi cho khách mình chăm; tc/kt/ceo ghi mọi lượt.
+      // Quyền ghi: NV (sale/doctor) chỉ ghi cho khách mình chăm; tc/kt/ktt/ceo ghi mọi lượt.
       const viewer = req.currentUser!;
       if (viewer.role === "sale" || viewer.role === "doctor") {
         const owner = await storage.getRecallItemOwner(orderItemId);
@@ -1593,7 +1589,8 @@ function isoTuGioVN(s: string): string {
     },
   );
 
-  app.post("/api/customers", async (req, res) => {
+  // Tạo khách chỉ có ở màn tạo đơn, nên cùng vai được tạo đơn (BN01).
+  app.post("/api/customers", requireRole([...ORDER_CREATOR_ROLES]), async (req, res) => {
     try {
       const parsed = insertCustomerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1635,8 +1632,8 @@ function isoTuGioVN(s: string): string {
     }
   });
 
-  // Full leaderboard — gated CEO/TC/KT only per B4 R-9-1 (NV/BS chỉ thấy của mình).
-  app.get("/api/staff", requireRole(["ceo", "tc", "kt"]), async (_req, res) => {
+  // Full leaderboard — gated CEO/TC/KT/KTT only per B4 R-9-1 (NV/BS chỉ thấy của mình).
+  app.get("/api/staff", requireRole(["ceo", "tc", "kt", "ktt"]), async (_req, res) => {
     try {
       const staff = await storage.getAllStaffMembers();
       res.json(staff);
@@ -1646,7 +1643,7 @@ function isoTuGioVN(s: string): string {
   });
 
   // Bảng xếp hạng theo kỳ — xếp hạng NV theo tổng HH thật (commission_records) của cycle.
-  app.get("/api/leaderboard", requireRole(["ceo", "tc", "kt"]), async (req, res) => {
+  app.get("/api/leaderboard", requireRole(["ceo", "tc", "kt", "ktt"]), async (req, res) => {
     try {
       const cycle = typeof req.query.cycle === "string" ? req.query.cycle : currentCycleId();
       const records = await storage.getAllCommissionRecordsByCycle(cycle);
@@ -1679,7 +1676,7 @@ function isoTuGioVN(s: string): string {
   });
 
   // Phân tích tổng quan — số liệu thật theo kỳ (quản lý xem; NV thường 403).
-  app.get("/api/analytics/overview", requireRole(["ceo", "tc", "kt"]), async (req, res) => {
+  app.get("/api/analytics/overview", requireRole(["ceo", "tc", "kt", "ktt"]), async (req, res) => {
     try {
       const cycle = typeof req.query.cycle === "string" && req.query.cycle ? req.query.cycle : currentCycleId();
       const data = await getAnalyticsOverview(cycle);
@@ -1691,7 +1688,7 @@ function isoTuGioVN(s: string): string {
   });
 
   // Phân tích lịch hẹn — số liệu thật theo kỳ (chưa gồm phần theo bác sĩ).
-  app.get("/api/analytics/appointments", requireRole(["ceo", "tc", "kt"]), async (req, res) => {
+  app.get("/api/analytics/appointments", requireRole(["ceo", "tc", "kt", "ktt"]), async (req, res) => {
     try {
       const cycle = typeof req.query.cycle === "string" && req.query.cycle ? req.query.cycle : currentCycleId();
       const data = await getAnalyticsAppointments(cycle);
@@ -1705,7 +1702,7 @@ function isoTuGioVN(s: string): string {
   // Personal ranking — any authenticated user (NV/BS dùng để xem tier của mình).
   app.get(
     "/api/ranking/me",
-    requireRole(["sale", "tc", "kt", "ceo", "doctor"]),
+    requireRole(["sale", "tc", "kt", "ktt", "ceo", "doctor"]),
     async (req, res) => {
       try {
         const data = await getPersonalRanking(req.currentUser!.id);
@@ -1720,7 +1717,7 @@ function isoTuGioVN(s: string): string {
   /**
    * Income detail — role-gated, current user only (B4 R-9-1 + R-11-7).
    * - Sale/BS/TC: xem HH của mình
-   * - KT/CEO: 403 (vào admin-commission-approval thay vì)
+   * - KT/KTT/CEO: 403 (vào admin-commission-approval thay vì)
    *
    * Query: ?cycle=YYYY-MM (default current cycle).
    * Response: HH gốc theo đơn (CR group) + Adjustments APPROVED + Clawbacks + net.
@@ -1745,14 +1742,15 @@ function isoTuGioVN(s: string): string {
 
   // ============================================================
   // Admin: Commission Approval (B5-3 Section 3 — Diễm/KT review)
-  // GET: KT + CEO + TC view; POST: KT only.
+  // GET: KT + KTT + CEO view; POST: KT + KTT. Trưởng ca không xem bảng kê toàn phòng
+  // khám (BR-HH03-01): họ xem hoa hồng của mình ở màn Hoa hồng.
   // ============================================================
 
   // Helper: ensure CRs sinh cho mọi đơn (cycle hiện tại) trước khi list.
   // GET — overview cho 4 tabs (CR, complaint, adjustment counts)
   app.get(
     "/api/admin/commission-approval",
-    requireRole(["kt", "ceo", "tc"]),
+    requireRole(["kt", "ktt", "ceo"]),
     async (req, res) => {
       const cycle = typeof req.query.cycle === "string" ? req.query.cycle : currentCycleId();
 
@@ -1797,11 +1795,13 @@ function isoTuGioVN(s: string): string {
         };
       });
 
-      // Adjustments — toàn cycle, nguồn DB thật
+      // Adjustments — toàn cycle, nguồn DB thật. Cửa sổ sửa theo cấu hình
+      // period_edit_window_days, gửi kèm để màn duyệt in đúng số ngày.
+      const { period_edit_window_days: editWindowDays } = await storage.getSystemSettings();
       const allAdj = (await storage.listAllAdjustmentsForCycle(cycle)).map((a) => ({
         ...a,
         beneficiaryName: userMap.get(a.userId)?.name ?? "-",
-        canEdit: canEditAdjustment(a),
+        canEdit: canEditAdjustment(a, editWindowDays),
       }));
 
       res.json({
@@ -1816,14 +1816,15 @@ function isoTuGioVN(s: string): string {
         orderGroups,
         pendingComplaints,
         adjustments: allAdj,
+        editWindowDays,
       });
     },
   );
 
-  // POST /cr/:crId/approve (KT only — find orderId từ crId scan)
+  // POST /cr/:crId/approve (KT + KTT — find orderId từ crId scan)
   app.post(
     "/api/admin/commission-approval/cr/:crId/approve",
-    requireRole(["kt"]),
+    requireRole(["kt", "ktt"]),
     async (req, res) => {
       const crId = parseInt(String(req.params.crId), 10);
       if (!Number.isFinite(crId)) return res.status(400).json({ error: "invalid_id" });
@@ -1839,21 +1840,29 @@ function isoTuGioVN(s: string): string {
     },
   );
 
-  // POST /cr/:crId/reject (KT only — admin reject với reason min 10 chars)
+  // POST /cr/:crId/reject (KT + KTT, lý do tối thiểu REJECT_REASON_MIN ký tự). Route
+  // từ chối duy nhất: màn chi tiết đơn trước đây có route riêng, ngưỡng 2 ký tự và
+  // không ghi nhật ký, nên cùng một việc mà hai nơi hai luật.
   app.post(
     "/api/admin/commission-approval/cr/:crId/reject",
-    requireRole(["kt"]),
+    requireRole(["kt", "ktt"]),
     async (req, res) => {
       const parsed = adminRejectCRSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ error: "validation", issues: parsed.error.issues });
+        return res.status(400).json({
+          error: "validation",
+          message: parsed.error.issues[0]?.message ?? "Lý do từ chối không hợp lệ",
+          issues: parsed.error.issues,
+        });
       }
       const crId = parseInt(String(req.params.crId), 10);
       if (!Number.isFinite(crId)) return res.status(400).json({ error: "invalid_id" });
       const cr = await storage.rejectCommissionRecord(crId, parsed.data.reason);
-      if (!cr) return res.status(409).json({ error: "invalid_state" });
+      if (!cr) {
+        return res
+          .status(409)
+          .json({ error: "invalid_state", message: "Khoản này không còn ở trạng thái chờ duyệt" });
+      }
       await auditLog.append({
         userId: req.currentUser!.id,
         action: "cr.reject",
@@ -1864,10 +1873,10 @@ function isoTuGioVN(s: string): string {
     },
   );
 
-  // POST /order/:orderId/bulk-approve (KT only — duyệt tất cả CR CHO_DUYET trong đơn)
+  // POST /order/:orderId/bulk-approve (KT + KTT — duyệt tất cả CR CHO_DUYET trong đơn)
   app.post(
     "/api/admin/commission-approval/order/:orderId/bulk-approve",
-    requireRole(["kt"]),
+    requireRole(["kt", "ktt"]),
     async (req, res) => {
       const orderId = parseInt(String(req.params.orderId), 10);
       if (!Number.isFinite(orderId)) return res.status(400).json({ error: "invalid_id" });
@@ -1885,10 +1894,10 @@ function isoTuGioVN(s: string): string {
     },
   );
 
-  // POST /bulk-approve-cycle (KT only — safety gate: typing "DUYỆT")
+  // POST /bulk-approve-cycle (KT + KTT — safety gate: typing "DUYỆT")
   app.post(
     "/api/admin/commission-approval/bulk-approve-cycle",
-    requireRole(["kt"]),
+    requireRole(["kt", "ktt"]),
     async (req, res) => {
       const parsed = bulkApproveCycleSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1912,10 +1921,10 @@ function isoTuGioVN(s: string): string {
     },
   );
 
-  // POST /complaint/:crId/resolve (KT only — Diễm decide alone per R-11-7)
+  // POST /complaint/:crId/resolve (KT + KTT — Diễm decide alone per R-11-7)
   app.post(
     "/api/admin/commission-approval/complaint/:crId/resolve",
-    requireRole(["kt"]),
+    requireRole(["kt", "ktt"]),
     async (req, res) => {
       const parsed = resolveComplaintSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1940,10 +1949,10 @@ function isoTuGioVN(s: string): string {
     },
   );
 
-  // POST /adjustment/:adjId/cancel (KT only — chỉ PENDING/AUTO_PENDING)
+  // POST /adjustment/:adjId/cancel (KT + KTT — chỉ PENDING/AUTO_PENDING)
   app.post(
     "/api/admin/commission-approval/adjustment/:adjId/cancel",
-    requireRole(["kt"]),
+    requireRole(["kt", "ktt"]),
     async (req, res) => {
       const adjId = parseInt(String(req.params.adjId), 10);
       if (!Number.isFinite(adjId)) return res.status(400).json({ error: "invalid_id" });
@@ -1962,18 +1971,18 @@ function isoTuGioVN(s: string): string {
   /**
    * Dashboard — role-based response (B4 R-9-1).
    * - Sale/BS/TC → Personal view (HH cá nhân, KPI cá nhân, pending của mình)
-   * - KT/CEO → Admin view (Tổng HH PK, KPI PK, pending toàn PK, leaderboard)
+   * - KT/KTT/CEO → Admin view (Tổng HH PK, KPI PK, pending toàn PK, leaderboard)
    *
    * Token-gated; bỏ hardcoded "mai" lookup.
    */
   app.get(
     "/api/dashboard",
-    requireRole(["sale", "doctor", "tc", "kt", "ceo"]),
+    requireRole(["sale", "doctor", "tc", "kt", "ktt", "ceo"]),
     async (req, res) => {
       try {
         const role = req.currentUser!.role;
         const userId = req.currentUser!.id;
-        const isAdmin = role === "kt" || role === "ceo";
+        const isAdmin = role === "kt" || role === "ktt" || role === "ceo";
         const data = isAdmin
           ? await getAdminDashboard(userId)
           : await getPersonalDashboard(userId);
@@ -1992,7 +2001,7 @@ function isoTuGioVN(s: string): string {
 
   app.get(
     "/api/notifications/me",
-    requireRole(["ceo", "tc", "kt", "sale", "doctor"]),
+    requireRole(["ceo", "tc", "kt", "ktt", "sale", "doctor"]),
     async (req, res) => {
       const user = req.currentUser!;
       const list = await listNotificationsForUser(user.id, user.role as UserRole);
@@ -2003,7 +2012,7 @@ function isoTuGioVN(s: string): string {
 
   app.get(
     "/api/notifications/me/count",
-    requireRole(["ceo", "tc", "kt", "sale", "doctor"]),
+    requireRole(["ceo", "tc", "kt", "ktt", "sale", "doctor"]),
     async (req, res) => {
       const user = req.currentUser!;
       const count = await countUnreadForUser(user.id, user.role as UserRole);
@@ -2013,7 +2022,7 @@ function isoTuGioVN(s: string): string {
 
   app.post(
     "/api/notifications/:id/read",
-    requireRole(["ceo", "tc", "kt", "sale", "doctor"]),
+    requireRole(["ceo", "tc", "kt", "ktt", "sale", "doctor"]),
     async (req, res) => {
       const id = String(req.params.id);
       if (!id) return res.status(400).json({ error: "invalid_id" });
@@ -2024,7 +2033,7 @@ function isoTuGioVN(s: string): string {
 
   app.post(
     "/api/notifications/read-all",
-    requireRole(["ceo", "tc", "kt", "sale", "doctor"]),
+    requireRole(["ceo", "tc", "kt", "ktt", "sale", "doctor"]),
     async (req, res) => {
       const user = req.currentUser!;
       const list = await listNotificationsForUser(user.id, user.role as UserRole);
@@ -2042,9 +2051,9 @@ function isoTuGioVN(s: string): string {
       }
 
       // Lọc theo người đăng nhập (token): NV (sale/doctor) chỉ thấy đơn của mình +
-      // khách mình chăm; quản lý (tc/kt/ceo) thấy hết. Dịch vụ là danh mục chung, không lọc.
+      // khách mình chăm; quản lý (tc/kt/ktt/ceo) thấy hết. Dịch vụ là danh mục chung, không lọc.
       const user = req.currentUser!;
-      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ceo";
+      const seesAll = user.role === "tc" || user.role === "kt" || user.role === "ktt" || user.role === "ceo";
 
       const allServices = await storage.getAllServices();
       const allCustomers = await storage.getAllCustomers();

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown, X } from "@/components/np/icon";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { parseVnDateTime, vnDateKey, vnDaysUntil, vnParts } from "@shared/vn-time";
 
 /** Một dòng nhật ký: ai, làm gì, lúc nào. */
 export type ActivityEntry = {
@@ -167,12 +168,9 @@ function docThoiDiem(at: string | number | Date): Date | null {
   // là ngày trước tháng sau, còn new Date() đọc theo kiểu Mỹ tháng trước ngày sau
   // nên "05/08/2026" ra ngày 8 tháng 5, sai mà vẫn hợp lệ nên không ai phát hiện.
   // Chỉ ngày lớn hơn 12 mới khiến new Date() chịu thua rồi mới rơi xuống đây.
-  // Regex neo đầu chuỗi nên chuỗi ISO không thể khớp nhầm.
-  const m = at.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
-  if (m) {
-    const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] ?? 0), +(m[5] ?? 0));
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
+  // Regex neo đầu chuỗi nên chuỗi ISO không thể khớp nhầm. Chuỗi này máy chủ ghi
+  // theo giờ Việt Nam, nên đọc lại cũng theo giờ Việt Nam chứ không theo giờ máy.
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(at)) return parseVnDateTime(at);
   const thu = new Date(at);
   return Number.isNaN(thu.getTime()) ? null : thu;
 }
@@ -180,23 +178,22 @@ function docThoiDiem(at: string | number | Date): Date | null {
 function fmtGio(at: string | number | Date): string {
   const d = docThoiDiem(at);
   if (!d) return "";
+  const t = vnParts(d);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${p(t.hour)}:${p(t.minute)}`;
 }
 
 /** Tiêu đề nhóm ngày: "Hôm nay", "Hôm qua", hoặc "8 tháng 10, 2026". */
 function fmtNgay(at: string | number | Date): string {
   const d = docThoiDiem(at);
   if (!d) return "Không rõ ngày";
-  const moc = new Date(d);
-  moc.setHours(0, 0, 0, 0);
-  const homNay = new Date();
-  homNay.setHours(0, 0, 0, 0);
-  const cach = Math.round((homNay.getTime() - moc.getTime()) / 86_400_000);
+  // Nhóm theo ngày lịch Việt Nam, khớp giờ in trên từng dòng.
+  const cach = -(vnDaysUntil(vnDateKey(d)) ?? 0);
   if (cach === 0) return "Hôm nay";
   if (cach === 1) return "Hôm qua";
-  const cungNam = d.getFullYear() === new Date().getFullYear();
-  return `${d.getDate()} tháng ${d.getMonth() + 1}${cungNam ? "" : `, ${d.getFullYear()}`}`;
+  const t = vnParts(d);
+  const cungNam = t.year === vnParts().year;
+  return `${t.day} tháng ${t.month}${cungNam ? "" : `, ${t.year}`}`;
 }
 
 /** Gom nhật ký thành từng nhóm theo ngày, giữ nguyên thứ tự đầu vào. */

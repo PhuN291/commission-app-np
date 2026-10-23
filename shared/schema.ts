@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, serial, date, jsonb, doublePrecision, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, serial, date, jsonb, doublePrecision, primaryKey, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -14,7 +14,7 @@ export const users = pgTable("users", {
   // Account lock — set when 3 OTP attempts fail. ISO timestamp; null = not locked.
   lockedUntil: timestamp("locked_until"),
   name: text("name").notNull(),
-  // UserRole enum from @shared/types: "ceo" | "tc" | "kt" | "sale" | "doctor".
+  // UserRole enum from @shared/types: "ceo" | "tc" | "kt" | "ktt" | "sale" | "doctor".
   // Default sale per B1 — most users là ĐD-Sale.
   role: text("role").notNull().default("sale"),
   department: text("department").notNull().default("Phòng Kinh Doanh"),
@@ -26,7 +26,7 @@ export const users = pgTable("users", {
   /** @deprecated since v15 (B5-2). */
   commissionRate: integer("commission_rate").notNull().default(5),
   // ── Added per B5-2 Section 2 (S-Admin-Staff) ─────────────────────
-  // Ranking enum from @shared/types: M0-M3 cho sale, L1-L3 cho doctor, null cho ceo/tc/kt.
+  // Ranking enum from @shared/types: M0-M3 cho sale, L1-L3 cho doctor, null cho ceo/tc/kt/ktt.
   ranking: text("ranking"),
   // Required khi role=doctor (validate ở zod adminCreateStaffSchema).
   // Mapping ID giữa NP App và iHOS hệ thống.
@@ -155,6 +155,13 @@ export const statusLogs = pgTable("status_logs", {
   toStatus: text("to_status").notNull(),
   timestamp: text("timestamp").notNull(),
   note: text("note"),
+  // Ba cột thêm ở Đợt 0 (script/migrate-dot0.ts) để truy được ai đổi trạng thái và
+  // đổi từ đâu. `timestamp` chữ vẫn giữ vì màn đơn đang đọc nó; created_at là mốc
+  // tuyệt đối để so sánh, sắp xếp mà không phải parse chữ. Dòng cũ có trước ba cột
+  // này để source và actor_user_id NULL, nghĩa là không rõ.
+  source: text("source").default("app"), // 'app' | 'system' | 'seed' | 'his'
+  actorUserId: integer("actor_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertStatusLogSchema = createInsertSchema(statusLogs).omit({ id: true });
@@ -308,17 +315,26 @@ export const insertCommissionComplaintSchema = createInsertSchema(commissionComp
 export type InsertCommissionComplaint = z.infer<typeof insertCommissionComplaintSchema>;
 export type CommissionComplaintRow = typeof commissionComplaints.$inferSelect;
 
-// audit_logs — ghi mọi thay đổi quan trọng (R-10-2). Thay store mock.
-export const auditLogs = pgTable("audit_logs", {
-  id: serial("id").primaryKey(),
-  entityType: text("entity_type").notNull(),
-  entityId: integer("entity_id"),
-  action: text("action").notNull(),
-  actorId: integer("actor_id"),
-  before: jsonb("before"),
-  after: jsonb("after"),
-  timestamp: timestamp("timestamp").notNull().defaultNow(),
-});
+// audit_logs — ghi mọi thay đổi quan trọng (R-10-2), server/audit.ts ghi vào đây.
+// Đợt 0 đổi actor_id thành actor_user_id cho cùng tên với các bảng nhật ký khác, và
+// thay cột `timestamp` không múi giờ bằng created_at timestamptz (cột cũ lệch +7h).
+// entity_type 'user' + entity_id là nhân sự được nói tới; cấu hình chung như bảng
+// tỷ lệ thì entity_id NULL. actor_user_id NULL là hệ thống tự làm.
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    actorUserId: integer("actor_user_id"),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id"),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    source: text("source").notNull().default("app"), // 'app' | 'system' | 'migration'
+  },
+  (t) => ({ entityIdx: index("audit_logs_entity_idx").on(t.entityType, t.entityId, t.createdAt.desc()) }),
+);
 
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
@@ -396,8 +412,9 @@ export const insertAutoRuleSchema = createInsertSchema(autoRules).omit({ id: tru
 export type InsertAutoRule = z.infer<typeof insertAutoRuleSchema>;
 export type AutoRuleRow = typeof autoRules.$inferSelect;
 
-// pay_cycle_settings — cài đặt Kì lương (singleton, 1 dòng). cap_warning_pct là số thực.
-// editWindowDays + lockAfterDays cứng 30, KHÔNG lưu DB (dựng trong mã khi trả về).
+// pay_cycle_settings — bảng Kì lương CŨ, không còn đọc ghi. script/migrate-dot0.ts đã
+// chép deadline_day và cap_warning_pct sang system_settings. Giữ định nghĩa vì bảng
+// vẫn còn trong DB và bản đang chạy trên Vercel trước khi deploy vẫn đọc nó.
 export const payCycleSettings = pgTable("pay_cycle_settings", {
   id: serial("id").primaryKey(),
   deadlineDay: integer("deadline_day").notNull(),
@@ -409,6 +426,35 @@ export const payCycleSettings = pgTable("pay_cycle_settings", {
 export const insertPayCycleSettingsSchema = createInsertSchema(payCycleSettings).omit({ id: true });
 export type InsertPayCycleSettings = z.infer<typeof insertPayCycleSettingsSchema>;
 export type PayCycleSettingsRow = typeof payCycleSettings.$inferSelect;
+
+// system_settings — cấu hình hệ thống dạng key/value, khóa và khoảng giá trị định
+// nghĩa ở shared/system-settings.ts. value là jsonb để sau này chứa được cả chuỗi
+// (giờ chạy batch) mà không phải đổi kiểu cột.
+export const systemSettings = pgTable("system_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedByUserId: integer("updated_by_user_id"),
+});
+
+export type SystemSettingRow = typeof systemSettings.$inferSelect;
+
+// system_settings_history — mỗi lần đổi một khóa là một dòng cũ/mới, ghi cùng
+// transaction với lần đổi (AC-CH01-01: ai sửa, lúc nào, từ bao nhiêu thành bao nhiêu).
+export const systemSettingsHistory = pgTable(
+  "system_settings_history",
+  {
+    id: serial("id").primaryKey(),
+    key: text("key").notNull(),
+    oldValue: jsonb("old_value"),
+    newValue: jsonb("new_value").notNull(),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+    changedByUserId: integer("changed_by_user_id"),
+  },
+  (t) => ({ keyIdx: index("system_settings_history_key_idx").on(t.key, t.changedAt.desc()) }),
+);
+
+export type SystemSettingHistoryRow = typeof systemSettingsHistory.$inferSelect;
 
 // ════════════════════════════════════════════════════════════════════
 // Session/auth stores — chuyển từ in-memory Map sang DB để chạy được trên

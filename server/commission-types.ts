@@ -103,10 +103,14 @@ export function mapAdjustmentRowToView(row: AdjustmentRow): Adjustment {
   };
 }
 
-/** Edit window check — APPROVED/EDITED trong 30 ngày kể từ approvedAt. */
-const EDIT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-export function canEditAdjustment(adj: Adjustment): boolean {
+/**
+ * Edit window check — APPROVED/EDITED trong `editWindowDays` ngày kể từ approvedAt.
+ * Số ngày lấy từ cấu hình period_edit_window_days (mặc định 30), nơi gọi truyền vào
+ * để hàm vẫn thuần, không phải đọc DB.
+ */
+const DAY_MS = 24 * 60 * 60 * 1000;
+export function canEditAdjustment(adj: Adjustment, editWindowDays: number, now = Date.now()): boolean {
   if (adj.status !== "APPROVED" && adj.status !== "EDITED") return false;
   if (!adj.approvedAt) return false;
-  return Date.now() - adj.approvedAt < EDIT_WINDOW_MS;
+  return now - adj.approvedAt < editWindowDays * DAY_MS;
 }

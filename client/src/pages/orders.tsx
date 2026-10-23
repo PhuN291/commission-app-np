@@ -23,19 +23,21 @@ import {
   type OrderStatusCode,
 } from "@shared/status";
 import type { Order } from "@shared/schema";
+import { canCreateOrder } from "@shared/types";
+import {
+  formatVnDate,
+  parseVnDateTime,
+  vnDateKey,
+  vnDaysUntil,
+  vnInstant,
+  vnParts,
+} from "@shared/vn-time";
+import { formatMoney, formatSignedMoney } from "@/lib/format";
+import { useRuntimeSettings } from "@/lib/use-runtime-settings";
 
-function fmtVND(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
-}
-
-/** 'DD/MM/YYYY HH:mm' → ms epoch (0 nếu lỗi). Cho lọc theo ngày + sắp xếp. */
+/** 'DD/MM/YYYY HH:mm' giờ Việt Nam → ms epoch (0 nếu lỗi). Cho lọc theo ngày + sắp xếp. */
 function orderTimestamp(createdAt: string): number {
-  const [datePart, timePart] = (createdAt ?? "").trim().split(" ");
-  const [dd, mm, yyyy] = (datePart ?? "").split("/").map(Number);
-  const [hh, min] = (timePart ?? "").split(":").map(Number);
-  if (!dd || !mm || !yyyy) return 0;
-  const d = new Date(yyyy, mm - 1, dd, hh || 0, min || 0);
-  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+  return parseVnDateTime(createdAt)?.getTime() ?? 0;
 }
 
 const THU = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
@@ -48,18 +50,14 @@ const THU = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm",
  * "Hôm qua" nhanh hơn phải trừ nhẩm ngày trong đầu.
  */
 function nhomNgayTao(createdAt: string): string {
-  const t = orderTimestamp(createdAt);
-  if (!t) return "Không rõ ngày";
-  const moc = new Date(t);
-  moc.setHours(0, 0, 0, 0);
-  const homNay = new Date();
-  homNay.setHours(0, 0, 0, 0);
-  const cach = Math.round((homNay.getTime() - moc.getTime()) / 86_400_000);
+  const moc = parseVnDateTime(createdAt);
+  if (!moc) return "Không rõ ngày";
+  // Đếm theo lịch Việt Nam như máy chủ, máy đặt múi giờ khác vẫn ra cùng nhóm.
+  const cach = -(vnDaysUntil(vnDateKey(moc)) ?? 0);
   if (cach === 0) return "Hôm nay";
   if (cach === 1) return "Hôm qua";
-  if (cach > 1 && cach < 7) return THU[moc.getDay()];
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(moc.getDate())}/${p(moc.getMonth() + 1)}/${moc.getFullYear()}`;
+  if (cach > 1 && cach < 7) return THU[vnParts(moc).weekday];
+  return formatVnDate(moc);
 }
 
 /** Giờ tạo đơn "HH:mm". Ngày đã nằm ở tiêu đề nhóm nên dòng đơn chỉ cần giờ. */
@@ -109,6 +107,8 @@ export default function Orders() {
   const { active, onTab } = useTabNav();
   const [, navigate] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
+  // Kế toán xem được mọi đơn nhưng không tạo đơn (máy chủ trả 403), nên không hiện nút.
+  const coTheTaoDon = canCreateOrder(typeof window !== "undefined" ? localStorage.getItem("np_role") : null);
 
   // ?filter=late → Khách trễ; ?status=pending → DRAFT (backward-compat)
   const searchParams = new URLSearchParams(window.location.search);
@@ -128,20 +128,14 @@ export default function Orders() {
   const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders", getCurrentUserId()],
   });
+  // Số phút tính trễ lấy từ cấu hình, cùng con số Trang chủ dùng để đếm "Khách trễ".
+  const { lateMinutes } = useRuntimeSettings();
 
   const filtered = useMemo(() => {
     const now = Date.now();
-    const startOfDay = () => {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    };
-    const startOfMonth = () => {
-      const d = new Date();
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    };
+    const homNay = vnParts(now);
+    const startOfDay = () => vnInstant(homNay.year, homNay.month, homNay.day).getTime();
+    const startOfMonth = () => vnInstant(homNay.year, homNay.month, 1).getTime();
     const dateCutoff =
       dateFilter === "today"
         ? startOfDay()
@@ -162,7 +156,7 @@ export default function Orders() {
         o.serviceName.toLowerCase().includes(q);
       if (!matchesSearch) return false;
       if (activeFilter === "late") {
-        if (!isLate15min(o)) return false;
+        if (!isLate15min(o, lateMinutes)) return false;
       } else if (activeFilter !== "all") {
         if (deriveOrderStatus(o.appointmentStatus, o.visitStatus) !== activeFilter) return false;
       }
@@ -177,7 +171,7 @@ export default function Orders() {
       const tb = orderTimestamp(b.createdAt);
       return sortBy === "oldest" ? ta - tb : tb - ta;
     });
-  }, [orders, searchTerm, activeFilter, dateFilter, sortBy]);
+  }, [orders, searchTerm, activeFilter, dateFilter, sortBy, lateMinutes]);
 
   /**
    * Gom theo ngày tạo. Chỉ gom khi đang sắp theo thời gian: sắp theo giá trị thì
@@ -211,10 +205,10 @@ export default function Orders() {
     tabs.splice(1, 0, {
       key: "late",
       label: "Khách trễ",
-      count: orders.filter(isLate15min).length,
+      count: orders.filter((o) => isLate15min(o, lateMinutes)).length,
     });
     return tabs;
-  }, [orders]);
+  }, [orders, lateMinutes]);
 
   const isRefundFilter =
     activeFilter === "REFUND_FULL" || activeFilter === "REFUND_PARTIAL";
@@ -228,9 +222,11 @@ export default function Orders() {
       <PageHeader
         title="Đơn hàng"
         action={
-          <NPButton tone="primary" size="sm" icon={Plus} onClick={() => navigate("/orders/new")}>
-            Tạo đơn
-          </NPButton>
+          coTheTaoDon ? (
+            <NPButton tone="primary" size="sm" icon={Plus} onClick={() => navigate("/orders/new")}>
+              Tạo đơn
+            </NPButton>
+          ) : undefined
         }
       />
 
@@ -395,7 +391,7 @@ export default function Orders() {
                     <div className="flex items-baseline justify-between gap-2.5">
                       <span className="truncate text-[15px] font-bold text-np-ink">{o.code}</span>
                       <span className="flex-shrink-0 text-[15px] font-extrabold text-np-ink tabular-nums">
-                        {fmtVND(o.totalPrice)}
+                        {formatMoney(o.totalPrice)}
                       </span>
                     </div>
                     {/* Tên khách, số dịch vụ, giờ tạo dồn một dòng. Tên dịch vụ đầy đủ
@@ -414,7 +410,7 @@ export default function Orders() {
                         )}
                       </span>
                       <span className="flex-shrink-0 text-[12px] font-bold text-np-brand-ink tabular-nums">
-                        +{fmtVND(o.commission)}
+                        {formatSignedMoney(o.commission)}
                       </span>
                     </div>
                     <div className="mt-1.5">

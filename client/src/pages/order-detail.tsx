@@ -85,6 +85,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { formatMoney, formatSignedMoney } from "@/lib/format";
+import { vnDateKey } from "@shared/vn-time";
 import { eventView, type ActivityEvent } from "@/lib/activity-text";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -98,8 +100,10 @@ import {
 } from "@shared/status";
 import type { Customer, Order, Service } from "@shared/schema";
 import {
+  REJECT_REASON_MIN,
   ROLE_LABEL,
   SKIPPED_REASON_LABEL,
+  canCreateOrder,
   type CRStatus,
   type OrderItemStatus,
   type SkippedReason,
@@ -181,10 +185,6 @@ function toInputDate(v: string | null): string {
   return dd && mm && yyyy ? `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}` : "";
 }
 
-function fmtVND(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
-}
-
 /**
  * Moi câu lỗi của server ra khỏi Error do apiRequest ném.
  *
@@ -250,7 +250,7 @@ export default function OrderDetail() {
     (typeof window !== "undefined" ? localStorage.getItem("np_user_id") : null) ?? "0",
     10,
   );
-  const canRejectCR = role === "kt";
+  const canRejectCR = role === "kt" || role === "ktt";
 
   // Per-section edit state — null = không edit, key xác định section nào đang edit.
 
@@ -289,6 +289,9 @@ export default function OrderDetail() {
     queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`, uid] });
     queryClient.invalidateQueries({ queryKey: ["/api/orders", uid] });
     queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/history`, uid] });
+    // Hủy, không đến, dời lịch, sửa dịch vụ, từ chối đều đổi hoa hồng tạm tính ở Trang
+    // chủ; làm mới theo tiền tố để mọi tab đang mở cùng ra số mới.
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
   };
 
   // Người đã nghỉ vẫn còn trong danh sách để hiện đúng tên trên đơn cũ, nhưng
@@ -345,11 +348,11 @@ export default function OrderDetail() {
     onSuccess: () => {
       invalidateAll();
       setSuaDvOpen(false);
-      // Hoa hồng được sinh lại ở trạng thái chờ duyệt nên phải nói rõ, không thì
-      // người dùng tưởng chỉ đổi mỗi tên dịch vụ.
+      // Hoa hồng chờ duyệt được tính lại nên phải nói rõ, không thì người dùng tưởng
+      // chỉ đổi mỗi tên dịch vụ. Khoản Kế toán đã quyết thì máy chủ giữ nguyên.
       toast({
         title: "Đã cập nhật dịch vụ",
-        description: "Bảng kê hoa hồng của đơn đã được tính lại và chờ duyệt.",
+        description: "Hoa hồng chờ duyệt của đơn đã được tính lại. Khoản đã duyệt hoặc đã từ chối giữ nguyên.",
       });
     },
     onError: (e: Error) => {
@@ -361,11 +364,12 @@ export default function OrderDetail() {
     },
   });
 
-  // Đúng luật của server (routes.ts, layDonTheoQuyen): chủ đơn, trưởng ca, CEO.
-  // Kế toán mở được đơn nhưng không sửa được, nên phải khoá ngay ở giao diện chứ
-  // không để bấm thoải mái rồi mới nhận về một câu từ chối.
+  // Đúng luật của server (routes.ts, duocThaoTacDon): trưởng ca, CEO, hoặc chủ đơn
+  // khi vai vẫn được tạo đơn. Kế toán mở được đơn nhưng không sửa được, kể cả đơn cũ
+  // đứng tên mình, nên phải khoá ngay ở giao diện chứ không để bấm thoải mái rồi mới
+  // nhận về một câu từ chối.
   const suaPhuTrachDuoc =
-    order?.userId === currentUserId || role === "tc" || role === "ceo";
+    (order?.userId === currentUserId && canCreateOrder(role)) || role === "tc" || role === "ceo";
 
   /**
    * Id đang hiển thị ở một chỗ phụ trách.
@@ -502,15 +506,15 @@ export default function OrderDetail() {
       setRescheduleDialog(false);
       navigate(`/orders/${data.newOrder.id}`);
     },
-    onError: () => {
-      toast({ title: "Lỗi", description: "Không thể dời lịch", variant: "destructive" });
+    onError: (e: Error) => {
+      toast({ title: "Lỗi", description: docLoi(e) ?? "Không thể dời lịch", variant: "destructive" });
     },
   });
 
-  // Reject CR — KT only
+  // Reject CR — KT only. Cùng route với màn duyệt để chung luật và chung nhật ký.
   const rejectCRMutation = useMutation({
     mutationFn: async (input: { crId: string; reason: string }) => {
-      const res = await authFetch(`/api/orders/${orderId}/cr/${input.crId}/reject`, {
+      const res = await authFetch(`/api/admin/commission-approval/cr/${input.crId}/reject`, {
         method: "POST",
         body: JSON.stringify({ reason: input.reason }),
       });
@@ -523,7 +527,7 @@ export default function OrderDetail() {
       setRejectDialog({ open: false, cr: null, reason: "" });
     },
     onError: (err: any) => {
-      toast({ title: "Lỗi", description: err?.error || "Không thể từ chối", variant: "destructive" });
+      toast({ title: "Lỗi", description: err?.message || "Không từ chối được khoản này", variant: "destructive" });
     },
   });
 
@@ -777,13 +781,27 @@ export default function OrderDetail() {
             <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
               <span>Tạm tính</span>
               <span className={"tabular-nums " + (order.refundType === "full" ? "line-through opacity-60" : "")}>
-                {fmtVND(order.totalPrice)}
+                {formatMoney(order.totalPrice)}
               </span>
             </div>
+            {/* totalPrice là tạm tính trước giảm, nên số giảm và phần bảo hiểm phải trừ ở
+                đây, cùng cách màn tạo đơn xong và doanh thu thực thu đang tính. */}
+            {order.voucherAmount > 0 && (
+              <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
+                <span>Giảm giá{order.voucherCode ? ` (${order.voucherCode})` : ""}</span>
+                <span className="tabular-nums">{formatSignedMoney(-order.voucherAmount)}</span>
+              </div>
+            )}
+            {order.insuranceAmount > 0 && (
+              <div className="flex justify-between text-[13px] font-medium text-np-text-sub">
+                <span>Bảo hiểm chi trả</span>
+                <span className="tabular-nums">{formatSignedMoney(-order.insuranceAmount)}</span>
+              </div>
+            )}
             {order.refundType === "partial" && (
               <div className="flex justify-between text-[13px] font-medium text-np-danger">
                 <span>Hoàn tiền</span>
-                <span className="tabular-nums">-{fmtVND(order.refundAmount)}</span>
+                <span className="tabular-nums">{formatSignedMoney(-order.refundAmount)}</span>
               </div>
             )}
             <div className="mt-1 flex justify-between border-t border-np-border pt-2 text-[15px] font-extrabold text-np-ink">
@@ -793,7 +811,15 @@ export default function OrderDetail() {
                   "tabular-nums " + (order.refundType === "full" ? "line-through opacity-60" : "")
                 }
               >
-                {fmtVND(order.totalPrice - (order.refundType === "partial" ? order.refundAmount : 0))}
+                {formatMoney(
+                  Math.max(
+                    0,
+                    order.totalPrice -
+                      order.voucherAmount -
+                      order.insuranceAmount -
+                      (order.refundType === "partial" ? order.refundAmount : 0),
+                  ),
+                )}
               </span>
             </div>
           </div>
@@ -1008,7 +1034,7 @@ export default function OrderDetail() {
             time={gioMoi}
             onTimeChange={setGioMoi}
             timeAs="inline"
-            min={new Date().toISOString().split("T")[0]}
+            min={vnDateKey()}
           />
 
           <div className="mt-5">
@@ -1108,7 +1134,7 @@ export default function OrderDetail() {
             <div className="mb-3 flex items-baseline justify-between">
               <span className="text-[14px] font-medium text-np-text-sub">Tạm tính</span>
               <span className="text-[17px] font-extrabold tabular-nums text-np-ink">
-                {fmtVND(tongNhap)}
+                {formatMoney(tongNhap)}
               </span>
             </div>
             <NPButton
@@ -1149,7 +1175,7 @@ export default function OrderDetail() {
               time={newTime}
               onTimeChange={setNewTime}
               timeAs="inline"
-              min={new Date().toISOString().split("T")[0]}
+              min={vnDateKey()}
             />
           </div>
           <DialogFooter>
@@ -1262,7 +1288,7 @@ export default function OrderDetail() {
               Hoa hồng {rejectDialog.cr ? ROLE_LABEL[rejectDialog.cr.role as UserRole] : ""}{" "}
               ·{" "}
               <span className="font-bold text-np-ink">
-                {rejectDialog.cr ? fmtVND(rejectDialog.cr.amount) : ""}
+                {rejectDialog.cr ? formatMoney(rejectDialog.cr.amount) : ""}
               </span>
             </p>
             <div>
@@ -1270,7 +1296,7 @@ export default function OrderDetail() {
                 Lý do từ chối
               </label>
               <Textarea
-                placeholder="Ví dụ: Số đơn không khớp với số liệu hệ thống..."
+                placeholder={`Ví dụ: Số đơn không khớp với số liệu hệ thống (tối thiểu ${REJECT_REASON_MIN} ký tự)`}
                 value={rejectDialog.reason}
                 onChange={(e) => setRejectDialog((p) => ({ ...p, reason: e.target.value }))}
               />
@@ -1285,7 +1311,7 @@ export default function OrderDetail() {
             </NPButton>
             <NPButton
               tone="dark"
-              disabled={!rejectDialog.reason || rejectDialog.reason.length < 2 || rejectCRMutation.isPending}
+              disabled={rejectDialog.reason.trim().length < REJECT_REASON_MIN || rejectCRMutation.isPending}
               onClick={() =>
                 rejectDialog.cr &&
                 rejectCRMutation.mutate({ crId: rejectDialog.cr.id, reason: rejectDialog.reason })
@@ -1350,7 +1376,7 @@ function ItemRow({
           </div>
         </div>
         <div className={"flex-shrink-0 text-[14px] font-bold tabular-nums " + (isStruck ? "text-np-text-muted line-through" : "text-np-ink")}>
-          {fmtVND(item.price)}
+          {formatMoney(item.price)}
         </div>
       </div>
     </div>

@@ -24,6 +24,7 @@ import {
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import { ROLE_LABEL, type UserRole } from "@shared/types";
 import { cn } from "@/lib/utils";
+import { formatMoney, formatMoneyShort, formatMoneyShortNumber } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────
 // Shape khớp GET /api/analytics/overview
@@ -52,23 +53,11 @@ type AnalyticsOverview = {
 
 const BAR_COLORS = ["#1A8A7D", "#22A594", "#34D399", "#6EE7B7", "#A7F3D0", "#D1FAE5"];
 
-const fmtVND = (n: number) => new Intl.NumberFormat("vi-VN").format(n) + "đ";
-
-function fmtShort(n: number) {
-  // Triệu/tỷ giữ 1 chữ số thập phân, dấu phẩy kiểu VN (vd 7,3tr · 1,2tỷ); nghìn giữ nguyên.
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(".", ",") + "tỷ";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(".", ",") + "tr";
-  if (n >= 1_000) return (n / 1_000).toFixed(0) + "k";
-  return String(n);
-}
-
-/** Nhãn trục Y biểu đồ — số nguyên triệu/tỷ cho gọn (giữ như cũ, không thập phân). */
-function fmtAxis(n: number) {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(0) + "tỷ";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(0) + "tr";
-  if (n >= 1_000) return (n / 1_000).toFixed(0) + "k";
-  return String(n);
-}
+/**
+ * Nhãn trục Y biểu đồ: số gọn không kèm ₫, trục đã nói là tiền. Viết đủ "triệu"
+ * thay cho "tr" như chữ ở mọi chỗ khác, nên trục rộng hơn bản cũ một chút.
+ */
+const fmtAxis = (n: number) => formatMoneyShortNumber(n);
 
 /** "2026-06" → "Tháng 06/2026". */
 function cycleLabel(cycle: string) {
@@ -84,11 +73,11 @@ export default function AnalyticsOverview() {
   const { active, onTab } = useTabNav();
   const quayLai = useQuayLai("/");
 
-  // Chặn vai: chỉ quản lý (ceo/tc/kt) xem; vai khác về trang chủ (như admin-settings).
+  // Chặn vai: chỉ quản lý (ceo/tc/kt/ktt) xem; vai khác về trang chủ (như admin-settings).
   const role = (typeof window !== "undefined"
     ? localStorage.getItem("np_role")
     : null) as UserRole | null;
-  const canView = role === "ceo" || role === "tc" || role === "kt";
+  const canView = role === "ceo" || role === "tc" || role === "kt" || role === "ktt";
   if (typeof window !== "undefined" && !canView) {
     return <Redirect to="/" />;
   }
@@ -142,7 +131,7 @@ export default function AnalyticsOverview() {
         <div className="np-divide bg-white">
           <KpiCard
             title="Doanh thu thực thu"
-            display={fmtVND(kpis.doanhThuThucThu.value)}
+            display={formatMoney(kpis.doanhThuThucThu.value)}
             changePct={kpis.doanhThuThucThu.changePct}
           />
           <KpiCard
@@ -152,7 +141,7 @@ export default function AnalyticsOverview() {
           />
           <KpiCard
             title="Giá trị trung bình mỗi đơn"
-            display={fmtVND(kpis.giaTriTbDon.value)}
+            display={formatMoney(kpis.giaTriTbDon.value)}
             changePct={kpis.giaTriTbDon.changePct}
           />
           <KpiCard
@@ -192,7 +181,7 @@ export default function AnalyticsOverview() {
                   tick={{ fontSize: 10, fill: "var(--color-np-text-muted)" }}
                   axisLine={false}
                   tickLine={false}
-                  width={40}
+                  width={52}
                 />
                 <Tooltip
                   contentStyle={{
@@ -204,7 +193,7 @@ export default function AnalyticsOverview() {
                     padding: "8px 12px",
                   }}
                   formatter={(value: number, name: string) => [
-                    fmtVND(value),
+                    formatMoney(value),
                     name === "current" ? "Kỳ hiện tại" : "Kỳ trước",
                   ]}
                   labelFormatter={(label) => `Ngày ${label}`}
@@ -259,7 +248,7 @@ export default function AnalyticsOverview() {
                   <p className="text-[11px] text-np-text-muted tabular-nums">{s.tyTrong}% doanh thu</p>
                 </div>
                 <span className="flex-shrink-0 text-[14px] font-bold text-np-ink tabular-nums">
-                  {fmtShort(s.doanhThu)}đ
+                  {formatMoneyShort(s.doanhThu)}
                 </span>
               </div>
             ))
@@ -306,8 +295,8 @@ export default function AnalyticsOverview() {
                   </p>
                 </div>
                 <div className="flex-shrink-0 text-right">
-                  <p className="text-[14px] font-bold text-np-ink tabular-nums">{fmtShort(nv.doanhThu)}đ</p>
-                  <p className="text-[11px] text-np-text-muted tabular-nums">Hoa hồng {fmtShort(nv.hoaHong)}đ</p>
+                  <p className="text-[14px] font-bold text-np-ink tabular-nums">{formatMoneyShort(nv.doanhThu)}</p>
+                  <p className="text-[11px] text-np-text-muted tabular-nums">Hoa hồng {formatMoneyShort(nv.hoaHong)}</p>
                 </div>
               </div>
             ))
@@ -335,7 +324,7 @@ export default function AnalyticsOverview() {
             <p className="text-[11px] font-bold text-np-text-muted">
               Tổng tiền hoàn trong kỳ
             </p>
-            <p className="text-[20px] font-extrabold text-np-ink tabular-nums">{fmtVND(hoanTien.tong)}</p>
+            <p className="text-[20px] font-extrabold text-np-ink tabular-nums">{formatMoney(hoanTien.tong)}</p>
           </div>
           {hoanTien.dichVu.length === 0 ? (
             <p className="mt-2 text-center text-[12px] italic text-np-text-muted">
@@ -347,7 +336,7 @@ export default function AnalyticsOverview() {
                 <div key={s.serviceName} className="flex items-center justify-between gap-2">
                   <span className="truncate text-[13px] text-np-ink">{s.serviceName}</span>
                   <span className="flex-shrink-0 text-[13px] font-bold text-np-danger tabular-nums">
-                    {fmtShort(s.hoanTien)}đ
+                    {formatMoneyShort(s.hoanTien)}
                   </span>
                 </div>
               ))}
@@ -358,7 +347,7 @@ export default function AnalyticsOverview() {
         {/* Hoa hồng */}
         <SectionTitle>Hoa hồng</SectionTitle>
         <div className="np-divide bg-white">
-          <StatCard label="Tổng hoa hồng" value={fmtShort(hoaHong.tong) + "đ"} />
+          <StatCard label="Tổng hoa hồng" value={formatMoneyShort(hoaHong.tong)} />
           <StatCard label="Tỷ lệ trên doanh thu" value={`${hoaHong.tyLeTrenDoanhThu}%`} />
         </div>
 
@@ -445,7 +434,7 @@ function RevenueBars({ items }: { items: { label: string; value: number; sub?: s
           <div className="mb-1 flex items-center justify-between">
             <span className="truncate text-[13px] font-medium text-np-ink">{it.label}</span>
             <div className="flex flex-shrink-0 items-center gap-2 tabular-nums">
-              <span className="text-[12px] font-bold text-np-ink">{fmtShort(it.value)}đ</span>
+              <span className="text-[12px] font-bold text-np-ink">{formatMoneyShort(it.value)}</span>
               {it.sub && <span className="text-[11px] font-medium text-np-text-muted">{it.sub}</span>}
             </div>
           </div>

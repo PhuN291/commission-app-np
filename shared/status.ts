@@ -1,3 +1,6 @@
+import { isPastBy, parseVnDateTime, type Instant } from "./vn-time";
+import { SYSTEM_SETTING_DEFAULTS } from "./system-settings";
+
 // ===== Appointment Status (Tầng 1) =====
 export type AppointmentStatusCode =
   | "pending"
@@ -239,28 +242,26 @@ type LateCheckOrder = {
   visitStatus: string | null;
 };
 
-/** Parse 'dd/MM/yyyy' + 'HH:mm' → Date thủ công (không dùng date-fns). null nếu sai/rỗng. */
-function parseVNDateTime(dateStr: string | null, timeStr: string | null): Date | null {
-  if (!dateStr || !timeStr) return null;
-  const d = dateStr.split("/");
-  const t = timeStr.split(":");
-  if (d.length !== 3 || t.length < 2) return null;
-  const [day, month, year] = d.map(Number);
-  const [hour, minute] = t.map(Number);
-  if ([day, month, year, hour, minute].some((n) => Number.isNaN(n))) return null;
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 /**
- * Đơn trễ T+15p: quá giờ hẹn 15 phút, trạng thái reminded/confirmed, chưa checkin.
+ * Đơn trễ: quá giờ hẹn hơn `thresholdMinutes` phút, trạng thái reminded/confirmed,
+ * chưa checkin. Nơi gọi truyền số phút từ cấu hình late_minutes (máy chủ đọc
+ * system_settings, giao diện dùng useRuntimeSettings); mặc định chỉ để dự phòng.
  * Edge case T+30p auto NO_SHOW (R-2-2): đơn NO_SHOW không còn reminded/confirmed nên tự loại.
+ *
+ * Giờ hẹn đọc là giờ Việt Nam (parseVnDateTime), không theo múi giờ máy: Dashboard
+ * đếm ở máy chủ, mà Vercel chạy UTC nên đọc theo giờ máy thì hẹn 09:00 thành 16:00.
+ * Gọi kiểu `.filter((o) => isLate15min(o))`, đừng truyền thẳng vào filter: filter
+ * đẩy chỉ số phần tử vào tham số thứ hai, thành ngưỡng 0, 1, 2 phút.
  */
-export function isLate15min(order: LateCheckOrder): boolean {
-  const scheduled = parseVNDateTime(order.appointmentDate, order.appointmentTime);
+export function isLate15min(
+  order: LateCheckOrder,
+  thresholdMinutes = SYSTEM_SETTING_DEFAULTS.late_minutes,
+  now: Instant = Date.now(),
+): boolean {
+  if (!order.appointmentTime) return false; // chưa chốt giờ thì chưa có mốc để trễ
+  const scheduled = parseVnDateTime(order.appointmentDate, order.appointmentTime);
   if (!scheduled) return false;
-  const cutoff = scheduled.getTime() + 15 * 60_000;
-  if (Date.now() <= cutoff) return false;
+  if (!isPastBy(scheduled, thresholdMinutes, now)) return false;
   if (!["reminded", "confirmed"].includes(order.appointmentStatus)) return false;
   if (order.visitStatus) return false; // đã checkin
   return true;

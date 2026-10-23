@@ -31,6 +31,7 @@ import {
 } from "@/components/np";
 import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { vnDaysUntil, vnParts } from "@shared/vn-time";
 
 /** Một lượt cần gọi (shape khớp GET /api/recalls/worklist). */
 interface WorklistRow {
@@ -65,19 +66,17 @@ function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
+  const t = vnParts(d);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())} ${p(d.getDate())}/${p(d.getMonth() + 1)}`;
+  return `${p(t.hour)}:${p(t.minute)} ${p(t.day)}/${p(t.month)}`;
 }
 
 /** Số ngày từ hôm nay tới recallDueDate (dương = quá hạn). null nếu thiếu/định dạng lạ. */
 function daysOverdue(dateStr: string | null | undefined): number | null {
-  if (!dateStr) return null;
-  const due = new Date(dateStr);
-  if (Number.isNaN(due.getTime())) return null;
-  due.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((today.getTime() - due.getTime()) / 86_400_000);
+  // Đếm theo lịch Việt Nam như máy chủ: new Date("YYYY-MM-DD") là nửa đêm UTC, máy
+  // đặt múi giờ phía tây sẽ đọc thành hôm trước và lệch hạn một ngày.
+  const days = vnDaysUntil(dateStr);
+  return days === null ? null : -days;
 }
 
 /** Nhãn trạng thái thời gian theo số ngày quá hạn. */

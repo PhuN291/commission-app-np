@@ -38,6 +38,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ROLE_LABEL, type UserRole } from "@shared/types";
+import { vnParts } from "@shared/vn-time";
+import { MONEY_SYMBOL, formatMoney, formatMoneyNumber, formatMoneyShort } from "@/lib/format";
 import metricRevenueIcon from "@/assets/icons/np-doanh-so.png";
 import metricCustomersClosedIcon from "@/assets/icons/np-da-chot.png";
 import taskPendingIcon from "@/assets/icons/np-don-cho-xac-nhan.png";
@@ -128,19 +130,8 @@ function getRank(revenue: number) {
   return RANK_TIERS[0];
 }
 
-function fmtShort(n: number) {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + " tỷ";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + " triệu";
-  if (n >= 1_000) return Math.round(n / 1_000) + " nghìn";
-  return String(n);
-}
-
-function fmtFull(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n);
-}
-
 function getGreeting() {
-  const h = new Date().getHours();
+  const h = vnParts().hour; // lời chào theo giờ phòng khám, không theo múi giờ của máy
   if (h < 11) return "Chào buổi sáng";
   if (h < 13) return "Chào buổi trưa";
   if (h < 18) return "Chào buổi chiều";
@@ -227,7 +218,7 @@ function PersonalView({
         <div className="mt-2.5 grid grid-cols-2 gap-2.5 px-4">
           <MetricCard
             label="Doanh số"
-            value={fmtShort(kpis.revenue)}
+            value={formatMoneyShort(kpis.revenue)}
             delta={null}
             icon={metricRevenueIcon}
           />
@@ -273,7 +264,7 @@ function PersonalView({
               </span>
               {rank.next && (
                 <span className="text-[11px] font-medium text-np-text-muted">
-                  còn {fmtShort(remaining)}₫ lên {rank.next}
+                  còn {formatMoneyShort(remaining)} lên {rank.next}
                 </span>
               )}
             </div>
@@ -284,7 +275,7 @@ function PersonalView({
                 <span className="text-[11px] font-semibold text-np-brand-ink">
                   Lên {rank.next}: Hoa hồng {RANK_REWARDS[rank.next].commission}%
                   {RANK_REWARDS[rank.next].bonus > 0
-                    ? ` · thưởng ${fmtFull(RANK_REWARDS[rank.next].bonus)}₫`
+                    ? ` · thưởng ${formatMoney(RANK_REWARDS[rank.next].bonus)}`
                     : ""}
                 </span>
               </div>
@@ -333,7 +324,7 @@ function AdminView({
         <div className="mt-2.5 grid grid-cols-2 gap-2.5 px-4">
           <MetricCard
             label="Doanh số"
-            value={fmtShort(kpis.totalRevenue)}
+            value={formatMoneyShort(kpis.totalRevenue)}
             delta={`${kpis.activeStaffCount} nhân viên`}
             tone="success"
             icon={metricRevenueIcon}
@@ -415,10 +406,10 @@ function AdminView({
               </div>
               <div className="flex-shrink-0 text-right">
                 <div className="text-[13px] font-bold text-np-ink tabular-nums">
-                  {fmtShort(p.revenue)}₫
+                  {formatMoneyShort(p.revenue)}
                 </div>
                 <div className="text-[11px] font-semibold text-np-brand-ink">
-                  Hoa hồng {fmtShort(p.commission)}₫
+                  Hoa hồng {formatMoneyShort(p.commission)}
                 </div>
               </div>
             </div>
@@ -516,11 +507,11 @@ function HeroCard({
           </span>
         )}
       </div>
-      <div className="relative mt-2 flex items-baseline gap-1">
+      <div className="relative mt-2 flex items-baseline">
         <span className="text-[36px] font-extrabold leading-none tracking-[-1px] text-np-hero-ink tabular-nums">
-          {fmtFull(amount)}
+          {formatMoneyNumber(amount)}
         </span>
-        <span className="text-base font-bold text-np-text-sub">VNĐ</span>
+        <span className="text-base font-bold text-np-text-sub">{MONEY_SYMBOL}</span>
       </div>
       {subtitle && (
         <div className="mt-2.5 text-[12px] font-medium text-np-text-sub">{subtitle}</div>

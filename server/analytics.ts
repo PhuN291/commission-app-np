@@ -14,34 +14,17 @@
 import type { Order } from "@shared/schema";
 import { isGrossCommission } from "@shared/types";
 import { deriveOrderStatus, ORDER_STATUS_LABEL, type OrderStatusCode } from "@shared/status";
+import { daysInCycle, shiftCycle, vnCycleOfText } from "@shared/vn-time";
 import { storage } from "./storage";
 
 /** order.createdAt ('DD/MM/YYYY HH:mm') → 'YYYY-MM'; null nếu định dạng lạ. */
 export function orderCycle(createdAt: string | null): string | null {
-  try {
-    const datePart = (createdAt ?? "").trim().split(" ")[0]; // 'DD/MM/YYYY'
-    const [, mm, yyyy] = datePart.split("/");
-    if (yyyy && mm && /^\d{4}$/.test(yyyy) && /^\d{1,2}$/.test(mm)) {
-      return `${yyyy}-${mm.padStart(2, "0")}`;
-    }
-  } catch {
-    // rơi xuống null
-  }
-  return null;
+  return vnCycleOfText(createdAt);
 }
 
 /** Kỳ liền trước của một kỳ 'YYYY-MM'. */
 function prevCycleOf(cycle: string): string {
-  const [y, m] = cycle.split("-").map(Number);
-  const d = new Date(y, (m || 1) - 1, 1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** Số ngày trong tháng của kỳ. */
-function daysInCycle(cycle: string): number {
-  const [y, m] = cycle.split("-").map(Number);
-  return new Date(y, m, 0).getDate(); // ngày 0 của tháng sau = ngày cuối tháng này
+  return shiftCycle(cycle, -1);
 }
 
 /** Ngày trong tháng từ createdAt ('DD/MM/...'); null nếu lạ. */
