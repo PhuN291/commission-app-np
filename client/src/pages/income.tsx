@@ -37,6 +37,8 @@ import {
   useTabNav,
   HeroSurface,
 } from "@/components/np";
+import { MONEY_SYMBOL, formatMoney, formatMoneyNumber, formatSignedMoney } from "@/lib/format";
+import { vnCycleOf } from "@shared/vn-time";
 import {
   Select,
   SelectContent,
@@ -115,24 +117,14 @@ type IncomeData = {
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-function fmtVND(n: number) {
-  const sign = n < 0 ? "-" : "";
-  return sign + new Intl.NumberFormat("vi-VN").format(Math.abs(n)) + "₫";
-}
-
-function fmtSignedVND(n: number) {
-  if (n > 0) return "+" + fmtVND(n);
-  return fmtVND(n);
-}
-
 function cycleLabel(cycle: string): string {
   const [y, m] = cycle.split("-");
   return `Tháng ${m}/${y}`;
 }
 
+/** Kỳ mặc định theo lịch Việt Nam như máy chủ, máy đặt múi giờ khác vẫn mở đúng kỳ. */
 function currentCycleId(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return vnCycleOf();
 }
 
 
@@ -233,16 +225,16 @@ export default function Income() {
         <div className="px-4">
           <HeroSurface>
             <div className="mb-2 text-[11px] font-bold text-np-hero-ink">Thực nhận</div>
-            <div className="flex items-baseline gap-1">
+            <div className="flex items-baseline">
               <span className="text-[36px] font-extrabold leading-none tracking-[-1px] text-np-hero-ink tabular-nums">
-                {new Intl.NumberFormat("vi-VN").format(data.netHh)}
+                {formatMoneyNumber(data.netHh)}
               </span>
-              <span className="text-base font-bold text-np-text-sub">đ</span>
+              <span className="text-base font-bold text-np-text-sub">{MONEY_SYMBOL}</span>
             </div>
             {data.target > 0 && (
               <div className="mt-3">
                 <div className="mb-1.5 flex items-baseline justify-between text-[11px] font-medium text-np-text-sub">
-                  <span>Mục tiêu tháng {fmtVND(data.target)}</span>
+                  <span>Mục tiêu tháng {formatMoney(data.target)}</span>
                   <span className="font-bold tabular-nums text-np-hero-ink">{targetPct}%</span>
                 </div>
                 {/* Rãnh trắng đục, phần đã đạt màu teal, cùng cặp màu với chữ trên thẻ. Cặp trắng
@@ -329,7 +321,7 @@ export default function Income() {
             })}
             <div className="flex items-center justify-between border-t border-np-border px-4 py-3.5 text-[15px] font-extrabold text-np-ink">
               <span>Tổng hoa hồng</span>
-              <span className="tabular-nums">{fmtVND(data.totalHh)}</span>
+              <span className="tabular-nums">{formatMoney(data.totalHh)}</span>
             </div>
           </Card>
         </>
@@ -350,7 +342,7 @@ export default function Income() {
             <div className="flex items-center justify-between border-t border-np-border px-4 py-3.5 text-[15px] font-extrabold text-np-ink">
               <span>Tổng điều chỉnh</span>
               <span className={"tabular-nums " + (data.totalAdjustment >= 0 ? "" : "text-np-danger")}>
-                {fmtSignedVND(data.totalAdjustment)}
+                {formatSignedMoney(data.totalAdjustment)}
               </span>
             </div>
           </Card>
@@ -372,7 +364,7 @@ export default function Income() {
             <div className="flex items-center justify-between border-t border-np-border px-4 py-3.5 text-[15px] font-extrabold text-np-ink">
               <span>Tổng truy thu</span>
               <span className="tabular-nums text-np-danger">
-                {fmtSignedVND(data.totalClawback)}
+                {formatSignedMoney(data.totalClawback)}
               </span>
             </div>
           </Card>
@@ -427,7 +419,7 @@ function AdjustmentRow({ adj, last }: { adj: Adjustment; last?: boolean }) {
           (isThuong ? "text-np-badge-success-fg" : "text-np-badge-critical-fg")
         }
       >
-        {fmtSignedVND(adj.amount)}
+        {formatSignedMoney(adj.amount)}
       </div>
     </div>
   );
@@ -450,7 +442,7 @@ function ClawbackRow({ clawback, last }: { clawback: Clawback; last?: boolean })
         </div>
       </div>
       <div className="flex-shrink-0 text-[14px] font-extrabold tabular-nums text-np-danger">
-        {fmtSignedVND(clawback.amount)}
+        {formatSignedMoney(clawback.amount)}
       </div>
     </div>
   );

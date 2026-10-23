@@ -12,8 +12,10 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format";
 import { SERVICE_PACKAGES } from "@/pages/service-detail";
 import type { Service } from "@shared/schema";
+import { tenDongDichVu } from "@shared/service-packages";
 import { DETAIL_HEADER_BTN } from "./detail-header";
 
 /** Một dòng dịch vụ đã chọn trên đơn. */
@@ -40,21 +42,21 @@ export function khoaDong(line: ServiceLine): string {
  * khi không chọn gói.
  *
  * Quy ước ghép tên này là thứ DUY NHẤT cho phép suy ngược từ đơn đã lưu ra đúng
- * gói đã chọn, nên phải nằm một chỗ. Trước đây màn tạo đơn ghép tay tại chỗ gửi
- * đơn, ai sửa dấu nối ở đó là màn sửa dịch vụ hết dò ra gói.
+ * gói đã chọn, nên phải nằm một chỗ (tenDongDichVu, máy chủ ghép cùng hàm đó).
  */
 export function tenDayDu(line: ServiceLine): string {
-  return line.packageInfo ? `${line.service.title} - ${line.packageInfo.name}` : line.service.title;
+  return tenDongDichVu(line.service.title, line.packageInfo?.name);
 }
 
-/** Một dòng đã chọn → đúng hình dạng PATCH /api/orders/:id/services nhận. */
+/**
+ * Một dòng đã chọn → đúng hình dạng POST /api/orders và PATCH /api/orders/:id/services
+ * nhận. Không gửi giá: máy chủ tự tra giá dịch vụ, giá gói từ danh mục.
+ */
 export function payloadDong(line: ServiceLine) {
   return {
     serviceCode: line.service.code,
-    serviceName: tenDayDu(line),
-    serviceCategory: line.service.category ?? null,
+    packageName: line.packageInfo?.name ?? null,
     quantity: line.quantity,
-    unitPrice: giaDong(line),
   };
 }
 
@@ -104,10 +106,6 @@ export function dungLaiDong(items: DongDaLuu[], services: Service[]): ServiceLin
     }
   }
   return ra;
-}
-
-function fmtVND(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
 }
 
 /**
@@ -186,10 +184,10 @@ export function ServiceLines({
             </div>
             <div className="mt-2 flex items-baseline justify-between gap-3">
               <span className="text-[13px] font-medium tabular-nums text-np-link">
-                {fmtVND(price)} × {item.quantity}
+                {formatMoney(price)} × {item.quantity}
               </span>
               <span className="text-[15px] font-bold tabular-nums text-np-ink">
-                {fmtVND(price * item.quantity)}
+                {formatMoney(price * item.quantity)}
               </span>
             </div>
           </div>
@@ -409,10 +407,10 @@ function ServiceRow({
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] font-semibold text-np-ink">{pkg.name}</p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px]">
-                    <span className="tabular-nums text-np-text-sub">{fmtVND(pkg.price)}</span>
+                    <span className="tabular-nums text-np-text-sub">{formatMoney(pkg.price)}</span>
                     <span className="text-np-text-muted">·</span>
                     <span className="font-medium tabular-nums text-np-brand-ink">
-                      Hoa hồng {fmtVND(pkg.commission)}
+                      Hoa hồng {formatMoney(pkg.commission)}
                     </span>
                   </div>
                 </div>

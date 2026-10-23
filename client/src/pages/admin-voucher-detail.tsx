@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuayLai } from "@/lib/use-back";
-import { useLocation, useParams } from "wouter";
+import { Redirect, useLocation, useParams } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Badge,
@@ -20,10 +20,11 @@ import { authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { VoucherRow } from "@shared/schema";
+import type { UserRole } from "@shared/types";
+import { vnDateKey } from "@shared/vn-time";
+import { formatMoney } from "@/lib/format";
 
 type DiscountType = "percent" | "fixed";
-
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
 const fmtDate = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -38,6 +39,9 @@ export default function AdminVoucherDetail() {
   const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const isNew = !params.id || params.id === "new";
+  // Máy chủ chỉ mở mã giảm giá cho CEO (requireRole), vai khác vào là trang trống.
+  const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
+  const canView = role === "ceo";
 
   const [form, setForm] = useState({
     code: "",
@@ -59,7 +63,7 @@ export default function AdminVoucherDetail() {
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: !isNew,
+    enabled: canView && !isNew,
   });
 
   const existingVoucher = useMemo(
@@ -144,12 +148,17 @@ export default function AdminVoucherDetail() {
     if (!existingVoucher) return null;
     if (existingVoucher.usageLimit > 0 && existingVoucher.usedCount >= existingVoucher.usageLimit)
       return { label: "Hết lượt", tone: "critical" };
-    if (existingVoucher.endDate && new Date(existingVoucher.endDate) < new Date())
+    // Ngày lịch Việt Nam như máy chủ, xem getVoucherStatus ở màn danh sách.
+    if (existingVoucher.endDate && existingVoucher.endDate < vnDateKey())
       return { label: "Hết hạn", tone: "muted" }; // đã đóng, cho chìm xuống
     return { label: "Đang hoạt động", tone: "success" };
   };
 
   const status = getStatusBadge();
+
+  if (typeof window !== "undefined" && !canView) {
+    return <Redirect to="/" />;
+  }
 
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
@@ -327,8 +336,8 @@ export default function AdminVoucherDetail() {
                 <li className="flex items-start gap-2">
                   <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
                   {existingVoucher.discountType === "percent"
-                    ? `Giảm ${existingVoucher.value}%${existingVoucher.maxDiscount ? `, tối đa ${fmt(existingVoucher.maxDiscount)}₫` : ""}`
-                    : `Giảm ${fmt(existingVoucher.value)}₫`}
+                    ? `Giảm ${existingVoucher.value}%${existingVoucher.maxDiscount ? `, tối đa ${formatMoney(existingVoucher.maxDiscount)}` : ""}`
+                    : `Giảm ${formatMoney(existingVoucher.value)}`}
                 </li>
                 {existingVoucher.description && (
                   <li className="flex items-start gap-2">
@@ -338,7 +347,7 @@ export default function AdminVoucherDetail() {
                 )}
                 <li className="flex items-start gap-2">
                   <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-np-text-muted" />
-                  Đơn tối thiểu {fmt(existingVoucher.minOrder)}₫
+                  Đơn tối thiểu {formatMoney(existingVoucher.minOrder)}
                   {existingVoucher.minServices > 0 ? `, từ ${existingVoucher.minServices} dịch vụ` : ""}
                 </li>
                 <li className="flex items-start gap-2">

@@ -39,6 +39,8 @@ import {
   Screen,
   useTabNav,
 } from "@/components/np";
+import { formatMoney, formatSignedMoney } from "@/lib/format";
+import { vnCycleOf } from "@shared/vn-time";
 import {
   Dialog,
   DialogContent,
@@ -144,6 +146,8 @@ type ApprovalData = {
   orderGroups: OrderGroup[];
   pendingComplaints: ComplaintCard[];
   adjustments: Adjustment[];
+  /** Số ngày điều chỉnh đã duyệt còn sửa được, theo Cài đặt hệ thống. */
+  editWindowDays: number;
 };
 
 type Tab = "cr" | "complaint" | "adjustment" | "export";
@@ -152,24 +156,14 @@ type Tab = "cr" | "complaint" | "adjustment" | "export";
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-function fmtVND(n: number) {
-  const sign = n < 0 ? "-" : "";
-  return sign + new Intl.NumberFormat("vi-VN").format(Math.abs(n)) + "₫";
-}
-
-function fmtSignedVND(n: number) {
-  if (n > 0) return "+" + fmtVND(n);
-  return fmtVND(n);
-}
-
 function cycleLabel(cycle: string): string {
   const [y, m] = cycle.split("-");
   return `Tháng ${m}/${y}`;
 }
 
+/** Kỳ mặc định theo lịch Việt Nam như máy chủ, máy đặt múi giờ khác vẫn mở đúng kỳ. */
 function currentCycleId(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return vnCycleOf();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -181,8 +175,9 @@ export default function AdminCommissionApproval() {
   const [, navigate] = useLocation();
   const quayLai = useQuayLai("/");
   const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
-  const canView = role === "kt" || role === "ceo" || role === "tc";
-  const canEdit = role === "kt";
+  // Trưởng ca không xem bảng kê toàn phòng khám (BR-HH03-01), máy chủ cũng trả 403.
+  const canView = role === "kt" || role === "ktt" || role === "ceo";
+  const canEdit = role === "kt" || role === "ktt";
 
   const [cycle, setCycle] = useState<string>(currentCycleId());
   const [tab, setTab] = useState<Tab>("cr");
@@ -204,8 +199,12 @@ export default function AdminCommissionApproval() {
 
   // ───────── Mutations ─────────
 
-  const invalidate = () =>
+  // Duyệt, từ chối đổi luôn số hoa hồng ở Trang chủ, làm mới cả hai để các tab khác
+  // đang mở không giữ số cũ (HOME-19).
+  const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/commission-approval"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+  };
 
   const approveCRMut = useMutation({
     mutationFn: async (crId: string) => {
@@ -276,7 +275,7 @@ export default function AdminCommissionApproval() {
     onSuccess: (result) => {
       toast({
         title: "Duyệt hàng loạt thành công",
-        description: `${result.approved} khoản · ${fmtVND(result.totalAmount)} · ${result.affectedOrders} đơn`,
+        description: `${result.approved} khoản · ${formatMoney(result.totalAmount)} · ${result.affectedOrders} đơn`,
       });
       invalidate();
       setBulkDialog({ open: false, typed: "", ack: false });
@@ -441,6 +440,7 @@ export default function AdminCommissionApproval() {
         {tab === "adjustment" && (
           <AdjustmentTab
             items={data.adjustments}
+            editWindowDays={data.editWindowDays}
             canEdit={canEdit}
             onCancel={(id) => cancelAdjustmentMut.mutate(id)}
             onCreate={() => navigate("/admin/adjustment/new")}
@@ -469,7 +469,7 @@ export default function AdminCommissionApproval() {
           <div className="space-y-3 py-2">
             <p className="text-[13px] text-np-text-sub">
               {rejectDialog.cr && ROLE_LABEL[rejectDialog.cr.role as UserRole]} ·{" "}
-              {rejectDialog.cr ? fmtVND(rejectDialog.cr.amount) : ""}
+              {rejectDialog.cr ? formatMoney(rejectDialog.cr.amount) : ""}
             </p>
             <Textarea
               placeholder="Lý do từ chối (tối thiểu 10 ký tự)..."
@@ -512,7 +512,7 @@ export default function AdminCommissionApproval() {
           <div className="space-y-3 py-2">
             <div className="rounded-np-button border border-np-danger-bg bg-np-danger-bg/30 p-3 text-[13px] font-medium text-np-danger">
               Sắp duyệt <strong>{data.stats.pending.count}</strong> khoản hoa hồng (
-              <strong>{fmtVND(data.stats.pending.totalAmount)}</strong>) cho{" "}
+              <strong>{formatMoney(data.stats.pending.totalAmount)}</strong>) cho{" "}
               <strong>{cycleLabel(cycle)}</strong>.
               <div className="mt-1 text-[11px] font-medium">
                 Hành động không khôi phục được. Thao tác này được lưu vết để tra cứu.
@@ -574,7 +574,7 @@ export default function AdminCommissionApproval() {
                 <div className="text-[13px] text-np-text-sub">
                   <strong className="text-np-ink">{complaintDialog.card.cr.beneficiaryName}</strong> ·{" "}
                   {ROLE_LABEL[complaintDialog.card.cr.role as UserRole]} ·{" "}
-                  {fmtVND(complaintDialog.card.cr.amount)}
+                  {formatMoney(complaintDialog.card.cr.amount)}
                 </div>
                 {complaintDialog.card.cr.rejectedReason && (
                   <div className="rounded-np-button border border-np-border bg-np-surface-sub p-2 text-[12px]">
@@ -828,7 +828,7 @@ function StatCard({
       </div>
       <div className={"mt-1 text-[20px] font-extrabold tabular-nums " + colorClass}>{count}</div>
       <div className="mt-0.5 text-[11px] font-medium tabular-nums text-np-text-sub">
-        {fmtVND(amount)}
+        {formatMoney(amount)}
       </div>
     </div>
   );
@@ -876,7 +876,7 @@ function OrderGroupCard({
         </div>
         <div className="text-right">
           <div className="text-[13px] font-bold text-np-brand-ink tabular-nums">
-            {fmtVND(total)}
+            {formatMoney(total)}
           </div>
           {pendingCRs.length > 0 && (
             <div className="text-[11px] font-medium text-np-badge-attention-fg">
@@ -944,7 +944,7 @@ function CRRow({
           )}
         </div>
         <div className="flex-shrink-0 text-[14px] font-extrabold text-np-brand-ink tabular-nums">
-          {fmtVND(cr.amount)}
+          {formatMoney(cr.amount)}
         </div>
       </div>
       {canEdit && isPending && (
@@ -1001,7 +1001,7 @@ function ComplaintTab({
               </div>
             </div>
             <div className="flex-shrink-0 text-[14px] font-extrabold text-np-brand-ink tabular-nums">
-              {fmtVND(card.cr.amount)}
+              {formatMoney(card.cr.amount)}
             </div>
           </div>
           {card.cr.rejectedReason && (
@@ -1040,11 +1040,13 @@ function ComplaintTab({
 
 function AdjustmentTab({
   items,
+  editWindowDays,
   canEdit,
   onCancel,
   onCreate,
 }: {
   items: Adjustment[];
+  editWindowDays: number;
   canEdit: boolean;
   onCancel: (id: string) => void;
   onCreate: () => void;
@@ -1082,7 +1084,7 @@ function AdjustmentTab({
       {/* Section 2: Approved (edit window) */}
       <div>
         <h3 className="mb-2 text-[13px] font-bold text-np-ink">
-          Đã duyệt (sửa được trong 30 ngày, {approved.length})
+          Đã duyệt (sửa được trong {editWindowDays} ngày, {approved.length})
         </h3>
         {approved.length === 0 ? (
           <Card className="px-5 py-8 text-center">
@@ -1176,7 +1178,7 @@ function AdjustmentRow({
           (isThuong ? "text-np-badge-success-fg" : "text-np-badge-critical-fg")
         }
       >
-        {fmtSignedVND(adj.amount)}
+        {formatSignedMoney(adj.amount)}
       </div>
     </div>
   );
@@ -1226,7 +1228,7 @@ function ExportTab({
         </div>
 
         <div className="mt-3 text-[12px] font-medium text-np-text-sub">
-          Tổng hoa hồng: <strong className="text-np-ink">{fmtVND(stats.approved.totalAmount + stats.pending.totalAmount)}</strong>
+          Tổng hoa hồng: <strong className="text-np-ink">{formatMoney(stats.approved.totalAmount + stats.pending.totalAmount)}</strong>
         </div>
 
         <NPButton

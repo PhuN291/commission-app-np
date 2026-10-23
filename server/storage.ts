@@ -20,8 +20,17 @@ import {
   APPOINTMENT_TRANSITIONS,
   VISIT_TRANSITIONS,
 } from "@shared/status";
+import { formatVnDateTime, parseVnDateTime } from "@shared/vn-time";
 import type { CommissionRecord, ComplaintEntry, Adjustment, Clawback } from "./commission-types";
-import type { AutoRuleKey, UpdateAutoRuleInput, UpdatePayCycleInput } from "@shared/types";
+import type { AutoRuleKey, UpdateAutoRuleInput } from "@shared/types";
+import {
+  SYSTEM_SETTING_DEFAULTS,
+  SYSTEM_SETTING_KEYS,
+  type SystemSettingHistoryEntry,
+  type SystemSettingKey,
+  type SystemSettings,
+  type SystemSettingsView,
+} from "@shared/system-settings";
 
 /** Bản ghi hoa hồng kèm vai (join order_role_assignments) cho màn Income. */
 export type CommissionRecordWithRole = CommissionRecordRow & { role: string | null };
@@ -38,14 +47,13 @@ export type AutoRule = {
   updatedByUserId: number | null;
 };
 
-/** Cài đặt Kì lương — singleton. editWindowDays + lockAfterDays CỨNG 30 (không lưu DB). */
-export type PayCycleSettings = {
-  deadlineDay: number;
-  editWindowDays: 30;
-  lockAfterDays: 30;
-  capWarningPct: number;
-  updatedAt: number;
-  updatedByUserId: number | null;
+/** Nguồn của một lần đổi trạng thái đơn, ghi vào status_logs.source. */
+export type StatusLogSource = "app" | "system" | "seed" | "his";
+
+/** Ai đổi trạng thái và đổi từ đâu; bỏ trống thì source là "app", người là NULL. */
+export type StatusChangeMeta = {
+  actorUserId?: number | null;
+  source?: StatusLogSource;
 };
 
 /** Kết quả file khiếu nại: thành công kèm entry, hoặc lỗi theo loại. */
@@ -141,9 +149,11 @@ export interface IStorage {
   getOrder(id: number): Promise<Order | undefined>;
   getOrderByCode(code: string): Promise<Order | undefined>;
   getOrdersByUser(userId: number): Promise<Order[]>;
+  /** userId → số đơn còn dở dang người đó đang đứng tên (cảnh báo bàn giao khi nghỉ). */
+  countOpenOrdersByStaff(): Promise<Map<number, number>>;
   createOrder(order: InsertOrder): Promise<Order>;
-  updateOrderAppointmentStatus(id: number, status: AppointmentStatusCode, note?: string): Promise<Order | undefined>;
-  updateOrderVisitStatus(id: number, status: VisitStatusCode, note?: string): Promise<Order | undefined>;
+  updateOrderAppointmentStatus(id: number, status: AppointmentStatusCode, note?: string, meta?: StatusChangeMeta): Promise<Order | undefined>;
+  updateOrderVisitStatus(id: number, status: VisitStatusCode, note?: string, meta?: StatusChangeMeta): Promise<Order | undefined>;
   updateOrderNotes(id: number, notes: string | null): Promise<Order | undefined>;
 
   getStatusLogs(orderId: number): Promise<StatusLog[]>;
@@ -193,7 +203,7 @@ export interface IStorage {
   /**
    * Các lượt cần gọi: order_item có recallDueDate != null và recallStatus = 'pending'.
    * Lọc quyền: sale/doctor chỉ thấy lượt của khách mình chăm (primaryAssignedUserId =
-   * viewer); tc/kt/ceo thấy tất cả. Sắp xếp quá hạn nhiều nhất (recallDueDate sớm nhất) lên đầu.
+   * viewer); tc/kt/ktt/ceo thấy tất cả. Sắp xếp quá hạn nhiều nhất (recallDueDate sớm nhất) lên đầu.
    */
   getRecallWorklist(viewerUserId: number, viewerRole: string): Promise<RecallWorklistRow[]>;
   /**
@@ -280,12 +290,19 @@ export interface IStorage {
   deleteVoucher(id: number): Promise<boolean>;
   incrementVoucherUse(code: string): Promise<void>;
 
-  // Admin settings — Auto Rule + Kì lương (lưu DB, bền qua restart). CEO sửa; TC/KT xem.
+  // Admin settings — Auto Rule (lưu DB, bền qua restart). CEO sửa; TC/KT xem.
   listAutoRules(): Promise<AutoRule[]>;
   getAutoRule(key: AutoRuleKey): Promise<AutoRule | null>;
   updateAutoRule(key: AutoRuleKey, patch: UpdateAutoRuleInput, actorUserId: number): Promise<AutoRule | null>;
-  getPayCycle(): Promise<PayCycleSettings>;
-  updatePayCycle(patch: UpdatePayCycleInput, actorUserId: number): Promise<PayCycleSettings>;
+
+  // Cấu hình hệ thống (system_settings + system_settings_history). Khóa chưa lưu
+  // hoặc lưu giá trị hỏng thì trả mặc định ở shared/system-settings.ts.
+  getSystemSettings(): Promise<SystemSettings>;
+  getSystemSettingsView(): Promise<SystemSettingsView>;
+  /** Chỉ khóa đổi giá trị mới được ghi, mỗi khóa một dòng lịch sử, cùng một transaction. */
+  updateSystemSettings(patch: Partial<SystemSettings>, actorUserId: number): Promise<SystemSettingsView>;
+  /** Mới nhất trước. key null là mọi khóa. */
+  listSystemSettingsHistory(key: SystemSettingKey | null, limit: number): Promise<SystemSettingHistoryEntry[]>;
 }
 
 export class MemoryStorage implements IStorage {
@@ -500,6 +517,19 @@ export class MemoryStorage implements IStorage {
     return this.orders.filter(o => o.userId === userId).sort((a, b) => b.id - a.id);
   }
 
+  async countOpenOrdersByStaff(): Promise<Map<number, number>> {
+    const dem = new Map<number, number>();
+    for (const o of this.orders) {
+      if (o.appointmentStatus === "cancelled" || o.appointmentStatus === "no_show" || o.appointmentStatus === "rescheduled") continue;
+      if (o.visitStatus === "completed" || o.visitStatus === "cancelled") continue;
+      const nguoi = [o.userId, o.saleUserId, o.indicatedByUserId, o.performedByUserId];
+      nguoi.forEach((uid, i) => {
+        if (uid != null && nguoi.indexOf(uid) === i) dem.set(uid, (dem.get(uid) ?? 0) + 1);
+      });
+    }
+    return dem;
+  }
+
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
     const order: Order = {
       id: this.nextId.orders++,
@@ -548,7 +578,7 @@ export class MemoryStorage implements IStorage {
     return order;
   }
 
-  async updateOrderAppointmentStatus(id: number, newStatus: AppointmentStatusCode, note?: string): Promise<Order | undefined> {
+  async updateOrderAppointmentStatus(id: number, newStatus: AppointmentStatusCode, note?: string, meta?: StatusChangeMeta): Promise<Order | undefined> {
     const order = this.orders.find(o => o.id === id);
     if (!order) return undefined;
 
@@ -566,20 +596,22 @@ export class MemoryStorage implements IStorage {
 
     // Log the transition
     const now = new Date();
-    const timestamp = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     await this.createStatusLog({
       orderId: id,
       tier: "appointment",
       fromStatus,
       toStatus: newStatus,
-      timestamp,
+      timestamp: formatVnDateTime(now),
       note: note ?? null,
+      source: meta?.source ?? "app",
+      actorUserId: meta?.actorUserId ?? null,
+      createdAt: now,
     });
 
     return order;
   }
 
-  async updateOrderVisitStatus(id: number, newStatus: VisitStatusCode, note?: string): Promise<Order | undefined> {
+  async updateOrderVisitStatus(id: number, newStatus: VisitStatusCode, note?: string, meta?: StatusChangeMeta): Promise<Order | undefined> {
     const order = this.orders.find(o => o.id === id);
     if (!order || !order.visitStatus) return undefined;
 
@@ -591,14 +623,16 @@ export class MemoryStorage implements IStorage {
     order.visitStatus = newStatus;
 
     const now = new Date();
-    const timestamp = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     await this.createStatusLog({
       orderId: id,
       tier: "visit",
       fromStatus,
       toStatus: newStatus,
-      timestamp,
+      timestamp: formatVnDateTime(now),
       note: note ?? null,
+      source: meta?.source ?? "app",
+      actorUserId: meta?.actorUserId ?? null,
+      createdAt: now,
     });
 
     return order;
@@ -624,6 +658,9 @@ export class MemoryStorage implements IStorage {
       toStatus: insertLog.toStatus,
       timestamp: insertLog.timestamp,
       note: insertLog.note ?? null,
+      source: insertLog.source ?? "app",
+      actorUserId: insertLog.actorUserId ?? null,
+      createdAt: insertLog.createdAt ?? parseVnDateTime(insertLog.timestamp) ?? new Date(),
     };
     this.statusLogs.push(log);
     return log;
@@ -892,18 +929,20 @@ export class MemoryStorage implements IStorage {
   ): Promise<AutoRule | null> {
     return null;
   }
-  async getPayCycle(): Promise<PayCycleSettings> {
-    return { deadlineDay: 5, editWindowDays: 30, lockAfterDays: 30, capWarningPct: 10, updatedAt: 0, updatedByUserId: null };
+  async getSystemSettings(): Promise<SystemSettings> {
+    return { ...SYSTEM_SETTING_DEFAULTS };
   }
-  async updatePayCycle(patch: UpdatePayCycleInput, actorUserId: number): Promise<PayCycleSettings> {
-    return {
-      deadlineDay: patch.deadlineDay,
-      editWindowDays: 30,
-      lockAfterDays: 30,
-      capWarningPct: patch.capWarningPct,
-      updatedAt: 0,
-      updatedByUserId: actorUserId,
-    };
+  async getSystemSettingsView(): Promise<SystemSettingsView> {
+    const meta = Object.fromEntries(
+      SYSTEM_SETTING_KEYS.map((k) => [k, { updatedAt: null, updatedByUserId: null, updatedByName: null }]),
+    ) as SystemSettingsView["meta"];
+    return { values: { ...SYSTEM_SETTING_DEFAULTS }, meta };
+  }
+  async updateSystemSettings(_patch: Partial<SystemSettings>, _actorUserId: number): Promise<SystemSettingsView> {
+    return this.getSystemSettingsView();
+  }
+  async listSystemSettingsHistory(_key: SystemSettingKey | null, _limit: number): Promise<SystemSettingHistoryEntry[]> {
+    return [];
   }
 }
 

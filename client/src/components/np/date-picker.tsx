@@ -9,6 +9,7 @@ import {
 } from "@/components/np/icon";
 import type { NPIcon } from "@/components/np/icon";
 import { cn } from "@/lib/utils";
+import { vnDateKey } from "@shared/vn-time";
 
 const THU_NGAN = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const THU_DAY = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
@@ -87,7 +88,10 @@ type DatePickerProps = {
  * trên máy này một dạng, trên điện thoại một dạng khác, không khớp với app.
  */
 export function DatePicker({ value, onChange, min, className }: DatePickerProps) {
-  const homNay = dauNgay(new Date());
+  // Hôm nay theo lịch Việt Nam, cùng mốc `min={vnDateKey()}` nơi gọi truyền vào: lấy
+  // theo đồng hồ máy thì máy để múi giờ khác có "Hôm nay" rơi vào ngày bị chặn. Ô lịch
+  // vẫn dựng bằng Date giờ máy, tuKhoa trả nửa đêm giờ máy của đúng ngày đó.
+  const homNay = tuKhoa(vnDateKey())!;
   const daChon = tuKhoa(value);
   const chanTruoc = min ? tuKhoa(min) : null;
 

@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { canCreateOrder } from "@shared/types";
 import { NPButton } from "./button";
 import { Avatar } from "./avatar";
 
@@ -61,6 +62,8 @@ export function CallResultSheet({
   onSave,
 }: CallResultSheetProps) {
   const [, navigate] = useLocation();
+  // Kế toán gọi nhắc tái khám được nhưng không tạo đơn (máy chủ chặn), nên bỏ ô đó.
+  const coTheTaoDon = canCreateOrder(typeof window !== "undefined" ? localStorage.getItem("np_role") : null);
   const [outcome, setOutcome] = useState<CallOutcome>("scheduled");
   const [note, setNote] = useState("");
 
@@ -129,10 +132,12 @@ export function CallResultSheet({
             <Chat size={18} strokeWidth={2.25} className="text-np-brand" />
             Nhắn Zalo
           </a>
-          <button type="button" onClick={() => navigate(`/orders/new?customerId=${customerId}`)} className={TILE}>
-            <Plus size={18} strokeWidth={2.25} className="text-np-brand" />
-            Tạo đơn
-          </button>
+          {coTheTaoDon && (
+            <button type="button" onClick={() => navigate(`/orders/new?customerId=${customerId}`)} className={TILE}>
+              <Plus size={18} strokeWidth={2.25} className="text-np-brand" />
+              Tạo đơn
+            </button>
+          )}
         </div>
 
         <div className="mb-1.5 text-[12px] font-bold text-np-text-muted">Kết quả cuộc gọi</div>

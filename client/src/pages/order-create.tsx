@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useQuayLai } from "@/lib/use-back";
-import { useLocation, useSearch } from "wouter";
+import { Redirect, useLocation, useSearch } from "wouter";
 import {
   ArrowLeft,
   Building2,
@@ -33,7 +33,6 @@ import {
   ServicePickerSheet,
   giaDong,
   payloadDong,
-  tenDayDu,
   type ServiceLine,
   useTabNav,
 } from "@/components/np";
@@ -45,10 +44,9 @@ import { authFetch, getCurrentUserId } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { SERVICE_PACKAGES } from "@/pages/service-detail";
 import type { Customer, Order, Service, VoucherRow } from "@shared/schema";
-
-function fmtVND(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(n) + "₫";
-}
+import { ORDER_LINE_LIMIT, canCreateOrder } from "@shared/types";
+import { vnDateKey } from "@shared/vn-time";
+import { MINUS_SIGN, formatMoney, formatSignedMoney } from "@/lib/format";
 
 type SelectedCustomer = { id?: number; name: string; phone: string };
 
@@ -60,12 +58,10 @@ type AppliedVoucher = {
   description: string | null;
 };
 
-/** Nhãn giảm giá hiển thị ở thẻ voucher: '-5%' hoặc '-100k'. */
+/** Nhãn giảm giá hiển thị ở thẻ voucher: '−5%' hoặc '−100.000₫', cùng dấu trừ với dòng tiền. */
 function voucherBadge(v: VoucherRow): string {
-  if (v.discountType === "fixed") {
-    return v.value >= 1000 ? `-${Math.round(v.value / 1000)}k` : `-${v.value}`;
-  }
-  return `-${v.value}%`;
+  if (v.discountType === "fixed") return formatSignedMoney(-v.value);
+  return `${MINUS_SIGN}${v.value}%`;
 }
 
 /** Ngày hẹn → 'DD/MM/YYYY · HH:mm'; nhận cả 'YYYY-MM-DD' lẫn 'DD/MM/YYYY'. */
@@ -175,20 +171,20 @@ function OrderCreatedView({
               {discount > 0 && (
                 <SummaryLine
                   label={order.voucherCode ? `Giảm giá (${order.voucherCode})` : "Giảm giá"}
-                  value={`-${fmtVND(discount)}`}
+                  value={formatSignedMoney(-discount)}
                 />
               )}
               <div className="my-3 border-t border-np-surface-pressed" />
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-bold text-np-ink">Tổng</span>
                 <span className="text-[18px] font-extrabold text-np-ink tabular-nums">
-                  {fmtVND(net)}
+                  {formatMoney(net)}
                 </span>
               </div>
               <div className="mt-2.5 flex items-center justify-between rounded-np-button bg-np-success-bg px-3 py-2">
                 <span className="text-[13px] font-semibold text-np-success">Hoa hồng ghi nhận</span>
                 <span className="text-[14px] font-extrabold text-np-success tabular-nums">
-                  +{fmtVND(order.commission)}
+                  {formatSignedMoney(order.commission)}
                 </span>
               </div>
             </div>
@@ -377,7 +373,7 @@ export default function OrderCreate() {
       setVoucherAmount(data.amount);
       setAppliedVoucher(data);
       setVoucherInput("");
-      toast({ title: `Đã áp mã ${data.code}`, description: `Giảm ${fmtVND(data.amount)}` });
+      toast({ title: `Đã áp mã ${data.code}`, description: `Giảm ${formatMoney(data.amount)}` });
     } catch {
       toast({ title: "Lỗi", description: "Không kiểm tra được mã", variant: "destructive" });
     } finally {
@@ -498,36 +494,16 @@ export default function OrderCreate() {
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedCustomer || selectedServices.length === 0) throw new Error("Missing data");
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, "0");
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const year = String(now.getFullYear()).slice(2);
-      const rand = String(Math.floor(Math.random() * 900) + 100);
-      const code = `#NP${year}${month}${day}${rand}`;
-      const timeStr = `${day}/${month}/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const mainService = selectedServices[0];
-      const serviceNames = selectedServices.map(tenDayDu).join(", ");
-
+      if (!selectedCustomer || selectedServices.length === 0) throw new Error("Thiếu khách hàng hoặc dịch vụ");
+      // Chỉ gửi khách đặt gì. Mã đơn, giờ tạo, giá, số giảm, tổng và hoa hồng do máy
+      // chủ tính rồi trả về, màn đơn đã tạo hiện đúng các số đó.
       const res = await authFetch("/api/orders", {
         method: "POST",
         body: JSON.stringify({
-          code,
           patientName: selectedCustomer.name,
           phone: selectedCustomer.phone,
           email: null,
-          serviceName: serviceNames,
-          serviceCode: mainService.service.code,
-          quantity: totalItems,
-          unitPrice:
-            selectedServices.length === 1
-              ? getItemPrice(mainService)
-              : Math.round(totalPrice / totalItems),
-          totalPrice, // giá gốc (gross) — engine trừ voucherAmount để ra net + hoa hồng
-          commission: commissionAfter,
-          voucherAmount,
           voucherCode: voucherCode || null,
-          appointmentStatus: "pending",
           notes: notes || null,
           appointmentDate: appointmentDate || null,
           appointmentTime: appointmentTime || null,
@@ -535,31 +511,42 @@ export default function OrderCreate() {
           vatTaxCode: wantVat && vatTaxCode ? vatTaxCode : null,
           vatCompanyAddress: wantVat && vatCompanyAddress ? vatCompanyAddress : null,
           vatEmail: wantVat && vatEmail ? vatEmail : null,
-          createdAt: timeStr,
-          userId: Number(getCurrentUserId()),
-          // Chi tiết từng dịch vụ: bảng orders chỉ lưu được bản gộp, gửi kèm cái này
-          // thì order_items mới có một dòng cho mỗi dịch vụ, sửa lại được về sau.
           services: selectedServices.map(payloadDong),
         }),
       });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        // Máy chủ trả câu tiếng Việt cho lỗi dữ liệu (mã giảm giá hết lượt, dịch vụ
+        // không còn trong danh mục); in thẳng ra để người dùng biết phải sửa gì.
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message ?? "Không tạo được đơn hàng");
+      }
       return res.json();
     },
     onSuccess: (order: Order) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/vouchers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       setCreatedOrder(order);
     },
-    onError: () => {
-      toast({ title: "Lỗi", description: "Không thể tạo đơn hàng", variant: "destructive" });
+    onError: (err: unknown) => {
+      toast({
+        title: "Không tạo được đơn hàng",
+        description: (err as { message?: string })?.message ?? "Kiểm tra mạng rồi thử lại.",
+        variant: "destructive",
+      });
     },
   });
 
   // Lịch hẹn là bắt buộc: đơn không có ngày giờ thì không lên được danh sách tái
   // khám, cũng không ai biết khi nào cần gọi nhắc khách.
   const coLichHen = Boolean(appointmentDate && appointmentTime);
+  const quaSoDong = selectedServices.length > ORDER_LINE_LIMIT;
   const canSubmit =
-    selectedCustomer && selectedServices.length > 0 && coLichHen && !createOrderMutation.isPending;
+    selectedCustomer &&
+    selectedServices.length > 0 &&
+    !quaSoDong &&
+    coLichHen &&
+    !createOrderMutation.isPending;
 
   const ctaLabel = createOrderMutation.isPending
     ? "Đang tạo..."
@@ -567,9 +554,11 @@ export default function OrderCreate() {
       ? "Chọn khách hàng để tiếp tục"
       : selectedServices.length === 0
         ? "Thêm dịch vụ để tiếp tục"
-        : !coLichHen
-          ? "Chọn lịch hẹn để tiếp tục"
-          : "Tạo đơn";
+        : quaSoDong
+          ? `Mỗi đơn tối đa ${ORDER_LINE_LIMIT} dịch vụ`
+          : !coLichHen
+            ? "Chọn lịch hẹn để tiếp tục"
+            : "Tạo đơn";
 
   const resetForm = () => {
     setSelectedCustomer(null);
@@ -590,6 +579,12 @@ export default function OrderCreate() {
     setVatCompanyAddress("");
     setVatEmail("");
   };
+
+  // Kế toán không có nút nào dẫn tới đây; mở thẳng đường dẫn thì đưa về danh sách đơn
+  // thay vì cho điền xong cả đơn rồi mới nhận lỗi không có quyền.
+  if (typeof window !== "undefined" && !canCreateOrder(localStorage.getItem("np_role"))) {
+    return <Redirect to="/orders" />;
+  }
 
   if (createdOrder) {
     return (
@@ -677,7 +672,7 @@ export default function OrderCreate() {
             onDateChange={setAppointmentDate}
             time={appointmentTime}
             onTimeChange={setAppointmentTime}
-            min={new Date().toISOString().split("T")[0]}
+            min={vnDateKey()}
           />
         </Card>
 
@@ -769,7 +764,7 @@ export default function OrderCreate() {
         <Card className="space-y-3 p-4">
           <div className="flex items-center justify-between text-[14px]">
             <span className="text-np-text-sub">Tạm tính ({totalItems} dịch vụ)</span>
-            <span className="font-medium text-np-ink tabular-nums">{fmtVND(totalPrice)}</span>
+            <span className="font-medium text-np-ink tabular-nums">{formatMoney(totalPrice)}</span>
           </div>
           <div className="flex items-center justify-between text-[14px]">
             <span className="text-np-text-sub">
@@ -781,19 +776,19 @@ export default function OrderCreate() {
                 voucherAmount > 0 ? "font-semibold text-np-danger" : "text-np-ink",
               )}
             >
-              {voucherAmount > 0 ? `-${fmtVND(voucherAmount)}` : "0₫"}
+              {formatSignedMoney(-voucherAmount)}
             </span>
           </div>
           <div className="flex items-center justify-between border-t border-np-border pt-3">
             <span className="text-[14px] font-bold text-np-ink">Tổng cộng</span>
             <span className="text-[18px] font-extrabold text-np-ink tabular-nums">
-              {fmtVND(discountedTotal)}
+              {formatMoney(discountedTotal)}
             </span>
           </div>
           <div className="flex items-center justify-between rounded-np-button bg-np-success-bg px-3 py-2.5">
             <span className="text-[13px] font-semibold text-np-success">Hoa hồng ước tính</span>
             <span className="text-[15px] font-extrabold text-np-success tabular-nums">
-              +{fmtVND(commissionAfter)}
+              {formatSignedMoney(commissionAfter)}
             </span>
           </div>
         </Card>

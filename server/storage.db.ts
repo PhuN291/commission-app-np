@@ -29,7 +29,7 @@ import {
   customers, staffMembers, statusLogs, commissionTiers,
   orderItems, orderRoleAssignments, commissionRecords, customerEvents,
   vouchers, recallLogs, commissionComplaints, adjustments,
-  autoRules, payCycleSettings,
+  autoRules, systemSettings, systemSettingsHistory,
 } from "@shared/schema";
 import {
   type AppointmentStatusCode,
@@ -37,11 +37,26 @@ import {
   APPOINTMENT_TRANSITIONS,
   VISIT_TRANSITIONS,
 } from "@shared/status";
-import { canKhieuNai, type AutoRuleKey, type UpdateAutoRuleInput, type UpdatePayCycleInput } from "@shared/types";
+import { canKhieuNai, type AutoRuleKey, type UpdateAutoRuleInput } from "@shared/types";
+import {
+  SYSTEM_SETTING_DEFAULTS,
+  SYSTEM_SETTING_KEYS,
+  isSystemSettingKey,
+  normalizeSettingValue,
+  type SystemSettingHistoryEntry,
+  type SystemSettingKey,
+  type SystemSettings,
+  type SystemSettingsView,
+} from "@shared/system-settings";
 import { and, asc, desc, eq, getTableColumns, gt, ilike, inArray, isNotNull, isNull, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { formatVnDateTime, parseVnDateTime } from "@shared/vn-time";
 import { db } from "./db";
-import { computeCommissionForOrder } from "./commission-engine";
-import type { IStorage, CommissionRecordWithRole, RecallWorklistRow, RecallCallOutcome, RecallItemForCustomer, RecallLogForCustomer, RecallItemStat, FileComplaintResult, AutoRule, PayCycleSettings } from "./storage";
+import type { DbTx } from "./db-tx";
+import { computeCommissionForOrder, huyHoaHongChuaDuyet } from "./commission-engine";
+import type { ChiTietDichVu } from "./ingest";
+import { tomTatDong } from "./order-lines";
+import { lyDoKhongDuDieuKien, tienGiamTheoMa } from "./vouchers";
+import type { IStorage, CommissionRecordWithRole, RecallWorklistRow, RecallCallOutcome, RecallItemForCustomer, RecallLogForCustomer, RecallItemStat, FileComplaintResult, AutoRule, StatusChangeMeta } from "./storage";
 import {
   mapCrRowToView,
   mapComplaintRowToView,
@@ -67,9 +82,116 @@ function normalizeRecallDate(v: string | Date | null | undefined): string | null
   return v.slice(0, 10);
 }
 
-/** VN timestamp DD/MM/YYYY HH:mm — bê đúng format từ MemoryStorage. */
-function vnTimestamp(now: Date): string {
-  return `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+/**
+ * VN timestamp DD/MM/YYYY HH:mm, bê đúng format từ MemoryStorage. Ghi theo giờ Việt
+ * Nam chứ không theo giờ máy: chạy trên Vercel (UTC) thì nhật ký lệch 7 tiếng.
+ */
+const vnTimestamp = formatVnDateTime;
+
+async function ghiStatusLog(exec: typeof db | DbTx, insertLog: InsertStatusLog): Promise<StatusLog> {
+  const rows = await exec
+    .insert(statusLogs)
+    .values({
+      orderId: insertLog.orderId,
+      tier: insertLog.tier,
+      fromStatus: insertLog.fromStatus,
+      toStatus: insertLog.toStatus,
+      timestamp: insertLog.timestamp,
+      note: insertLog.note ?? null,
+      source: insertLog.source ?? "app",
+      actorUserId: insertLog.actorUserId ?? null,
+      // Dòng seed chỉ có giờ dạng chữ; lấy mốc từ đó thay vì giờ chạy seed, không
+      // thì mọi lịch sử mẫu dồn về cùng một phút.
+      createdAt: insertLog.createdAt ?? parseVnDateTime(insertLog.timestamp) ?? new Date(),
+    })
+    .returning();
+  return rows[0];
+}
+
+/**
+ * Tỷ lệ (điểm cơ bản) đang hiệu lực của một vai, một bậc tại thời điểm `at`. Nhận cả
+ * transaction vì tạo đơn tra tỷ lệ lúc đang giữ khoá cấp mã đơn trong ngày: tra qua
+ * pool lúc đó là xin thêm kết nối trong khi các đơn xếp hàng sau khoá đang giữ hết.
+ */
+export async function tyLeHieuLuc(
+  exec: typeof db | DbTx,
+  role: string,
+  ranking: string | null,
+  at: Date = new Date(),
+): Promise<number | null> {
+  const rankingCond: SQL =
+    ranking === null ? isNull(commissionTiers.ranking) : eq(commissionTiers.ranking, ranking);
+  const rows = await exec
+    .select()
+    .from(commissionTiers)
+    .where(
+      and(
+        eq(commissionTiers.role, role),
+        rankingCond,
+        lte(commissionTiers.effectiveFrom, at),
+        or(isNull(commissionTiers.effectiveTo), gt(commissionTiers.effectiveTo, at)),
+      ),
+    )
+    .limit(1);
+  return rows[0] ? rows[0].percentBp : null;
+}
+
+/** Sửa dịch vụ bị từ chối: route trả nguyên `status` và câu này cho người dùng. */
+export type LoiSuaDichVu = { loi: true; status: 409 | 422; message: string };
+
+/** Lịch hẹn kết thúc mà khách không khám ở đơn này: hoa hồng ước tính của đơn về 0. */
+const LICH_HEN_HUY_HOA_HONG = new Set<AppointmentStatusCode>(["cancelled", "no_show", "rescheduled"]);
+
+/**
+ * Chuyển trạng thái lịch hẹn trong transaction của nơi gọi. Dời lịch dùng chung hàm
+ * này để đổi trạng thái đơn cũ, hủy khoản và tạo đơn mới trong cùng một lần ghi.
+ *
+ * Hủy lịch, Không đến, Dời lịch chuyển khoản chưa duyệt của đơn sang CANCEL ngay
+ * trong lần ghi đó (OD-19): trước đây khoản vẫn Chờ duyệt nên Trang chủ còn cộng
+ * tiền của đơn đã hủy, và dời lịch thì đơn cũ lẫn đơn mới cùng được tính.
+ */
+export async function chuyenTrangThaiLichHen(
+  tx: DbTx,
+  order: Order,
+  newStatus: AppointmentStatusCode,
+  note?: string,
+  meta?: StatusChangeMeta,
+): Promise<Order | undefined> {
+  const currentStatus = order.appointmentStatus as AppointmentStatusCode;
+  const validTransitions = APPOINTMENT_TRANSITIONS[currentStatus] || [];
+  if (!validTransitions.includes(newStatus)) return undefined;
+
+  const set: Partial<typeof orders.$inferInsert> = { appointmentStatus: newStatus };
+  // When arrived, auto-create visit status (bê đúng từ MemoryStorage).
+  if (newStatus === "arrived") set.visitStatus = "arrived";
+
+  // Kèm trạng thái cũ vào điều kiện: hai người bấm cùng lúc thì chỉ một lần chuyển
+  // được ghi, người kia nhận undefined như một bước chuyển không hợp lệ.
+  const rows = await tx
+    .update(orders)
+    .set(set)
+    .where(and(eq(orders.id, order.id), eq(orders.appointmentStatus, currentStatus)))
+    .returning();
+  if (!rows[0]) return undefined;
+
+  const now = new Date();
+  await ghiStatusLog(tx, {
+    orderId: order.id,
+    tier: "appointment",
+    fromStatus: currentStatus,
+    toStatus: newStatus,
+    timestamp: vnTimestamp(now),
+    note: note ?? null,
+    source: meta?.source ?? "app",
+    actorUserId: meta?.actorUserId ?? null,
+    createdAt: now,
+  });
+
+  if (!LICH_HEN_HUY_HOA_HONG.has(newStatus)) return rows[0];
+  await huyHoaHongChuaDuyet(tx, order.id);
+  // Đọc lại để trả về orders.commission đã về số mới.
+  const sau = await tx.select().from(orders).where(eq(orders.id, order.id)).limit(1);
+  return sau[0] ?? rows[0];
 }
 
 export class DbStorage implements IStorage {
@@ -296,6 +418,28 @@ export class DbStorage implements IStorage {
     return db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.id));
   }
 
+  /**
+   * Số đơn còn dở dang mỗi nhân viên đang đứng tên, cho cảnh báo bàn giao khi đánh dấu
+   * nghỉ. Đứng tên ở bất kỳ chỗ nào trên đơn đều tính: chủ đơn, tư vấn, chỉ định, thực
+   * hiện. Dở dang là lịch hẹn chưa kết thúc (hủy, không đến, đã dời sang đơn khác) và
+   * nếu đã đến khám thì ca khám chưa xong.
+   */
+  async countOpenOrdersByStaff(): Promise<Map<number, number>> {
+    const rows = await db.execute(sql`
+      SELECT t.uid AS "userId", count(DISTINCT t.id)::int AS "soDon"
+      FROM (
+        SELECT o.id, unnest(ARRAY[o.user_id, o.sale_user_id, o.indicated_by_user_id, o.performed_by_user_id]) AS uid
+        FROM ${orders} o
+        WHERE o.appointment_status NOT IN ('cancelled', 'no_show', 'rescheduled')
+          AND (o.visit_status IS NULL OR o.visit_status NOT IN ('completed', 'cancelled'))
+      ) t
+      WHERE t.uid IS NOT NULL
+      GROUP BY t.uid
+    `);
+    const list = ((rows as { rows?: unknown[] }).rows ?? rows) as { userId: number; soDon: number }[];
+    return new Map(list.map((r) => [Number(r.userId), Number(r.soDon)]));
+  }
+
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
     const rows = await db
       .insert(orders)
@@ -349,37 +493,20 @@ export class DbStorage implements IStorage {
     id: number,
     newStatus: AppointmentStatusCode,
     note?: string,
+    meta?: StatusChangeMeta,
   ): Promise<Order | undefined> {
-    const order = await this.getOrder(id);
-    if (!order) return undefined;
-
-    const currentStatus = order.appointmentStatus as AppointmentStatusCode;
-    const validTransitions = APPOINTMENT_TRANSITIONS[currentStatus] || [];
-    if (!validTransitions.includes(newStatus)) return undefined;
-
-    const fromStatus = order.appointmentStatus;
-    const set: Partial<typeof orders.$inferInsert> = { appointmentStatus: newStatus };
-    // When arrived, auto-create visit status (bê đúng từ MemoryStorage).
-    if (newStatus === "arrived") set.visitStatus = "arrived";
-
-    const rows = await db.update(orders).set(set).where(eq(orders.id, id)).returning();
-
-    await this.createStatusLog({
-      orderId: id,
-      tier: "appointment",
-      fromStatus,
-      toStatus: newStatus,
-      timestamp: vnTimestamp(new Date()),
-      note: note ?? null,
+    return db.transaction(async (tx) => {
+      const rows = await tx.select().from(orders).where(eq(orders.id, id)).limit(1).for("update");
+      if (!rows[0]) return undefined;
+      return chuyenTrangThaiLichHen(tx, rows[0], newStatus, note, meta);
     });
-
-    return rows[0];
   }
 
   async updateOrderVisitStatus(
     id: number,
     newStatus: VisitStatusCode,
     note?: string,
+    meta?: StatusChangeMeta,
   ): Promise<Order | undefined> {
     const order = await this.getOrder(id);
     if (!order || !order.visitStatus) return undefined;
@@ -395,13 +522,17 @@ export class DbStorage implements IStorage {
       .where(eq(orders.id, id))
       .returning();
 
+    const now = new Date();
     await this.createStatusLog({
       orderId: id,
       tier: "visit",
       fromStatus,
       toStatus: newStatus,
-      timestamp: vnTimestamp(new Date()),
+      timestamp: vnTimestamp(now),
       note: note ?? null,
+      source: meta?.source ?? "app",
+      actorUserId: meta?.actorUserId ?? null,
+      createdAt: now,
     });
 
     return rows[0];
@@ -448,69 +579,99 @@ export class DbStorage implements IStorage {
   }
 
   /**
-   * Thay toàn bộ dịch vụ của đơn rồi tính lại tiền.
+   * Thay toàn bộ dịch vụ của đơn rồi tính lại tiền, trong một transaction.
    *
-   * Bảng orders vẫn giữ kiểu gộp: serviceName nối bằng ", ", quantity là tổng số
-   * lượt, unitPrice là đơn giá dịch vụ đầu. Giữ nguyên cách gộp này để mọi màn
-   * đang đọc không phải sửa; chi tiết từng dịch vụ nằm ở order_items.
+   * Bảng orders vẫn giữ kiểu gộp (xem tomTatDong); chi tiết từng dịch vụ nằm ở
+   * order_items. Giá các dòng là giá máy chủ đã tra danh mục, nơi gọi lo việc đó.
    *
-   * Sinh lại order_items và bảng hoa hồng vì đổi dịch vụ là đổi tiền. Hàm tính
-   * hoa hồng xoá sạch bản ghi cũ của đơn rồi sinh lại ở trạng thái Chờ duyệt, nên
-   * chỉ được gọi khi đơn chưa đến khám (endpoint đã chặn).
+   * totalPrice và totalListed là tạm tính trước giảm, cùng nghĩa như lúc tạo đơn;
+   * trước đây chỗ này ghi tổng sau giảm vào totalPrice còn totalListed giữ số cũ, nên
+   * đơn đã sửa thì hai cột lệch nhau. Đơn có mã giảm giá thì tính lại số giảm theo tạm
+   * tính mới, không thì mã phần trăm giữ số giảm của danh sách dịch vụ cũ.
+   *
+   * Hoa hồng chỉ tính lại khoản còn Chờ duyệt, khoản đã duyệt, từ chối, khiếu nại giữ
+   * nguyên (xem computeCommissionForOrder).
+   *
+   * `danhMuc` do nơi gọi tải sẵn: đọc qua pool khi đang giữ khoá dòng đơn thì hai
+   * người cùng sửa một đơn có thể giữ hết kết nối rồi chờ nhau mãi.
+   * `trangThaiDaKiem` là trạng thái lịch hẹn route đã kiểm là còn sửa được; khác đi lúc
+   * đã khoá dòng nghĩa là vừa có người đổi (thường là khách vừa đến), dừng lại.
    */
   async replaceOrderServices(
     id: number,
-    services: {
-      serviceCode: string;
-      serviceName: string;
-      serviceCategory: string | null;
-      quantity: number;
-      unitPrice: number;
-    }[],
-  ): Promise<Order | undefined> {
-    const truoc = await this.getOrder(id);
-    if (!truoc) return undefined;
+    services: ChiTietDichVu[],
+    danhMuc: Service[],
+    trangThaiDaKiem: string,
+  ): Promise<Order | LoiSuaDichVu | undefined> {
+    if (services.length === 0) return undefined;
+    return db.transaction(async (tx): Promise<Order | LoiSuaDichVu | undefined> => {
+      const truoc = (await tx.select().from(orders).where(eq(orders.id, id)).limit(1).for("update"))[0];
+      if (!truoc) return undefined;
+      if (truoc.appointmentStatus !== trangThaiDaKiem) {
+        return { loi: true, status: 409, message: "Đơn vừa đổi trạng thái lịch hẹn, mở lại đơn rồi sửa" };
+      }
 
-    const tongTien = services.reduce((s, x) => s + x.unitPrice * x.quantity, 0);
-    const tongLuot = services.reduce((s, x) => s + x.quantity, 0);
-    const rows = await db
-      .update(orders)
-      .set({
-        serviceName: services.map((x) => x.serviceName).join(", "),
-        serviceCode: services[0].serviceCode,
-        serviceCategory: services[0].serviceCategory,
-        quantity: tongLuot,
-        unitPrice: services[0].unitPrice,
-        totalPrice: Math.max(0, tongTien - truoc.voucherAmount - truoc.insuranceAmount),
-      })
-      .where(eq(orders.id, id))
-      .returning();
-    const sau = rows[0];
-    if (!sau) return undefined;
+      const tom = tomTatDong(services);
+      let voucherAmount = Math.min(truoc.voucherAmount, tom.subtotal);
+      if (truoc.voucherCode) {
+        const v = (await tx.select().from(vouchers).where(eq(vouchers.code, truoc.voucherCode)).limit(1))[0];
+        if (v) {
+          const thieu = lyDoKhongDuDieuKien(v, tom.subtotal, services.length);
+          if (thieu) {
+            return {
+              loi: true,
+              status: 422,
+              message: `Đơn sau khi sửa không còn đủ điều kiện mã ${v.code}. ${thieu}`,
+            };
+          }
+          // Điều khoản mã đã đổi sau khi đơn dùng (tính lại trên tạm tính cũ không ra
+          // đúng số đã giảm) thì giữ số đã giảm: khách đặt theo điều khoản lúc đặt, CEO
+          // sửa phần trăm về sau không được kéo theo đơn cũ mỗi lần sửa dịch vụ.
+          if (tienGiamTheoMa(v, truoc.totalListed) === truoc.voucherAmount) {
+            voucherAmount = tienGiamTheoMa(v, tom.subtotal);
+          }
+        }
+      }
+      const rows = await tx
+        .update(orders)
+        .set({
+          serviceName: tom.serviceName,
+          serviceCode: tom.serviceCode,
+          serviceCategory: tom.serviceCategory,
+          quantity: tom.quantity,
+          unitPrice: tom.unitPrice,
+          totalPrice: tom.subtotal,
+          totalListed: tom.subtotal,
+          voucherAmount,
+        })
+        .where(eq(orders.id, id))
+        .returning();
+      const sau = rows[0];
+      if (!sau) return undefined;
 
-    const dsService = await this.getAllServices();
-    await db.delete(orderItems).where(eq(orderItems.orderId, id));
-    for (const x of services) {
-      const sv = dsService.find((s) => s.code === x.serviceCode);
-      await db.insert(orderItems).values({
-        orderId: id,
-        serviceId: sv?.id ?? 0,
-        serviceName: x.serviceName,
-        quantity: x.quantity,
-        unitPrice: x.unitPrice,
-        cost: sv?.defaultCost ?? 0,
-        status: "completed",
-        skippedReason: null,
-        performedByUserId: null,
-        recallDueDate: null,
-        refundedAmount: 0,
-      });
-    }
-    await computeCommissionForOrder(sau);
-    return sau;
+      await tx.delete(orderItems).where(eq(orderItems.orderId, id));
+      for (const x of services) {
+        const sv = danhMuc.find((s) => s.code === x.serviceCode);
+        await tx.insert(orderItems).values({
+          orderId: id,
+          serviceId: sv?.id ?? 0,
+          serviceName: x.serviceName,
+          quantity: x.quantity,
+          unitPrice: x.unitPrice,
+          cost: sv?.defaultCost ?? 0,
+          status: "completed",
+          skippedReason: null,
+          performedByUserId: null,
+          recallDueDate: null,
+          refundedAmount: 0,
+        });
+      }
+      await computeCommissionForOrder(sau, tx);
+      return (await tx.select().from(orders).where(eq(orders.id, id)).limit(1))[0] ?? sau;
+    });
   }
 
-  // ───────────────────────── Status logs ─────────────────────────  // ───────────────────────── Status logs ─────────────────────────
+  // ───────────────────────── Status logs ─────────────────────────
 
   async getStatusLogs(orderId: number): Promise<StatusLog[]> {
     return db
@@ -521,18 +682,7 @@ export class DbStorage implements IStorage {
   }
 
   async createStatusLog(insertLog: InsertStatusLog): Promise<StatusLog> {
-    const rows = await db
-      .insert(statusLogs)
-      .values({
-        orderId: insertLog.orderId,
-        tier: insertLog.tier,
-        fromStatus: insertLog.fromStatus,
-        toStatus: insertLog.toStatus,
-        timestamp: insertLog.timestamp,
-        note: insertLog.note ?? null,
-      })
-      .returning();
-    return rows[0];
+    return ghiStatusLog(db, insertLog);
   }
 
   // ───────────────────────── Staff members ─────────────────────────
@@ -607,21 +757,7 @@ export class DbStorage implements IStorage {
     ranking: string | null,
     at: Date = new Date(),
   ): Promise<number | null> {
-    const rankingCond: SQL =
-      ranking === null ? isNull(commissionTiers.ranking) : eq(commissionTiers.ranking, ranking);
-    const rows = await db
-      .select()
-      .from(commissionTiers)
-      .where(
-        and(
-          eq(commissionTiers.role, role),
-          rankingCond,
-          lte(commissionTiers.effectiveFrom, at),
-          or(isNull(commissionTiers.effectiveTo), gt(commissionTiers.effectiveTo, at)),
-        ),
-      )
-      .limit(1);
-    return rows[0] ? rows[0].percentBp : null;
+    return tyLeHieuLuc(db, role, ranking, at);
   }
 
   // ── G1b: dữ liệu phái sinh đơn ───────────────────────────────────
@@ -756,7 +892,7 @@ export class DbStorage implements IStorage {
       .innerJoin(customers, eq(orders.phone, customers.phone))
       .where(and(eq(orderItems.recallStatus, "pending"), isNotNull(orderItems.recallDueDate)));
 
-    // Lọc quyền: nhân viên (sale/doctor) chỉ thấy khách mình chăm; tc/kt/ceo thấy tất cả.
+    // Lọc quyền: nhân viên (sale/doctor) chỉ thấy khách mình chăm; tc/kt/ktt/ceo thấy tất cả.
     const permRows =
       viewerRole === "sale" || viewerRole === "doctor"
         ? base.filter((r) => r.assigneeUserId === viewerUserId)
@@ -1052,27 +1188,25 @@ export class DbStorage implements IStorage {
     return { count: rows.length, totalAmount: rows.reduce((s, r) => s + r.amount, 0) };
   }
 
+  // Mọi lệnh duyệt, từ chối đều kèm điều kiện "còn Chờ duyệt" ngay trong câu UPDATE:
+  // đơn vừa bị hủy chuyển khoản sang CANCEL giữa lúc Kế toán bấm thì lệnh duyệt không
+  // được ghi đè CANCEL thành Đã duyệt.
   async approveCommissionRecord(crId: number): Promise<CommissionRecord | null> {
-    const ok = await db.transaction(async (tx) => {
-      const cr = (await tx.select().from(commissionRecords).where(eq(commissionRecords.id, crId)).limit(1))[0];
-      if (!cr || cr.status !== "CHO_DUYET") return false;
-      await tx.update(commissionRecords).set({ status: "DUOC_DUYET" }).where(eq(commissionRecords.id, crId));
-      return true;
-    });
-    return ok ? this.getCrView(crId) : null;
+    const rows = await db
+      .update(commissionRecords)
+      .set({ status: "DUOC_DUYET" })
+      .where(and(eq(commissionRecords.id, crId), eq(commissionRecords.status, "CHO_DUYET")))
+      .returning({ id: commissionRecords.id });
+    return rows.length > 0 ? this.getCrView(crId) : null;
   }
 
   async rejectCommissionRecord(crId: number, reason: string): Promise<CommissionRecord | null> {
-    const ok = await db.transaction(async (tx) => {
-      const cr = (await tx.select().from(commissionRecords).where(eq(commissionRecords.id, crId)).limit(1))[0];
-      if (!cr || cr.status !== "CHO_DUYET") return false;
-      await tx
-        .update(commissionRecords)
-        .set({ status: "TU_CHOI", rejectedAt: new Date(), rejectedReason: reason })
-        .where(eq(commissionRecords.id, crId));
-      return true;
-    });
-    return ok ? this.getCrView(crId) : null;
+    const rows = await db
+      .update(commissionRecords)
+      .set({ status: "TU_CHOI", rejectedAt: new Date(), rejectedReason: reason })
+      .where(and(eq(commissionRecords.id, crId), eq(commissionRecords.status, "CHO_DUYET")))
+      .returning({ id: commissionRecords.id });
+    return rows.length > 0 ? this.getCrView(crId) : null;
   }
 
   async bulkApproveCrsByOrder(orderId: number): Promise<{ approved: number; total: number }> {
@@ -1082,13 +1216,13 @@ export class DbStorage implements IStorage {
         .from(commissionRecords)
         .where(eq(commissionRecords.orderId, orderId));
       const pendingIds = list.filter((c) => c.status === "CHO_DUYET").map((c) => c.id);
-      if (pendingIds.length > 0) {
-        await tx
-          .update(commissionRecords)
-          .set({ status: "DUOC_DUYET" })
-          .where(inArray(commissionRecords.id, pendingIds));
-      }
-      return { approved: pendingIds.length, total: list.length };
+      if (pendingIds.length === 0) return { approved: 0, total: list.length };
+      const duyet = await tx
+        .update(commissionRecords)
+        .set({ status: "DUOC_DUYET" })
+        .where(and(inArray(commissionRecords.id, pendingIds), eq(commissionRecords.status, "CHO_DUYET")))
+        .returning({ id: commissionRecords.id });
+      return { approved: duyet.length, total: list.length };
     });
   }
 
@@ -1099,14 +1233,25 @@ export class DbStorage implements IStorage {
         .from(commissionRecords)
         .where(and(eq(commissionRecords.cycleId, cycleId), eq(commissionRecords.status, "CHO_DUYET")));
       if (list.length === 0) return { approved: 0, totalAmount: 0, affectedOrders: 0 };
-      await tx
-        .update(commissionRecords)
-        .set({ status: "DUOC_DUYET" })
-        .where(inArray(commissionRecords.id, list.map((c) => c.id)));
+      const duyet = new Set(
+        (
+          await tx
+            .update(commissionRecords)
+            .set({ status: "DUOC_DUYET" })
+            .where(
+              and(
+                inArray(commissionRecords.id, list.map((c) => c.id)),
+                eq(commissionRecords.status, "CHO_DUYET"),
+              ),
+            )
+            .returning({ id: commissionRecords.id })
+        ).map((r) => r.id),
+      );
+      const daDuyet = list.filter((c) => duyet.has(c.id));
       return {
-        approved: list.length,
-        totalAmount: list.reduce((s, c) => s + c.amount, 0),
-        affectedOrders: new Set(list.map((c) => c.orderId)).size,
+        approved: daDuyet.length,
+        totalAmount: daDuyet.reduce((s, c) => s + c.amount, 0),
+        affectedOrders: new Set(daDuyet.map((c) => c.orderId)).size,
       };
     });
   }
@@ -1373,17 +1518,6 @@ export class DbStorage implements IStorage {
     };
   }
 
-  private mapPayCycle(row: typeof payCycleSettings.$inferSelect): PayCycleSettings {
-    return {
-      deadlineDay: row.deadlineDay,
-      editWindowDays: 30, // CỨNG, không lưu DB
-      lockAfterDays: 30, // CỨNG, không lưu DB
-      capWarningPct: row.capWarningPct,
-      updatedAt: row.updatedAt.getTime(),
-      updatedByUserId: row.updatedByUserId ?? null,
-    };
-  }
-
   async listAutoRules(): Promise<AutoRule[]> {
     const rows = await db.select().from(autoRules).orderBy(asc(autoRules.id));
     return rows.map((r) => this.mapAutoRule(r));
@@ -1413,33 +1547,108 @@ export class DbStorage implements IStorage {
     return rows[0] ? this.mapAutoRule(rows[0]) : null; // null nếu key chưa có → route trả 404
   }
 
-  async getPayCycle(): Promise<PayCycleSettings> {
-    const rows = await db.select().from(payCycleSettings).orderBy(asc(payCycleSettings.id)).limit(1);
-    if (rows[0]) return this.mapPayCycle(rows[0]);
-    // Chưa seed: trả mặc định để màn Cài đặt không vỡ (giữ shape).
-    return { deadlineDay: 5, editWindowDays: 30, lockAfterDays: 30, capWarningPct: 10, updatedAt: Date.now(), updatedByUserId: null };
+  // ───────────────────────── Cấu hình hệ thống ─────────────────────────
+
+  /** Dòng DB → bộ giá trị đủ khóa. Khóa thiếu hoặc giá trị hỏng rơi về mặc định. */
+  private settingsFromRows(rows: { key: string; value: unknown }[]): SystemSettings {
+    const out: SystemSettings = { ...SYSTEM_SETTING_DEFAULTS };
+    for (const r of rows) {
+      if (!isSystemSettingKey(r.key)) continue;
+      const v = normalizeSettingValue(r.key, r.value);
+      if (v !== null) out[r.key] = v;
+    }
+    return out;
   }
 
-  async updatePayCycle(patch: UpdatePayCycleInput, actorUserId: number): Promise<PayCycleSettings> {
-    // Singleton: cập nhật dòng đang có; nếu chưa có thì tạo (an toàn khi DB chưa seed).
-    const existing = await db.select().from(payCycleSettings).orderBy(asc(payCycleSettings.id)).limit(1);
-    if (existing[0]) {
-      const rows = await db
-        .update(payCycleSettings)
-        .set({
-          deadlineDay: patch.deadlineDay,
-          capWarningPct: patch.capWarningPct,
-          updatedAt: new Date(),
-          updatedByUserId: actorUserId,
-        })
-        .where(eq(payCycleSettings.id, existing[0].id))
-        .returning();
-      return this.mapPayCycle(rows[0]);
-    }
+  async getSystemSettings(): Promise<SystemSettings> {
+    const rows = await db.select({ key: systemSettings.key, value: systemSettings.value }).from(systemSettings);
+    return this.settingsFromRows(rows);
+  }
+
+  async getSystemSettingsView(): Promise<SystemSettingsView> {
     const rows = await db
-      .insert(payCycleSettings)
-      .values({ deadlineDay: patch.deadlineDay, capWarningPct: patch.capWarningPct, updatedByUserId: actorUserId })
-      .returning();
-    return this.mapPayCycle(rows[0]);
+      .select({
+        key: systemSettings.key,
+        value: systemSettings.value,
+        updatedAt: systemSettings.updatedAt,
+        updatedByUserId: systemSettings.updatedByUserId,
+        updatedByName: users.name,
+      })
+      .from(systemSettings)
+      .leftJoin(users, eq(users.id, systemSettings.updatedByUserId));
+    const meta = Object.fromEntries(
+      SYSTEM_SETTING_KEYS.map((k) => [k, { updatedAt: null, updatedByUserId: null, updatedByName: null }]),
+    ) as SystemSettingsView["meta"];
+    for (const r of rows) {
+      if (!isSystemSettingKey(r.key)) continue;
+      meta[r.key] = {
+        updatedAt: r.updatedAt.toISOString(),
+        updatedByUserId: r.updatedByUserId ?? null,
+        updatedByName: r.updatedByName ?? null,
+      };
+    }
+    return { values: this.settingsFromRows(rows), meta };
+  }
+
+  async updateSystemSettings(patch: Partial<SystemSettings>, actorUserId: number): Promise<SystemSettingsView> {
+    const keys = SYSTEM_SETTING_KEYS.filter((k) => patch[k] !== undefined);
+    if (keys.length > 0) {
+      await db.transaction(async (tx) => {
+        // Khóa các dòng sắp sửa: hai người bấm Lưu cùng lúc thì người sau đọc được
+        // giá trị người trước vừa ghi, lịch sử không có hai dòng chung một giá trị cũ.
+        const current = await tx
+          .select({ key: systemSettings.key, value: systemSettings.value })
+          .from(systemSettings)
+          .where(inArray(systemSettings.key, keys))
+          .for("update");
+        const truoc = this.settingsFromRows(current);
+        const now = new Date();
+        for (const k of keys) {
+          const moi = patch[k]!;
+          if (moi === truoc[k]) continue; // lưu lại y giá trị cũ thì không thành một lần đổi
+          await tx
+            .insert(systemSettings)
+            .values({ key: k, value: moi, updatedAt: now, updatedByUserId: actorUserId })
+            .onConflictDoUpdate({
+              target: systemSettings.key,
+              set: { value: moi, updatedAt: now, updatedByUserId: actorUserId },
+            });
+          await tx.insert(systemSettingsHistory).values({
+            key: k,
+            oldValue: truoc[k],
+            newValue: moi,
+            changedAt: now,
+            changedByUserId: actorUserId,
+          });
+        }
+      });
+    }
+    return this.getSystemSettingsView();
+  }
+
+  async listSystemSettingsHistory(key: SystemSettingKey | null, limit: number): Promise<SystemSettingHistoryEntry[]> {
+    const rows = await db
+      .select({ h: systemSettingsHistory, changedByName: users.name })
+      .from(systemSettingsHistory)
+      .leftJoin(users, eq(users.id, systemSettingsHistory.changedByUserId))
+      .where(key ? eq(systemSettingsHistory.key, key) : undefined)
+      .orderBy(desc(systemSettingsHistory.changedAt), desc(systemSettingsHistory.id))
+      .limit(limit);
+    // Giá trị cũ in đúng như đã lưu, kể cả khi khoảng cho phép về sau đổi khác.
+    const so = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const out: SystemSettingHistoryEntry[] = [];
+    for (const { h, changedByName } of rows) {
+      if (!isSystemSettingKey(h.key)) continue;
+      out.push({
+        id: h.id,
+        key: h.key,
+        oldValue: so(h.oldValue),
+        newValue: so(h.newValue),
+        changedAt: h.changedAt.toISOString(),
+        changedByUserId: h.changedByUserId ?? null,
+        changedByName: changedByName ?? null,
+      });
+    }
+    return out;
   }
 }

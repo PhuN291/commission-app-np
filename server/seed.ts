@@ -1,22 +1,25 @@
 import { storage } from "./storage";
 import type { InsertVoucher } from "@shared/schema";
 import { db } from "./db";
-import { autoRules, payCycleSettings } from "@shared/schema";
+import { autoRules, systemSettings } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { vnCycleOf } from "@shared/vn-time";
+import { SYSTEM_SETTING_DEFAULTS, SYSTEM_SETTING_KEYS } from "@shared/system-settings";
 
 /**
- * Seed cài đặt mặc định Auto Rule + Kì lương (idempotent). Chạy độc lập, không tạo
- * trùng khi seed lại (guard theo key auto_rule + theo dòng singleton pay_cycle).
+ * Seed cài đặt mặc định Auto Rule + cấu hình hệ thống (idempotent). Chạy độc lập,
+ * không tạo trùng khi seed lại (guard theo key auto_rule; system_settings bỏ qua khóa
+ * đã có nên không đè giá trị người dùng đã sửa).
  */
 async function seedSettings() {
   const rule = await db.select().from(autoRules).where(eq(autoRules.key, "target_bonus")).limit(1);
   if (rule.length === 0) {
     await db.insert(autoRules).values({ key: "target_bonus", active: true, targetPct: 100, bonusPct: 5 });
   }
-  const pc = await db.select().from(payCycleSettings).limit(1);
-  if (pc.length === 0) {
-    await db.insert(payCycleSettings).values({ deadlineDay: 5, capWarningPct: 10 });
-  }
+  await db
+    .insert(systemSettings)
+    .values(SYSTEM_SETTING_KEYS.map((key) => ({ key, value: SYSTEM_SETTING_DEFAULTS[key] })))
+    .onConflictDoNothing({ target: systemSettings.key });
 }
 
 /**
@@ -32,7 +35,7 @@ async function seedVouchers() {
     { code: "COMBO10", discountType: "percent", value: 10, maxDiscount: null, minOrder: 0, minServices: 2, description: "Đơn từ 2 dịch vụ trở lên", usedCount: 0, usageLimit: 0, startDate: "2026-01-01", endDate: "2026-12-31", active: true },
     { code: "WELCOME20", discountType: "percent", value: 20, maxDiscount: 500000, minOrder: 1000000, minServices: 0, description: "Giảm 20% cho khách hàng mới", usedCount: 12, usageLimit: 50, startDate: "2026-01-01", endDate: "2026-06-30", active: true },
     { code: "VIP10", discountType: "percent", value: 10, maxDiscount: 300000, minOrder: 2000000, minServices: 0, description: "Ưu đãi khách VIP", usedCount: 5, usageLimit: 100, startDate: "2026-02-01", endDate: "2026-12-31", active: true },
-    { code: "FLAT100K", discountType: "fixed", value: 100000, maxDiscount: null, minOrder: 500000, minServices: 0, description: "Giảm thẳng 100.000đ", usedCount: 30, usageLimit: 30, startDate: "2026-01-15", endDate: "2026-03-31", active: false },
+    { code: "FLAT100K", discountType: "fixed", value: 100000, maxDiscount: null, minOrder: 500000, minServices: 0, description: "Giảm thẳng 100.000₫", usedCount: 30, usageLimit: 30, startDate: "2026-01-15", endDate: "2026-03-31", active: false },
   ];
   for (const r of rows) await storage.createVoucher(r);
 }
@@ -153,7 +156,7 @@ async function seedRealAdjustmentsAndClawback() {
   if (!mai) return;
   const ceo = users.find((u) => u.role === "ceo");
   const now = new Date();
-  const cycle = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const cycle = vnCycleOf(now);
 
   // Thưởng/phạt APPROVED — chỉ seed nếu Mai chưa có adjustment nào trong kỳ.
   const existingAdj = (await storage.listAllAdjustmentsForCycle(cycle)).filter((a) => a.userId === mai.id);
@@ -192,7 +195,7 @@ export async function seedDatabase() {
   try {
     // Voucher seed chạy độc lập (idempotent) — DB cũ đã có users vẫn được seed mã.
     await seedVouchers();
-    // Cài đặt mặc định Auto Rule + Kì lương (idempotent) — chạy cả trên DB đã có users.
+    // Cài đặt mặc định Auto Rule + cấu hình hệ thống (idempotent) — chạy cả trên DB đã có users.
     await seedSettings();
 
     const existingUsers = await storage.getAllUsers();
@@ -334,6 +337,20 @@ export async function seedDatabase() {
       monthlyTargetOrders: 0,
     });
 
+    // KTT (Hạnh) — người duyệt, khóa kỳ, tách khỏi người lập bảng kê (Diễm). Tạo sau
+    // cùng để id của các tài khoản test cũ giữ nguyên (Diễm vẫn là 6).
+    await storage.createUser({
+      username: "hanh",
+      password: "",
+      phone: "0900000007",
+      name: "Nguyễn Thị Minh Hạnh",
+      role: "ktt",
+      department: "Phòng Kế toán",
+      ranking: null,
+      monthlyTargetHh: 0,
+      monthlyTargetOrders: 0,
+    });
+
     // Order 1: arrived + visit completed
     // Order 1: REFUND_PARTIAL demo (B5-3 Section 2 — strikethrough giá + badge)
     await storage.createOrder({ code: "#NP260213001", patientName: "Trần Văn An", phone: "0901234567", email: "tranvanan@gmail.com", serviceName: "Siêu âm Doppler Tim", serviceCode: "DV-007", serviceCategory: "Tim mạch", quantity: 1, unitPrice: 500000, totalPrice: 500000, commission: 25000, appointmentStatus: "arrived", visitStatus: "completed", notes: "", appointmentDate: "26/02/2026", appointmentTime: "08:30", examType: "Khám tại phòng khám", createdAt: "13/02/2026 08:30", userId: mainUser.id, refundAmount: 200000, refundType: "partial", refundReason: "Khách yêu cầu hoàn 1 dịch vụ" });
@@ -354,27 +371,27 @@ export async function seedDatabase() {
     await storage.createOrder({ code: "#NP260225001", patientName: "Bùi Quang Hải", phone: "0978901234", serviceName: "Kiểm tra chức năng Gan", serviceCode: "DV-009", serviceCategory: "Xét nghiệm", quantity: 1, unitPrice: 350000, totalPrice: 350000, commission: 17500, appointmentStatus: "no_show", notes: "Khám lần đầu", examType: "Lấy mẫu tại nhà", createdAt: "25/02/2026 08:00", userId: mainUser.id });
 
     // Seed status logs for orders that went through multiple steps
-    await storage.createStatusLog({ orderId: 1, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "13/02/2026 09:00", note: null });
-    await storage.createStatusLog({ orderId: 1, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "25/02/2026 18:00", note: "Đã gọi nhắc lịch" });
-    await storage.createStatusLog({ orderId: 1, tier: "appointment", fromStatus: "reminded", toStatus: "arrived", timestamp: "26/02/2026 08:25", note: null });
-    await storage.createStatusLog({ orderId: 1, tier: "visit", fromStatus: "arrived", toStatus: "in_progress", timestamp: "26/02/2026 08:35", note: null });
-    await storage.createStatusLog({ orderId: 1, tier: "visit", fromStatus: "in_progress", toStatus: "completed", timestamp: "26/02/2026 09:10", note: null });
-    await storage.createStatusLog({ orderId: 2, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "14/02/2026 10:00", note: null });
-    await storage.createStatusLog({ orderId: 2, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "25/02/2026 17:00", note: null });
-    await storage.createStatusLog({ orderId: 2, tier: "appointment", fromStatus: "reminded", toStatus: "arrived", timestamp: "26/02/2026 09:10", note: null });
-    await storage.createStatusLog({ orderId: 2, tier: "visit", fromStatus: "arrived", toStatus: "in_progress", timestamp: "26/02/2026 09:20", note: null });
-    await storage.createStatusLog({ orderId: 2, tier: "visit", fromStatus: "in_progress", toStatus: "completed", timestamp: "26/02/2026 10:00", note: null });
-    await storage.createStatusLog({ orderId: 4, tier: "appointment", fromStatus: "pending", toStatus: "cancelled", timestamp: "14/02/2026 15:00", note: "Khách hủy do bận" });
-    await storage.createStatusLog({ orderId: 5, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "15/02/2026 08:00", note: null });
-    await storage.createStatusLog({ orderId: 5, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "19/02/2026 16:00", note: null });
-    await storage.createStatusLog({ orderId: 5, tier: "appointment", fromStatus: "reminded", toStatus: "arrived", timestamp: "20/02/2026 15:40", note: null });
-    await storage.createStatusLog({ orderId: 5, tier: "visit", fromStatus: "arrived", toStatus: "in_progress", timestamp: "20/02/2026 15:50", note: null });
-    await storage.createStatusLog({ orderId: 6, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "16/02/2026 10:00", note: null });
-    await storage.createStatusLog({ orderId: 7, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "20/02/2026 11:00", note: null });
-    await storage.createStatusLog({ orderId: 7, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "21/02/2026 18:00", note: "Đã nhắn tin Zalo" });
-    await storage.createStatusLog({ orderId: 8, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "25/02/2026 09:00", note: null });
-    await storage.createStatusLog({ orderId: 8, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "10/03/2026 17:00", note: null });
-    await storage.createStatusLog({ orderId: 8, tier: "appointment", fromStatus: "reminded", toStatus: "no_show", timestamp: "11/03/2026 10:00", note: "Không liên lạc được" });
+    await storage.createStatusLog({ orderId: 1, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "13/02/2026 09:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 1, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "25/02/2026 18:00", note: "Đã gọi nhắc lịch", source: "seed" });
+    await storage.createStatusLog({ orderId: 1, tier: "appointment", fromStatus: "reminded", toStatus: "arrived", timestamp: "26/02/2026 08:25", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 1, tier: "visit", fromStatus: "arrived", toStatus: "in_progress", timestamp: "26/02/2026 08:35", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 1, tier: "visit", fromStatus: "in_progress", toStatus: "completed", timestamp: "26/02/2026 09:10", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 2, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "14/02/2026 10:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 2, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "25/02/2026 17:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 2, tier: "appointment", fromStatus: "reminded", toStatus: "arrived", timestamp: "26/02/2026 09:10", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 2, tier: "visit", fromStatus: "arrived", toStatus: "in_progress", timestamp: "26/02/2026 09:20", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 2, tier: "visit", fromStatus: "in_progress", toStatus: "completed", timestamp: "26/02/2026 10:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 4, tier: "appointment", fromStatus: "pending", toStatus: "cancelled", timestamp: "14/02/2026 15:00", note: "Khách hủy do bận", source: "seed" });
+    await storage.createStatusLog({ orderId: 5, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "15/02/2026 08:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 5, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "19/02/2026 16:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 5, tier: "appointment", fromStatus: "reminded", toStatus: "arrived", timestamp: "20/02/2026 15:40", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 5, tier: "visit", fromStatus: "arrived", toStatus: "in_progress", timestamp: "20/02/2026 15:50", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 6, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "16/02/2026 10:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 7, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "20/02/2026 11:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 7, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "21/02/2026 18:00", note: "Đã nhắn tin Zalo", source: "seed" });
+    await storage.createStatusLog({ orderId: 8, tier: "appointment", fromStatus: "pending", toStatus: "confirmed", timestamp: "25/02/2026 09:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 8, tier: "appointment", fromStatus: "confirmed", toStatus: "reminded", timestamp: "10/03/2026 17:00", note: null, source: "seed" });
+    await storage.createStatusLog({ orderId: 8, tier: "appointment", fromStatus: "reminded", toStatus: "no_show", timestamp: "11/03/2026 10:00", note: "Không liên lạc được", source: "seed" });
 
     // Ngày tái khám KHÔNG seed cứng trên customer nữa (để null). Giá trị hiện trên
     // hồ sơ được tính từ ca khám thật: MIN(order_items.recall_due_date) — xem

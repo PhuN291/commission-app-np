@@ -17,6 +17,7 @@ import {
   getNextRanking,
   type Ranking,
 } from "@shared/types";
+import { shiftCycle, vnCycleOf } from "@shared/vn-time";
 import { orderCycle, orderRealRevenue } from "./analytics";
 import { storage } from "./storage";
 
@@ -66,10 +67,9 @@ export type PersonalRankingData = {
   isAtTopTier: boolean;
 };
 
-/** Lùi `offset` tháng từ mốc, trả 'YYYY-MM'. */
+/** Lùi `offset` tháng từ kỳ chứa mốc (theo lịch Việt Nam), trả 'YYYY-MM'. */
 function cycleOffset(from: Date, offset: number): string {
-  const d = new Date(from.getFullYear(), from.getMonth() + offset, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return shiftCycle(vnCycleOf(from), offset);
 }
 
 /** 'YYYY-MM' → 'MM/YYYY' cho nhãn hiển thị. */

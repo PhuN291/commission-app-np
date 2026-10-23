@@ -8,21 +8,38 @@
  */
 
 import { z } from "zod";
+import { parseVnDateTime, vnInstant, vnParts, type Instant } from "./vn-time";
 
 // ─────────────────────────────────────────────────────────────────
 // User Roles
 // ─────────────────────────────────────────────────────────────────
 
-export const USER_ROLES = ["ceo", "tc", "kt", "sale", "doctor"] as const;
+// ktt (Kế toán trưởng) có mọi quyền của kt, nên chỗ nào cho "kt" thì cũng cho "ktt".
+// Tách vai riêng thay vì cờ trên kt vì về sau chỉ ktt duyệt và khóa kỳ: người lập
+// bảng kê (kt) không tự duyệt được bảng của mình.
+export const USER_ROLES = ["ceo", "tc", "kt", "ktt", "sale", "doctor"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   ceo: "CEO",
   tc: "Trưởng ca",
   kt: "Kế toán",
+  ktt: "Kế toán trưởng",
   sale: "Điều dưỡng",
   doctor: "Bác sĩ",
 };
+
+// Vai được tạo đơn và tạo khách (BN01, LH01). Kế toán chỉ đối soát tiền: để họ tự
+// tạo đơn là người duyệt hoa hồng tự sinh ra khoản mình duyệt. Máy chủ chặn bằng
+// danh sách này, điện thoại dùng cùng danh sách để ẩn nút Tạo đơn.
+export const ORDER_CREATOR_ROLES = ["sale", "doctor", "tc", "ceo"] as const satisfies readonly UserRole[];
+
+export function canCreateOrder(role: string | null | undefined): boolean {
+  return (ORDER_CREATOR_ROLES as readonly string[]).includes(role ?? "");
+}
+
+/** Số dòng dịch vụ tối đa trên một đơn (LH01). */
+export const ORDER_LINE_LIMIT = 20;
 
 // ─────────────────────────────────────────────────────────────────
 // Rankings
@@ -72,11 +89,12 @@ export function getNextRanking(current: Ranking | null | undefined): Ranking | n
   return null;
 }
 
-/** Ranking nào hợp lệ với role nào. CEO/TC/KT không có ranking. */
+/** Ranking nào hợp lệ với role nào. CEO/TC/KT/KTT không có ranking. */
 export const RANKING_FOR_ROLE: Record<UserRole, readonly Ranking[]> = {
   ceo: [],
   tc: [],
   kt: [],
+  ktt: [],
   sale: ["M0", "M1", "M2", "M3"],
   doctor: ["L1", "L2", "L3"],
 };
@@ -118,9 +136,13 @@ export const AUDIT_ACTION_LABEL = {
   "adjustment.create": "Tạo điều chỉnh",
   "adjustment.cancel": "Hủy điều chỉnh chờ",
   "adjustment.edit": "Sửa điều chỉnh (tạo truy thu)",
-  // Settings (B5-2 Section 3 — admin-settings)
+  // Settings (B5-2 Section 3 — admin-settings). Cấu hình hệ thống (kỳ lương, ngưỡng
+  // lịch hẹn) không ghi ở đây mà ở system_settings_history, kèm giá trị cũ và mới.
   "setting.auto_rule_update": "Cập nhật Auto Rule",
-  "setting.pay_cycle_update": "Cập nhật kỳ lương",
+  "setting.commission_rate_update": "Đổi tỷ lệ hoa hồng",
+  // Tiền của đơn đổi ngoài luồng duyệt: sửa dịch vụ, script dọn khoản sai.
+  "order.services_update": "Sửa dịch vụ đơn",
+  "order.commission_cleanup": "Dọn hoa hồng sai của đơn",
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABEL;
@@ -139,7 +161,7 @@ const baseStaffFields = {
   monthlyTargetOrders: z.number().int().nonnegative().default(0),
 };
 
-/** BS bắt buộc có ihosUserId; ranking phải match role (hoặc null nếu role=ceo/tc/kt). */
+/** BS bắt buộc có ihosUserId; ranking phải match role (hoặc null nếu role=ceo/tc/kt/ktt). */
 function refineStaff<T extends z.ZodObject<typeof baseStaffFields>>(schema: T) {
   return schema
     .refine(
@@ -150,7 +172,7 @@ function refineStaff<T extends z.ZodObject<typeof baseStaffFields>>(schema: T) {
     .refine(
       (d) => {
         const allowedRankings = RANKING_FOR_ROLE[d.role];
-        if (allowedRankings.length === 0) return d.ranking == null; // ceo/tc/kt không có ranking
+        if (allowedRankings.length === 0) return d.ranking == null; // ceo/tc/kt/ktt không có ranking
         return d.ranking != null && (allowedRankings as readonly string[]).includes(d.ranking);
       },
       { message: "Bậc không hợp lệ với vai trò", path: ["ranking"] },
@@ -285,14 +307,14 @@ export function hoursRemainingKhieuNai(rejectedAt: number | null): number {
   return Math.max(0, Math.floor((KHIEU_NAI_WINDOW_MS - elapsed) / (60 * 60 * 1000)));
 }
 
-export const rejectCRSchema = z.object({ reason: z.string().min(2, "Lý do tối thiểu 2 ký tự") });
 export const complaintSchema = z.object({ content: z.string().min(2, "Nội dung tối thiểu 2 ký tự") });
-export type RejectCRInput = z.infer<typeof rejectCRSchema>;
 export type ComplaintInput = z.infer<typeof complaintSchema>;
 
-// Admin-side reject (B5-3 Section 3.9: min 10 chars)
+// Từ chối hoa hồng (B5-3 Section 3.9). Màn duyệt và màn chi tiết đơn gọi chung một
+// API nên chung một ngưỡng; trước đây mỗi nơi một route, một nơi chỉ cần 2 ký tự.
+export const REJECT_REASON_MIN = 10;
 export const adminRejectCRSchema = z.object({
-  reason: z.string().min(10, "Lý do tối thiểu 10 ký tự"),
+  reason: z.string().trim().min(REJECT_REASON_MIN, `Lý do tối thiểu ${REJECT_REASON_MIN} ký tự`),
 });
 
 // Bulk-all cycle approve (safety gate — type "DUYỆT")
@@ -427,18 +449,9 @@ export const updateAutoRuleSchema = z.object({
 export type UpdateAutoRuleInput = z.infer<typeof updateAutoRuleSchema>;
 
 // ─────────────────────────────────────────────────────────────────
-// Pay cycle settings (B5-2 §3.11, R-5-1)
-// Cycle theo tháng dương lịch (cứng). Edit window 30 ngày sau payday + lock
-// sau T+30 cũng cứng. Chỉ deadline + cap warning là editable.
+// Pay cycle settings (B5-2 §3.11, R-5-1): ngày chốt, cửa sổ sửa, ngưỡng cảnh báo
+// đã chuyển sang shared/system-settings.ts cùng các ngưỡng lịch hẹn.
 // ─────────────────────────────────────────────────────────────────
-
-export const updatePayCycleSchema = z.object({
-  // Ngày trong tháng deadline payday (1-28 để tránh tháng 2).
-  deadlineDay: z.number().int().min(1).max(28),
-  // expected_total_pct_per_order — warning visual, không enforce cut.
-  capWarningPct: z.number().min(0).max(100),
-});
-export type UpdatePayCycleInput = z.infer<typeof updatePayCycleSchema>;
 
 // ─────────────────────────────────────────────────────────────────
 // Notifications — in-app feed cho bell icon AppHeader.
@@ -476,31 +489,28 @@ export const NOTIFICATION_LABEL: Record<NotificationType, string> = {
 /** Số tháng gần nhất dùng cho ô "Chi tiêu 12 tháng" và "Đơn 12 tháng". */
 export const CUSTOMER_STATS_MONTHS = 12;
 
-/** order.createdAt là text 'DD/MM/YYYY HH:mm' → Date đầu ngày; null nếu định dạng lạ. */
+/**
+ * order.createdAt là text 'DD/MM/YYYY HH:mm' → thời điểm 00:00 giờ Việt Nam của ngày
+ * đó; null nếu định dạng lạ. Bỏ phần giờ vì thống kê chỉ so theo ngày.
+ */
 export function parseOrderDate(createdAt: string | null | undefined): Date | null {
   const datePart = (createdAt ?? "").trim().split(" ")[0]; // 'DD/MM/YYYY'
-  const [dd, mm, yyyy] = datePart.split("/");
-  const d = Number(dd);
-  const m = Number(mm);
-  const y = Number(yyyy);
-  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) return null;
-  if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return null;
-  const date = new Date(y, m - 1, d);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return parseVnDateTime(datePart);
 }
 
 /**
- * Đơn có nằm trong N tháng gần nhất tính từ hôm nay không.
+ * Đơn có nằm trong N tháng gần nhất tính từ hôm nay (theo lịch Việt Nam) không.
  * Ngày sai định dạng trả false để không cộng nhầm vào thống kê.
  */
 export function isWithinLastMonths(
   createdAt: string | null | undefined,
   months: number = CUSTOMER_STATS_MONTHS,
+  now: Instant = Date.now(),
 ): boolean {
   const date = parseOrderDate(createdAt);
   if (!date) return false;
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - months);
-  cutoff.setHours(0, 0, 0, 0);
+  // Ngày tràn cuộn sang tháng sau giống setMonth() trước đây (29/02 lùi 12 tháng ra 01/03).
+  const t = vnParts(now);
+  const cutoff = vnInstant(t.year, t.month - months, t.day);
   return date.getTime() >= cutoff.getTime();
 }

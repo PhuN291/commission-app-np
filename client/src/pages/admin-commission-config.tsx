@@ -42,6 +42,7 @@ import {
   type TierKey,
   type UserRole,
 } from "@shared/types";
+import { formatVnDateTime } from "@shared/vn-time";
 
 // ─────────────────────────────────────────────────────────────────
 // Types matching server response
@@ -79,9 +80,9 @@ function percentToBp(input: string): number | null {
   return Math.round(n * 100);
 }
 
+/** Giờ Việt Nam dù máy đang đặt múi giờ nào, để khớp giờ in trong nhật ký máy chủ. */
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return formatVnDateTime(new Date(iso));
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -96,7 +97,7 @@ export default function AdminCommissionConfig() {
 
   // Permission gate (UX layer — server enforces too)
   const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
-  const canView = role === "ceo" || role === "tc" || role === "kt";
+  const canView = role === "ceo" || role === "tc" || role === "kt" || role === "ktt";
   const canEdit = role === "ceo";
 
   const [edits, setEdits] = useState<Record<string, string>>({});

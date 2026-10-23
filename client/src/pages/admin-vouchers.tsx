@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuayLai } from "@/lib/use-back";
-import { useLocation } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Plus, Ticket } from "@/components/np/icon";
 import {
@@ -20,10 +20,11 @@ import { Switch } from "@/components/ui/switch";
 import { authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { VoucherRow } from "@shared/schema";
+import type { UserRole } from "@shared/types";
+import { vnDateKey } from "@shared/vn-time";
+import { MINUS_SIGN, formatMoney, formatSignedMoney } from "@/lib/format";
 
 type VoucherStatus = "active" | "expired" | "used_up";
-
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
 const fmtDate = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -32,7 +33,9 @@ const fmtDate = (s: string) => {
 
 function getVoucherStatus(v: VoucherRow): VoucherStatus {
   if (v.usageLimit > 0 && v.usedCount >= v.usageLimit) return "used_up";
-  if (v.endDate && new Date(v.endDate) < new Date()) return "expired";
+  // Ngày lịch Việt Nam như máy chủ (computeVoucherDiscount): new Date("2026-03-31") là
+  // 07:00 sáng giờ Việt Nam, so với giờ máy thì mã báo Hết hạn khi còn dùng được cả ngày.
+  if (v.endDate && v.endDate < vnDateKey()) return "expired";
   return "active";
 }
 
@@ -51,8 +54,13 @@ export default function AdminVouchers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // Máy chủ chỉ mở mã giảm giá cho CEO (requireRole), vai khác vào là trang trống.
+  const role = (typeof window !== "undefined" ? localStorage.getItem("np_role") : null) as UserRole | null;
+  const canView = role === "ceo";
+
   const { data: vouchers = [] } = useQuery<VoucherRow[]>({
     queryKey: ["/api/admin/vouchers"],
+    enabled: canView,
     queryFn: async () => {
       const res = await authFetch("/api/admin/vouchers");
       if (!res.ok) throw new Error("Failed");
@@ -96,6 +104,10 @@ export default function AdminVouchers() {
     { key: "used_up", label: "Hết lượt", count: vouchers.filter((v) => getVoucherStatus(v) === "used_up").length },
   ];
 
+  if (typeof window !== "undefined" && !canView) {
+    return <Redirect to="/" />;
+  }
+
   return (
     <Screen activeTab={active} onTab={onTab} noHeader>
       <DetailHeader title="Voucher" onBack={quayLai} />
@@ -126,7 +138,7 @@ export default function AdminVouchers() {
               const status = getVoucherStatus(v);
               const sc = STATUS_TONE[status];
               const valueStr =
-                v.discountType === "percent" ? `${v.value}%` : `${fmt(v.value)}₫`;
+                v.discountType === "percent" ? `${MINUS_SIGN}${v.value}%` : formatSignedMoney(-v.value);
               return (
                 <div
                   key={v.id}
@@ -144,14 +156,14 @@ export default function AdminVouchers() {
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[15px] font-bold text-np-ink">{v.code}</span>
                         <span className="text-[15px] font-extrabold text-np-brand-ink tabular-nums">
-                          -{valueStr}
+                          {valueStr}
                         </span>
                       </div>
                       <div className="mt-1 text-[12px] text-np-text-sub">
                         {v.discountType === "percent" && v.maxDiscount
-                          ? `Giảm tối đa ${fmt(v.maxDiscount)}₫ · `
+                          ? `Giảm tối đa ${formatMoney(v.maxDiscount)} · `
                           : ""}
-                        Đơn tối thiểu {fmt(v.minOrder)}₫
+                        Đơn tối thiểu {formatMoney(v.minOrder)}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-np-text-muted">
                         {v.startDate && v.endDate && (
